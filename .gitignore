@@ -1,0 +1,9 @@
+node_modules/
+dist/
+
+# Local, machine-specific Claude Code settings — not project configuration.
+.claude/settings.local.json
+*.log
+.DS_Store
+.vite/
+coverage/

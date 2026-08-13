@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>floorplan-3d-card — dev harness</title>
+    <style>
+      /*
+       * Approximates the Home Assistant theme contract. The card only ever
+       * reads these custom properties, so getting them right here means what
+       * we see in dev is what a user sees in their dashboard.
+       */
+      :root {
+        color-scheme: dark;
+        --primary-color: #03a9f4;
+        --accent-color: #ff9800;
+        --primary-background-color: #111418;
+        --secondary-background-color: #1c1f26;
+        --card-background-color: #1c1f26;
+        --primary-text-color: #e8eaed;
+        --secondary-text-color: #9aa0a6;
+        --disabled-text-color: #6b7075;
+        --divider-color: rgba(255, 255, 255, 0.12);
+        --state-icon-color: #9aa0a6;
+        --state-icon-active-color: #fdd835;
+        --error-color: #db4437;
+        --warning-color: #ffa600;
+        --success-color: #43a047;
+        --ha-card-border-radius: 12px;
+        --ha-card-box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        --mdc-theme-primary: #03a9f4;
+      }
+      :root.light {
+        color-scheme: light;
+        --primary-background-color: #fafafa;
+        --secondary-background-color: #e9ecef;
+        --card-background-color: #ffffff;
+        --primary-text-color: #212121;
+        --secondary-text-color: #727272;
+        --divider-color: rgba(0, 0, 0, 0.12);
+        --ha-card-box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        background: var(--primary-background-color);
+        color: var(--primary-text-color);
+        font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        overflow: hidden;
+      }
+
+      #stage {
+        padding: 24px;
+        overflow: auto;
+        display: block;
+      }
+      #stage.panel {
+        padding: 0;
+      }
+      #stage > * {
+        display: block;
+        max-width: 980px;
+        margin: 0 auto;
+        height: 640px;
+      }
+      #stage.panel > * {
+        max-width: none;
+        height: 100%;
+      }
+
+      #panel {
+        border-left: 1px solid var(--divider-color);
+        background: var(--secondary-background-color);
+        padding: 16px;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #panel h3 {
+        margin: 16px 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--secondary-text-color);
+        font-weight: 600;
+      }
+      #panel h3:first-child {
+        margin-top: 0;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 34px;
+      }
+      .lbl {
+        color: var(--secondary-text-color);
+        font-size: 13px;
+      }
+      .lights {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        appearance: none;
+        border: 1px solid var(--divider-color);
+        background: transparent;
+        color: var(--primary-text-color);
+        border-radius: 999px;
+        padding: 5px 11px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .chip:hover {
+        border-color: var(--primary-color);
+      }
+      .chip.on {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: #fff;
+      }
+      select {
+        background: var(--primary-background-color);
+        color: var(--primary-text-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font: inherit;
+        font-size: 12px;
+        min-width: 130px;
+      }
+      input[type="range"] {
+        flex: 1;
+        accent-color: var(--primary-color);
+      }
+      textarea {
+        flex: 1;
+        min-height: 200px;
+        background: var(--primary-background-color);
+        color: var(--secondary-text-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        padding: 8px;
+        font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        resize: vertical;
+      }
+      #status {
+        position: fixed;
+        left: 16px;
+        bottom: 12px;
+        font: 11px ui-monospace, monospace;
+        color: var(--secondary-text-color);
+        background: var(--card-background-color);
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        padding: 4px 8px;
+        max-width: 60vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #status.bad {
+        color: #fff;
+        background: var(--error-color);
+        border-color: var(--error-color);
+      }
+    </style>
+  </head>
+  <body>
+    <main id="stage"></main>
+    <aside id="panel"></aside>
+    <div id="status">booting…</div>
+    <script type="module" src="/src/dev/dev-app.ts"></script>
+  </body>
+</html>
