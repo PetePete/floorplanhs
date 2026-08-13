@@ -13,10 +13,6 @@ This is a free, open-source alternative to the commercial 3D floorplan products
 sold as smart-home add-ons. Nothing phones home, nothing is rendered in a cloud,
 and your model file never leaves your Home Assistant instance.
 
-> **Placeholder URLs:** every `https://github.com/USERNAME/floorplan-3d-card`
-> link below is a placeholder — replace `USERNAME` with the account that hosts
-> your fork or the upstream repository.
-
 ---
 
 ## Features
@@ -46,7 +42,7 @@ and your model file never leaves your Home Assistant instance.
 ### HACS (recommended)
 
 1. HACS → **Frontend** → ⋮ → **Custom repositories**.
-2. Repository: `https://github.com/USERNAME/floorplan-3d-card`, category
+2. Repository: `https://github.com/PetePete/floorplanhs`, category
    **Lovelace / Plugin**. Add.
 3. Install **Floorplan 3D Card**, then reload the browser (Ctrl/Cmd + Shift + R).
 
@@ -55,7 +51,7 @@ HACS registers the resource for you. If it does not, add it manually as below.
 ### Manual
 
 1. Download `floorplan-3d-card.js` from the
-   [latest release](https://github.com/USERNAME/floorplan-3d-card/releases).
+   [latest release](https://github.com/PetePete/floorplanhs/releases).
 2. Copy it to `config/www/floorplan-3d-card.js` — that path is served as
    `/local/floorplan-3d-card.js`.
 3. **Settings → Dashboards → ⋮ → Resources → Add resource**:
@@ -519,7 +515,7 @@ versions the Home Assistant companion app ships.
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) before contributing — it defines the
 layer boundaries (`engine/` never imports from `card/`, `editor/` or `ha/`) that
 keep the codebase coherent. Pull requests are welcome at
-`https://github.com/USERNAME/floorplan-3d-card`; please keep `npm run build`
+`https://github.com/PetePete/floorplanhs`; please keep `npm run build`
 clean and add a vitest case for anything with logic in it.
 
 ## Licence

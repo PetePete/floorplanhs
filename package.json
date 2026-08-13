@@ -4,6 +4,14 @@
   "description": "Interactive 3D floorplan card for Home Assistant — cross-sections, camera presets, drag & drop entity placement and physically driven lighting.",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://github.com/PetePete/floorplanhs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PetePete/floorplanhs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PetePete/floorplanhs/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

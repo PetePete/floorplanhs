@@ -259,8 +259,7 @@ somewhere safe.
 
 ## Still stuck
 
-Open an issue at `https://github.com/USERNAME/floorplan-3d-card/issues`
-(replace `USERNAME` with the account hosting the repository) and include:
+Open an issue at <https://github.com/PetePete/floorplanhs/issues> and include:
 
 - the card YAML (redact entity names if you like),
 - the browser console output with the `[floorplan-3d]` lines,
