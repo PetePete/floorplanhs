@@ -290,6 +290,23 @@ Every option, straight from `src/types/config.ts`. Options marked *(engine
 default)* have no explicit value in the YAML schema; the listed value is what
 the engine uses when the key is absent.
 
+### Key naming
+
+**Option names are camelCase — `levelPresets`, `showToolbar`, `bloomStrength`.**
+The snake_case spelling of every one of them (`level_presets`, `show_toolbar`,
+`bloom_strength`) is accepted as well, because most Home Assistant cards use it
+and reaching for it is a reasonable reflex.
+
+camelCase is the canonical form for one concrete reason: this card **writes its
+own configuration back**. Saving a view or dropping an entity onto the model
+emits YAML, and what it emits is camelCase. If snake_case were canonical, your
+file would be quietly rewritten the first time you saved anything.
+
+The one deliberate exception is the action block — `tap_action`, `hold_action`,
+`double_tap_action`, `navigation_path`, `url_path`. Those mirror Home
+Assistant's own action schema field for field, so they keep its spelling; using
+a different one there would be worse than the inconsistency.
+
 ### Top level
 
 | Option | Type | Default | Description |
