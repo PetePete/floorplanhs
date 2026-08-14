@@ -8,7 +8,14 @@
 
 import '@/main';
 import { createMockHass, type MockHass } from '@/dev/mock-hass';
-import type { Floorplan3dCardConfig } from '@/types/config';
+import type {
+  Floorplan3dCardConfig,
+  LightVisualConfig,
+  ModelConfig,
+  PlanSpec,
+  SectionState,
+  Vec3,
+} from '@/types/config';
 
 interface CardElement extends HTMLElement {
   hass?: MockHass;
@@ -19,118 +26,225 @@ interface CardElement extends HTMLElement {
   setConfig(config: unknown): void;
 }
 
-const DEMO_CONFIG: Floorplan3dCardConfig = {
-  type: 'custom:floorplan-3d-card',
-  title: 'House',
-  model: { demo: true },
-  camera: { fov: 45, transitionDuration: 1.1 },
-  render: { quality: 'high', bloom: true, shadows: false, daylight: false },
-  ui: {
-    height: '100%',
-    showToolbar: true,
-    showPresetBar: true,
-    showFps: true,
+/**
+ * Which storey an entity belongs on, independent of what the loaded house calls
+ * its levels. The harness resolves this against whichever house it ended up
+ * with, so the same placements work for the demo house and for a plan.
+ */
+type Storey = 'lower' | 'main' | 'top';
+
+interface DevEntity {
+  entity: string;
+  position: Vec3;
+  storey: Storey;
+  light?: LightVisualConfig;
+}
+
+/**
+ * Placements worked out against the private plan (see `resolveLayout` below).
+ * `buildFromPlan` recentres on the footprint, so plan coordinates map to world
+ * coordinates by subtracting half the footprint in X and Z.
+ *
+ * Against the demo house a few of these land in the wrong room or just outside
+ * the shell. That is fine and is exactly what the drag-and-drop placement UI is
+ * for; nothing here assumes a particular geometry.
+ */
+const DEV_ENTITIES: DevEntity[] = [
+  /* Top floor — the open living level. Ceiling lights hang under the roof
+     soffit, which falls from the north face toward the south. */
+  {
+    entity: 'light.living_room_ceiling',
+    position: [0.5, 4.95, 1.2],
+    storey: 'top',
+    light: { kind: 'point', distance: 8, fixture: { show: true } },
   },
-  presets: [
-    {
-      id: 'overview',
-      name: 'Overview',
-      icon: 'mdi:home',
-      position: [14, 11, 16],
-      target: [0, 1.4, 0],
-      inTour: true,
-    },
-    {
-      id: 'ground',
-      name: 'Ground floor',
-      icon: 'mdi:home-floor-g',
-      position: [10, 9, 11],
-      target: [0, 1.2, 0],
-      section: {
-        mode: 'level',
-        levelId: 'ground',
-        planes: [
-          { axis: 'x', position: 0, enabled: false, invert: false },
-          { axis: 'y', position: 0, enabled: false, invert: false },
-          { axis: 'z', position: 0, enabled: false, invert: false },
-        ],
-        caps: true,
-        ghostAbove: true,
-      },
-      inTour: true,
-    },
-    {
-      id: 'floorplan',
-      name: 'Isometric',
-      icon: 'mdi:floor-plan',
-      // Looking along (1, 1, 1) with an orthographic projection: all three
-      // axes foreshorten equally, so the storey reads as a room you can see
-      // into rather than as a flat plan.
-      position: [16, 16, 16],
-      target: [0, 1.2, 0],
-      orthographic: true,
-      // The cut still matters: without it you would be looking at a roof from
-      // an angle instead of from above.
-      section: {
-        mode: 'level',
-        levelId: 'ground',
-        planes: [
-          { axis: 'x', position: 0, enabled: false, invert: false },
-          { axis: 'y', position: 0, enabled: false, invert: false },
-          { axis: 'z', position: 0, enabled: false, invert: false },
-        ],
-        caps: true,
-        ghostAbove: false,
-      },
-      visibleLevels: ['ground'],
-      default: true,
-    },
-  ],
-  entities: [
-    {
-      entity: 'light.living_room_ceiling',
-      position: [-2.4, 2.45, -1.6],
-      level: 'ground',
-      light: { kind: 'point', distance: 8, fixture: { show: true } },
-    },
-    {
-      entity: 'light.living_room_floor_lamp',
-      position: [-4.2, 1.5, -2.5],
-      level: 'ground',
-      light: { kind: 'point', distance: 6, intensity: 0.7, fixture: { show: true } },
-    },
-    {
-      entity: 'light.kitchen_counter',
-      position: [3.1, 2.3, -1.4],
-      level: 'ground',
-      light: { kind: 'spot', angle: 55, penumbra: 0.5, distance: 7, fixture: { show: true } },
-    },
-    {
-      entity: 'light.hallway',
-      position: [0.2, 2.45, 1.0],
-      level: 'ground',
-      light: { kind: 'point', distance: 6, fixture: { show: true } },
-    },
-    {
-      entity: 'light.bedroom_bedside',
-      position: [-2.8, 3.9, -1.2],
-      level: 'upper',
-      light: { kind: 'point', distance: 5, fixture: { show: true } },
-    },
-    {
-      entity: 'light.office_desk',
-      position: [3.4, 4.0, 1.8],
-      level: 'upper',
-      light: { kind: 'point', distance: 5, fixture: { show: true } },
-    },
-    { entity: 'sensor.living_room_temperature', position: [-3.6, 1.6, -3.2], level: 'ground' },
-    { entity: 'binary_sensor.hallway_motion', position: [0.6, 2.2, 3.4], level: 'ground' },
-    { entity: 'binary_sensor.front_door', position: [0, 1.1, 4.4], level: 'ground' },
-    { entity: 'switch.coffee_machine', position: [3.8, 1.15, -2.6], level: 'ground' },
-    { entity: 'media_player.living_room_tv', position: [-5.2, 1.4, -1.0], level: 'ground' },
-    { entity: 'sensor.bedroom_humidity', position: [-3.4, 3.6, -2.4], level: 'upper' },
-  ],
+  {
+    entity: 'light.living_room_floor_lamp',
+    position: [2.9, 4.25, 2.9],
+    storey: 'top',
+    light: { kind: 'point', distance: 6, intensity: 0.7, fixture: { show: true } },
+  },
+  {
+    entity: 'light.kitchen_counter',
+    // Over the worktop that runs along the north wall.
+    position: [-1.7, 4.9, -3.6],
+    storey: 'top',
+    light: { kind: 'spot', angle: 55, penumbra: 0.5, distance: 7, fixture: { show: true } },
+  },
+  // On that worktop: top-floor level plus 0.92 of counter.
+  { entity: 'switch.coffee_machine', position: [-0.6, 3.68, -3.6], storey: 'top' },
+  { entity: 'media_player.living_room_tv', position: [-4.45, 3.95, 2.0], storey: 'top' },
+  { entity: 'sensor.living_room_temperature', position: [4.5, 4.2, 1.5], storey: 'top' },
+
+  /* Main floor — bedrooms, study and the wet rooms off the corridor. */
+  {
+    entity: 'light.hallway',
+    position: [-1.0, 2.3, -0.85],
+    storey: 'main',
+    light: { kind: 'point', distance: 6, fixture: { show: true } },
+  },
+  {
+    entity: 'light.bedroom_bedside',
+    position: [3.4, 1.05, 1.1],
+    storey: 'main',
+    light: { kind: 'point', distance: 5, fixture: { show: true } },
+  },
+  {
+    entity: 'light.office_desk',
+    position: [-3.4, 1.35, 3.0],
+    storey: 'main',
+    light: { kind: 'point', distance: 5, fixture: { show: true } },
+  },
+  { entity: 'sensor.bedroom_humidity', position: [3.2, 1.6, -2.6], storey: 'main' },
+  { entity: 'binary_sensor.hallway_motion', position: [3.0, 2.25, -0.45], storey: 'main' },
+  // Just inside the entrance, on the north facade under the carport.
+  { entity: 'binary_sensor.front_door', position: [-2.62, 1.1, -4.35], storey: 'main' },
+];
+
+const NO_PLANES: SectionState['planes'] = [
+  { axis: 'x', position: 0, enabled: false, invert: false },
+  { axis: 'y', position: 0, enabled: false, invert: false },
+  { axis: 'z', position: 0, enabled: false, invert: false },
+];
+
+/**
+ * What the harness needs to know about the house it ended up with, so the
+ * presets and the entity `level` fields always name levels that exist.
+ */
+interface Layout {
+  model: ModelConfig;
+  title: string;
+  /** Level ids, bottom-up. */
+  levelIds: string[];
+  /** Finished floor level of the top storey, for framing the isometric view. */
+  topElevation: number;
+}
+
+/** The zero-config fallback, and what every other user of the card sees first. */
+const DEMO_LAYOUT: Layout = {
+  model: { demo: true },
+  title: 'Demo house',
+  levelIds: ['basement', 'ground', 'upper'],
+  topElevation: 2.9,
 };
+
+function layoutForPlan(plan: PlanSpec): Layout {
+  const levels = plan.levels.slice().sort((a, b) => a.elevation - b.elevation);
+  return {
+    model: { plan },
+    title: 'Home',
+    levelIds: levels.map((level) => level.id),
+    topElevation: levels[levels.length - 1].elevation,
+  };
+}
+
+function buildConfig(layout: Layout): Floorplan3dCardConfig {
+  const ids = layout.levelIds;
+  const levelId = (storey: Storey): string => {
+    if (storey === 'lower') return ids[0];
+    if (storey === 'top') return ids[ids.length - 1];
+    return ids[Math.min(1, ids.length - 1)];
+  };
+  const topId = levelId('top');
+  const mainId = levelId('main');
+
+  return {
+    type: 'custom:floorplan-3d-card',
+    title: layout.title,
+    model: layout.model,
+    camera: { fov: 45, transitionDuration: 1.1 },
+    render: { quality: 'high', bloom: true, shadows: false, daylight: false },
+    ui: {
+      height: '100%',
+      showToolbar: true,
+      showPresetBar: true,
+      showFps: true,
+    },
+    presets: [
+      {
+        id: 'overview',
+        name: 'Overview',
+        icon: 'mdi:home',
+        position: [15, 12, 17],
+        target: [0, 1.6, 0],
+        inTour: true,
+      },
+      {
+        id: 'main',
+        name: 'Main floor',
+        icon: 'mdi:home-floor-g',
+        position: [11, 9, 12],
+        target: [0, 1.2, 0],
+        section: {
+          mode: 'level',
+          levelId: mainId,
+          planes: structuredClone(NO_PLANES),
+          caps: true,
+          ghostAbove: true,
+        },
+        inTour: true,
+      },
+      {
+        id: 'top',
+        name: 'Living floor',
+        icon: 'mdi:home-floor-1',
+        // Looking along (1, 1, 1) with an orthographic projection: all three
+        // axes foreshorten equally, so the storey reads as a room you can see
+        // into rather than as a flat plan. The living floor is the interesting
+        // one in this house, so the harness opens here.
+        position: [16, 16 + layout.topElevation, 16],
+        target: [0, layout.topElevation + 1.2, 0],
+        orthographic: true,
+        // The cut still matters: without it you would be looking at the roof
+        // from an angle instead of into the storey.
+        section: {
+          mode: 'level',
+          levelId: topId,
+          planes: structuredClone(NO_PLANES),
+          caps: true,
+          ghostAbove: false,
+        },
+        visibleLevels: [topId],
+        default: true,
+      },
+    ],
+    entities: DEV_ENTITIES.map(({ storey, ...placed }) => ({
+      ...placed,
+      level: levelId(storey),
+    })),
+  };
+}
+
+/**
+ * The demo house is the default, which is also what every other user of the
+ * card sees. A private plan — a real building, kept out of the repository by
+ * `.gitignore` — is picked up when it happens to be there.
+ *
+ * Deliberately a `fetch` and not an `import`: importing a file that only exists
+ * on one machine would break `npm run dev` for everyone else. Vite serves the
+ * project root, so the path works with no extra configuration.
+ */
+const PRIVATE_PLAN_URL = '/private/house-plan.json';
+
+async function resolveLayout(): Promise<{ config: Floorplan3dCardConfig; note: string }> {
+  try {
+    const response = await fetch(PRIVATE_PLAN_URL, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const plan = (await response.json()) as PlanSpec;
+    if (!Array.isArray(plan?.levels) || plan.levels.length === 0) {
+      throw new Error('no "levels" in the file');
+    }
+    return {
+      config: buildConfig(layoutForPlan(plan)),
+      note: `private plan (${PRIVATE_PLAN_URL})`,
+    };
+  } catch (err) {
+    return {
+      config: buildConfig(DEMO_LAYOUT),
+      note: `demo house — ${PRIVATE_PLAN_URL}: ${(err as Error).message}`,
+    };
+  }
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -160,13 +274,14 @@ async function boot(): Promise<void> {
     return;
   }
 
-  let config: Floorplan3dCardConfig = structuredClone(DEMO_CONFIG);
+  const { config: baseConfig, note } = await resolveLayout();
+  let config: Floorplan3dCardConfig = structuredClone(baseConfig);
   const card = document.createElement('floorplan-3d-card') as CardElement;
 
   const applyConfig = () => {
     try {
       card.setConfig(structuredClone(config));
-      status.textContent = 'ok';
+      status.textContent = `ok — ${note}`;
       status.classList.remove('bad');
     } catch (err) {
       status.textContent = `setConfig threw: ${(err as Error).message}`;
@@ -320,7 +435,7 @@ async function boot(): Promise<void> {
 
   const reloadBtn = el('button', { className: 'chip' }, ['Reset config']);
   reloadBtn.addEventListener('click', () => {
-    config = structuredClone(DEMO_CONFIG);
+    config = structuredClone(baseConfig);
     applyConfig();
   });
   addRow('Config', reloadBtn);

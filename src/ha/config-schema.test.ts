@@ -435,3 +435,31 @@ describe('stubConfig', () => {
     expect(() => validateConfig(config)).not.toThrow();
   });
 });
+
+describe('model.plan', () => {
+  it('accepts a path to a hosted plan', () => {
+    const config = validateConfig(minimal({ model: { plan: '/local/haus-plan.json' } }));
+    expect(config.model?.plan).toBe('/local/haus-plan.json');
+  });
+
+  it('passes an inline plan through untouched', () => {
+    const plan = {
+      name: 'haus',
+      levels: [{ id: 'eg', name: 'EG', elevation: 0, height: 2.7, outline: [], rooms: [] }],
+      somethingTheCardDoesNotKnowYet: true,
+    };
+    const config = validateConfig(minimal({ model: { plan } }));
+    expect(config.model?.plan).toEqual(plan);
+  });
+
+  it('rejects a plan that is neither a path nor a mapping', () => {
+    expect(() => validateConfig(minimal({ model: { plan: 'haus-plan' } }))).toThrow(ConfigError);
+    expect(() => validateConfig(minimal({ model: { plan: 42 } }))).toThrow(ConfigError);
+  });
+
+  it('rejects an inline plan with no storeys', () => {
+    expect(() => validateConfig(minimal({ model: { plan: { levels: [] } } }))).toThrowError(
+      /model\.plan: "levels" is required/,
+    );
+  });
+});

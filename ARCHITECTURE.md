@@ -22,7 +22,9 @@ src/
     contracts.ts          interfaces between all subsystems (the contract)
     viewer.ts             owns the RenderContext, instantiates + wires subsystems
     core/                 renderer, render loop, resize, quality tiers
-    model/                glTF loading, procedural demo house, level detection
+    model/                glTF loading, procedural demo house, plan-driven
+                          houses (plan-types.ts is a persisted schema too),
+                          sh3d/ Sweet Home 3D import, level detection
     section/              clipping planes, level isolation, cut caps, handles
     camera/               orbit controls, preset capture + flight
     lighting/             HA light state -> three.js lights, daylight rig, postfx

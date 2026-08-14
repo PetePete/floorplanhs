@@ -1,7 +1,8 @@
 # Floorplan 3D Card
 
-An interactive 3D floorplan for your Home Assistant dashboard. Load a glTF/GLB
-model of your own house — or start with the built-in demo house — and the card
+An interactive 3D floorplan for your Home Assistant dashboard. Load a **Sweet
+Home 3D `.sh3d` file or a glTF/GLB model** of your own house — or start with the
+built-in demo house — and the card
 turns it into a live view: lights that actually light the room they are in,
 cross-sections that slice the building open, camera presets you can fly between,
 and drag & drop placement of entities straight onto the geometry. It is one
@@ -34,8 +35,66 @@ and your model file never leaves your Home Assistant instance.
   what makes this usable on a wall tablet.
 - **Visual editor.** Full GUI configuration with a live YAML preview; every
   option below is reachable without touching YAML.
+- **Sweet Home 3D files load directly.** Point the card at a `.sh3d` and it
+  reads it — no export, no conversion. See below for why that matters.
 - **Works with no model at all.** The demo house (three storeys, 12.9 × 10 m)
   ships inside the bundle so you can evaluate the card in 30 seconds.
+
+## Getting your house in
+
+Ranked by effort. Every step is optional — the card works with none of them.
+
+### Sweet Home 3D (recommended)
+
+[Sweet Home 3D](https://www.sweethome3d.com/) is free, runs everywhere, and you
+can trace your own floor plan over a scanned drawing without any 3D skills.
+Draw the walls, drop in doors and windows, add storeys — then copy the saved
+file straight into `config/www/`:
+
+```yaml
+model:
+  url: /local/house.sh3d
+```
+
+**Save it, do not export it.** `.sh3d` is Sweet Home 3D's own format, and the
+card reads it natively. That is deliberately the recommended route: `.sh3d`
+carries the storeys, the room names and the wall structure, whereas Sweet Home
+3D's OBJ export flattens everything into one mesh and the card then has to
+guess where your floors are.
+
+What comes across: storeys with their real heights and names, walls with their
+thicknesses (curved walls included), rooms as named polygons, and doors and
+windows as real openings with glass. Furniture is drawn as correctly sized,
+correctly rotated blocks — position, footprint, height and angle all come from
+the file.
+
+What does not: textures and the photo-realistic look of Sweet Home 3D's own
+renderer. This card has its own materials and lighting, so the result is
+cleaner and more diagram-like — which is usually what you want on a dashboard.
+
+Files saved by Sweet Home 3D **5.0 or newer** are supported. Older ones are
+stored in a legacy binary format; open and re-save such a file once with a
+current version.
+
+### glTF / GLB
+
+Anything that exports glTF works — Blender, SketchUp, IFC/BIM via BlenderBIM or
+IfcOpenShell:
+
+```yaml
+model:
+  url: /local/house.glb?v=3
+```
+
+Metres, Y up, Draco and meshopt compression supported, KTX2/Basis textures are
+not. Name your nodes `<level>/<room>/<part>` and the card picks up your storeys
+and rooms; otherwise it detects storeys from the geometry.
+
+### Type the dimensions instead
+
+If you have accurate drawings but no wish to install anything, describe the
+building directly — walls, rooms, openings and roof as plain data. See
+[`docs/configuration.md`](docs/configuration.md) for the `model.plan` format.
 
 ## Installation
 
@@ -251,7 +310,7 @@ the engine uses when the key is absent.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `url` | string | — | e.g. `/local/house.glb`. Absent → the procedural demo house. |
+| `url` | string | — | `/local/house.sh3d` (Sweet Home 3D) or `/local/house.glb` (glTF/GLB). Absent → the procedural demo house. |
 | `demo` | boolean | `false` | Force the demo house even when `url` is set. |
 | `scale` | number | `1` | Uniform scale. 1 world unit = 1 metre. |
 | `rotation` | `[x, y, z]` | `[0, 0, 0]` | Degrees, applied XYZ. Z-up exports usually need `[-90, 0, 0]`. |
@@ -491,8 +550,8 @@ lights, hollow cross-sections, touch drag & drop and performance.
 ## Documentation
 
 - [`docs/model-guide.md`](docs/model-guide.md) — getting a model of *your* house
-  into the card: Sweet Home 3D, Blender, SketchUp, IFC/BIM, node naming, units,
-  optimisation and Draco.
+  into the card: Sweet Home 3D and `.sh3d`, Blender, SketchUp, IFC/BIM, node
+  naming, units, optimisation and Draco.
 - [`docs/configuration.md`](docs/configuration.md) — every config block with
   worked examples.
 - [`docs/troubleshooting.md`](docs/troubleshooting.md) — when it does not look

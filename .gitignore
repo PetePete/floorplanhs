@@ -3,6 +3,13 @@ dist/
 
 # Local, machine-specific Claude Code settings — not project configuration.
 .claude/settings.local.json
+
+# Real floor plans. The repository ships an invented example house; an actual
+# building's dimensions, room layout and window positions are private and stay
+# on the machine they belong to.
+private/
+*.plan.json
+*.local.ts
 *.log
 .DS_Store
 .vite/

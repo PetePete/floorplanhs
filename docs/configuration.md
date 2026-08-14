@@ -39,6 +39,8 @@ model:
 - `url` — absent (or `demo: true`) means the demo house. `config/www/x.glb` is
   served as `/local/x.glb`; bump `?v=` after every re-export or the browser will
   serve a stale file.
+- `plan` — build the house from a floor plan instead of loading a mesh. See
+  [`model.plan`](#modelplan) below.
 - `scale` — 1 world unit is 1 metre. A model authored in centimetres needs
   `0.01`.
 - `rotation` — degrees, applied XYZ. A Z-up export needs `[-90, 0, 0]`.
@@ -51,6 +53,72 @@ model:
   an explicit error — re-export those as PNG/JPEG.
 
 See [`model-guide.md`](model-guide.md) for how to produce the file.
+
+## `model.plan`
+
+If what you have is a floor plan and a ruler rather than a 3D model, describe the
+building and let the card build it. No modelling tool, no export, no upload.
+
+```yaml
+model:
+  plan:
+    units: m
+    exteriorWall: 0.30      # defaults: 0.33 exterior, 0.15 interior, 0.30 slab
+    interiorWall: 0.12
+    levels:
+      - id: ground
+        name: Ground floor
+        elevation: 0        # finished floor level; ground floor is 0
+        height: 2.80        # floor to floor
+        # Closed polygon of the OUTER face, in metres. +X is east and +Z is
+        # south, so north is -Z. Put the origin on the north-west corner and
+        # every number stays positive; the card recentres the result.
+        outline: [[0, 0], [12, 0], [12, 8], [0, 8]]
+        rooms:
+          # Each room is its CLEAR INTERIOR as [x1, z1, x2, z2]. Leave exactly
+          # `interiorWall` between two rooms and the partition between them is
+          # built for you — once, however many rooms touch it.
+          - { id: hall, rect: [0.30, 0.30, 1.50, 7.70] }
+          - { id: kitchen, rect: [1.62, 0.30, 6.00, 3.50], wet: true }
+          - { id: living, rect: [1.62, 3.62, 11.70, 7.70] }
+          # `openTo` suppresses the partition, for an open-plan space:
+          - { id: dining, rect: [6.12, 0.30, 11.70, 3.50], openTo: [kitchen] }
+        openings:
+          # `at` is the plan coordinate along the facade — x for a north/south
+          # wall, z for east/west. `sill` is above the finished floor.
+          - { kind: window, wall: s, at: 4.00, width: 2.00, sill: 0.90 }
+          - { kind: sliding, wall: n, at: 8.00, width: 2.40 }
+          - { kind: door, wall: w, at: 2.00, width: 1.10 }
+          # An interior door needs no coordinates at all:
+          - { kind: door, wall: { between: [hall, living] }, width: 0.90 }
+        stairs:
+          - { id: stairs, room: hall, from: [0.90, 6.90], to: [0.90, 1.50],
+              width: 1.10, steps: 15 }
+    roof:
+      kind: mono            # or `gable`, or `flat`
+      highSide: n
+      eaveHeight: 4.40      # absolute, same scale as `elevation`
+      ridgeHeight: 5.60
+      overhang: 0.30
+    site:
+      - { id: terrace, kind: terrace, rect: [0, -4, 12, 0], level: -0.10 }
+```
+
+The full field list, with defaults and the two other ways to name a wall, is in
+`src/engine/model/plan-types.ts` — every field is documented there.
+
+A plan can also live **outside** the repository and be loaded by path, which is
+what you want for a real building you would rather not publish:
+
+```yaml
+model:
+  plan: /local/haus-plan.json
+```
+
+Source precedence is `demo: true` > `plan` > `url`. Anything that fails — a
+missing file, malformed JSON, a plan the validator rejects — falls back to the
+demo house with the reason shown on the card, naming the exact path inside the
+plan that is wrong.
 
 ## `model.levels`
 

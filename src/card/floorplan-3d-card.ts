@@ -42,7 +42,7 @@ import {
   type TourConfig,
   type Vec3,
 } from '@/types/config';
-import { DEFAULT_TOUR_CONFIG } from '@/types/config';
+import { DEFAULT_CAMERA_CONFIG, DEFAULT_TOUR_CONFIG } from '@/types/config';
 import type { HomeAssistant, LovelaceCard } from '@/types/hass';
 import { fireEvent } from '@/util/events';
 import { vRound } from '@/util/math';
@@ -200,6 +200,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private localViewsKey: string | null = null;
   private tourTimer: ReturnType<typeof setTimeout> | null = null;
   private tourResumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private tourMoveTimer: ReturnType<typeof setTimeout> | null = null;
   /** True while a tour-initiated flight is in progress; see onUserCameraInput. */
   private tourMoving = false;
 
@@ -1183,12 +1184,23 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       const index = stops.findIndex((preset) => preset.id === this.activePreset);
       const next = stops[(index + 1 + stops.length) % stops.length];
       // Flag the change as ours so `pauseOnInteraction` does not read the
-      // camera flight it just started as the user grabbing the camera.
+      // camera flight it just started as the user grabbing the camera. The
+      // flag has to outlive the *whole* flight: `onChange` fires throttled for
+      // its entire duration, and clearing early makes the tour pause itself on
+      // its own first move.
       this.tourMoving = true;
+      if (this.tourMoveTimer) clearTimeout(this.tourMoveTimer);
+      const flightMs =
+        (this.config?.camera?.transitionDuration ?? DEFAULT_CAMERA_CONFIG.transitionDuration) * 1000;
+      this.tourMoveTimer = setTimeout(
+        () => {
+          this.tourMoveTimer = null;
+          this.tourMoving = false;
+        },
+        flightMs + 400,
+      );
+
       this.onPresetSelect(next.id);
-      setTimeout(() => {
-        this.tourMoving = false;
-      }, 200);
       this.scheduleTourStep();
     }, seconds * 1000);
   }
@@ -1214,8 +1226,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private clearTourTimers(): void {
     if (this.tourTimer) clearTimeout(this.tourTimer);
     if (this.tourResumeTimer) clearTimeout(this.tourResumeTimer);
+    if (this.tourMoveTimer) clearTimeout(this.tourMoveTimer);
     this.tourTimer = null;
     this.tourResumeTimer = null;
+    this.tourMoveTimer = null;
+    this.tourMoving = false;
   }
 
   /**

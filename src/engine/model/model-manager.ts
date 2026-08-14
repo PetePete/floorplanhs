@@ -1,7 +1,11 @@
 /**
- * Owns the house: loads it (glTF or the procedural demo), normalises its
- * placement, works out its storeys and answers every "what is where" question
- * the rest of the engine asks.
+ * Owns the house: loads it (glTF, a Sweet Home 3D .sh3d, a floor plan spec, or
+ * the procedural demo), normalises its placement, works out its storeys and
+ * answers every "what is where" question the rest of the engine asks.
+ *
+ * Source precedence is `demo: true` > `plan` > `url`, and any failure along the
+ * way falls through to the demo house with an actionable message rather than
+ * leaving the card blank.
  *
  * Loading deliberately does the download itself instead of handing the URL to
  * GLTFLoader. Two reasons: we get real `loaded`/`total` byte counts for the
@@ -21,6 +25,9 @@ import type {
 } from '@/engine/contracts';
 import { disposeObject3D } from '@/engine/core/dispose';
 import { buildDemoHouse, type DemoHouse } from '@/engine/model/demo-house';
+import { buildFromPlan } from '@/engine/model/plan-house';
+import { looksLikeZip } from '@/engine/model/sh3d/sh3d-archive';
+import { buildFromSh3d } from '@/engine/model/sh3d/sh3d-build';
 import {
   assignNodesToLevels,
   computeModelBounds,
@@ -47,7 +54,8 @@ export class ModelManager implements IModelManager {
   private ctx: RenderContext | null = null;
   private root: THREE.Group | null = null;
   private loaded: LoadedModel | null = null;
-  private demoMaterials: MaterialLibrary | null = null;
+  /** Material library of whichever procedural house we built; we own it. */
+  private proceduralMaterials: MaterialLibrary | null = null;
   private levelNodes = new Map<string, THREE.Object3D[]>();
   private visibleLevels: string[] | null = null;
   private pickTargets: THREE.Object3D[] = [];
@@ -80,37 +88,87 @@ export class ModelManager implements IModelManager {
     this.disposeModel();
 
     let content: THREE.Object3D | null = null;
-    let demo: DemoHouse | null = null;
+    /** Demo, plan or .sh3d — all three are authored around their own y = 0. */
+    let procedural: DemoHouse | null = null;
+    let isDemo = false;
 
-    const url = config?.url;
-    if (url && config?.demo !== true) {
+    const forceDemo = config?.demo === true;
+    const plan = forceDemo ? undefined : config?.plan;
+    const url = forceDemo || plan ? undefined : config?.url;
+
+    if (plan) {
+      try {
+        let spec: unknown = plan;
+        if (typeof plan === 'string') {
+          report({ phase: 'download', loaded: 0, total: 0, message: 'Downloading plan' });
+          const buffer = await fetchWithProgress(plan, (loaded, total) => {
+            report({ phase: 'download', loaded, total });
+          });
+          spec = parsePlanJson(buffer, plan);
+        }
+        report({ phase: 'parse', message: 'Building from plan' });
+        procedural = buildFromPlan(spec, { anisotropy: this.maxAnisotropy() });
+        content = procedural.root;
+        this.proceduralMaterials = procedural.materials;
+      } catch (err) {
+        // Rule 7: a broken plan must not take the card down. Say exactly what is
+        // wrong — the message names the path inside the plan — then fall back.
+        procedural = null;
+        content = null;
+        report({
+          phase: 'error',
+          message: `${describe(err)} — showing the demo house instead. Check model.plan${
+            typeof plan === 'string' ? ` (${plan})` : ''
+          }.`,
+        });
+      }
+    }
+
+    if (!content && url) {
       try {
         report({ phase: 'download', loaded: 0, total: 0, message: 'Downloading model' });
         const buffer = await fetchWithProgress(url, (loaded, total) => {
           report({ phase: 'download', loaded, total });
         });
-        report({ phase: 'parse', message: 'Parsing model' });
-        content = await parseGltf(buffer, url, config?.dracoPath);
+
+        // Sweet Home 3D saves are ZIP archives. Trust the bytes over the name:
+        // a `.sh3d` served with the wrong extension is far more likely than a
+        // glTF that happens to start with `PK`.
+        if (looksLikeZip(buffer) || /\.sh3d(?:[?#]|$)/i.test(url)) {
+          report({ phase: 'parse', message: 'Reading Sweet Home 3D home' });
+          const home = buildFromSh3d(buffer, { anisotropy: this.maxAnisotropy() });
+          if (home.report.unmatchedOpenings > 0) {
+            console.warn(
+              `[floorplan-3d] ${home.report.unmatchedOpenings} door(s)/window(s) in ${url} sit in no wall and were skipped`,
+            );
+          }
+          procedural = home;
+          content = home.root;
+          this.proceduralMaterials = home.materials;
+        } else {
+          report({ phase: 'parse', message: 'Parsing model' });
+          content = await parseGltf(buffer, url, config?.dracoPath);
+        }
       } catch (err) {
         // Rule 7: never let a bad model take the card down with it. Surface the
         // failure, then show the demo house so the UI still works.
+        procedural = null;
         content = null;
-        report({
-          phase: 'error',
-          message: err instanceof Error ? err.message : String(err),
-        });
+        this.proceduralMaterials?.dispose();
+        this.proceduralMaterials = null;
+        report({ phase: 'error', message: describe(err) });
       }
     }
 
     if (!content) {
-      demo = buildDemoHouse({ anisotropy: this.maxAnisotropy() });
-      content = demo.root;
-      this.demoMaterials = demo.materials;
+      procedural = buildDemoHouse({ anisotropy: this.maxAnisotropy() });
+      content = procedural.root;
+      this.proceduralMaterials = procedural.materials;
+      isDemo = true;
     }
 
     report({ phase: 'prepare', message: 'Preparing scene' });
 
-    const isDemo = demo !== null;
     const scale = config?.scale && config.scale > 0 ? config.scale : 1;
     const offset: Vec3 = config?.offset ?? [0, 0, 0];
 
@@ -128,11 +186,12 @@ export class ModelManager implements IModelManager {
     root.updateMatrixWorld(true);
 
     // Recentre imported models only: XZ centre on the origin, lowest point on
-    // y = 0, which is what makes orbiting an arbitrary export feel right. The
-    // demo house is authored around its own origin with a basement below zero,
-    // and ARCHITECTURE.md pins level 0's floor to y = 0 — moving it would break
-    // every coordinate in the demo config.
-    if (!isDemo) {
+    // y = 0, which is what makes orbiting an arbitrary export feel right.
+    // Procedurally built houses — the demo one and anything from a plan — are
+    // authored around their own origin with a basement below zero, and
+    // ARCHITECTURE.md pins level 0's floor to y = 0. Moving them would break
+    // every coordinate the user has already placed against them.
+    if (!procedural) {
       const raw = computeModelBounds(content);
       if (!raw.isEmpty()) {
         const centre = raw.getCenter(new THREE.Vector3());
@@ -151,8 +210,8 @@ export class ModelManager implements IModelManager {
     let levels: LevelDefinition[];
     if (config?.levels && config.levels.length > 0) {
       levels = detectLevels(root, config.levels);
-    } else if (demo) {
-      levels = demo.levels.map((level) => ({
+    } else if (procedural) {
+      levels = procedural.levels.map((level) => ({
         ...level,
         elevation: level.elevation * scale + (offset[1] ?? 0),
         height: level.height * scale,
@@ -162,8 +221,8 @@ export class ModelManager implements IModelManager {
     }
 
     const nodes = new Map<string, THREE.Object3D>();
-    if (demo) {
-      for (const [name, object] of demo.nodes) nodes.set(name, object);
+    if (procedural) {
+      for (const [name, object] of procedural.nodes) nodes.set(name, object);
     }
     root.traverse((object) => {
       if (object.name && !nodes.has(object.name)) nodes.set(object.name, object);
@@ -233,10 +292,10 @@ export class ModelManager implements IModelManager {
       disposeObject3D(this.root);
       this.root = null;
     }
-    // The demo library owns canvas textures shared by several materials;
+    // The procedural library owns canvas textures shared by several materials;
     // dispose() there is idempotent and cheap, so call it regardless.
-    this.demoMaterials?.dispose();
-    this.demoMaterials = null;
+    this.proceduralMaterials?.dispose();
+    this.proceduralMaterials = null;
     this.loaded = null;
     this.levelNodes = new Map();
     this.visibleLevels = null;
@@ -350,6 +409,27 @@ function compileGlassMatcher(pattern: string): (name: string) => boolean {
 }
 
 /* ---------------------------------------------------------------- loading */
+
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A hosted plan is a `.json` file, so a 404 served as an HTML error page is the
+ * likeliest failure by far. Say that, rather than letting a raw
+ * "Unexpected token <" reach the dashboard.
+ */
+function parsePlanJson(buffer: ArrayBuffer, url: string): unknown {
+  const text = new TextDecoder().decode(new Uint8Array(buffer)).trim();
+  if (text.startsWith('<')) {
+    throw new Error(`${url} returned a web page, not a JSON plan — check the path`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${url} is not valid JSON — ${describe(err)}`);
+  }
+}
 
 async function fetchWithProgress(
   url: string,

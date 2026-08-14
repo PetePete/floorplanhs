@@ -1,20 +1,28 @@
 # Getting your house into the card
 
-The card renders a **glTF 2.0** file (`.glb` binary, or `.gltf` + assets). This
-guide covers how to produce one from nothing, how to name things so the card can
-find your storeys, and how to make it small enough to be pleasant on a tablet.
+The card takes your house from any of three places:
 
-If you just want to see the card work, skip all of this: with no `model.url` the
-card builds a procedural demo house (three storeys — `basement`, `ground`,
+| Source | `model` | Good for |
+| --- | --- | --- |
+| **Sweet Home 3D** | `url: /local/house.sh3d` | The easiest route by a wide margin. Draw the house, save, point the card at the save file. |
+| **A floor plan you type out** | `plan:` | No modelling tool at all — just a drawing and a ruler. See [`configuration.md`](configuration.md#modelplan). |
+| **glTF 2.0** | `url: /local/house.glb` | Blender, SketchUp, IFC — anything that can export a mesh. Most control, most work. |
+
+If you just want to see the card work, skip all of this: with no `model` at all
+the card builds a procedural demo house (three storeys — `basement`, `ground`,
 `upper` — 12.9 × 10 m, 2.9 m storey height) entirely in code.
+
+Sections 2 onward are about the glTF route. If you use Sweet Home 3D you can
+stop after section 1.
 
 ---
 
 ## 1. Draw the house
 
-### Sweet Home 3D (free, easiest, recommended)
+### Sweet Home 3D — recommended
 
-The shortest path from "I have a floorplan PDF" to "I have a GLB".
+The shortest path from "I have a floorplan PDF" to "I have a working card", and
+the only one where you never leave a single program.
 
 1. Install [Sweet Home 3D](https://www.sweethome3d.com/) (Windows/macOS/Linux,
    GPL).
@@ -24,13 +32,39 @@ The shortest path from "I have a floorplan PDF" to "I have a GLB".
    from the catalogue (they cut real openings).
 4. Add a second level for each storey (*Plan → Add level*) and set its
    elevation and height to match reality.
-5. Export: *3D view → Export to OBJ format*. Sweet Home 3D does not write glTF
-   directly, so import the OBJ into Blender and export GLB from there (step 2
-   below). Alternatively the *Export to glTF* plugin, if you have it installed,
-   writes GLB straight out.
+5. Name your rooms (double-click a room → *Name*). The card uses those names,
+   so `Kitchen` becomes the node `level0/kitchen/floor`.
+6. **Save the file** and copy it to `config/www/`.
 
-Sweet Home 3D works in centimetres by default. Confirm the export scale — a
-model that comes in 100× too large is nearly always a cm/m mix-up.
+```yaml
+model:
+  url: /local/house.sh3d?v=2
+```
+
+**Save it — do not export it.** `.sh3d` is Sweet Home 3D's own save format and
+the card reads it directly. This matters: Sweet Home 3D's built-in export is
+**OBJ**, which is a bag of triangles with no storeys, no rooms and no names, so
+everything this card is built on — the level selector, cross-sections, binding
+an entity to a room — would be gone. The `.sh3d` keeps all of it.
+
+Bump `?v=` after every re-save or the browser will serve you a stale file.
+
+What comes across: storeys and their elevations, walls with their real thickness
+and openings, sloping and curved walls, room polygons with their floors and
+ceilings, and every piece of furniture as a correctly sized, positioned and
+rotated box.
+
+What does not, yet: textures, and the detailed catalogue models — a sofa is a
+sofa-shaped box rather than a sofa. The models are inside the archive, so this
+may improve later.
+
+Files saved by Sweet Home 3D **5.0 or newer** work. Older ones store the home in
+a Java-serialised blob the card cannot read; open such a file in a current Sweet
+Home 3D and save it again, and the card will report exactly that if you forget.
+
+Sweet Home 3D works in **centimetres**; the card converts for you. You only need
+to think about units if you take the OBJ route below, where a model that arrives
+100× too large is nearly always a cm/m mix-up.
 
 ### Blender (free, most control)
 

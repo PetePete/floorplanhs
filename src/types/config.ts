@@ -4,6 +4,13 @@
  * hand-editable. Anything derived at runtime belongs in the engine, not here.
  */
 
+// Type-only, so this stays a documentation link rather than a dependency: the
+// plan format is a *persisted* schema and belongs to the same contract as the
+// rest of this file, but it is authored and consumed entirely inside the engine.
+import type { PlanSpec } from '@/engine/model/plan-types';
+
+export type { PlanSpec };
+
 export const CARD_TYPE = 'floorplan-3d-card';
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
@@ -29,7 +36,15 @@ export interface LevelDefinition {
 export interface ModelConfig {
   /** e.g. `/local/house.glb`. When absent the procedural demo house is used. */
   url?: string;
-  /** Force the built-in demo house even if a url is present. */
+  /**
+   * Build the house from a floor plan instead of loading a mesh: either the
+   * spec inline, or the path of a `.json` file holding one
+   * (`/local/haus-plan.json`). See `engine/model/plan-types.ts`.
+   *
+   * Precedence is `demo: true` > `plan` > `url` > the demo house as a fallback.
+   */
+  plan?: PlanSpec | string;
+  /** Force the built-in demo house even if a url or plan is present. */
   demo?: boolean;
   scale?: number;
   /** Degrees, applied XYZ. */
