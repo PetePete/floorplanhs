@@ -334,6 +334,43 @@ async function boot(): Promise<void> {
   }
   panel.append(el('h3', {}, ['Lights']), lightBox);
 
+  /*
+   * Model source. All three inputs have to produce the same downstream
+   * behaviour — levels, rooms, entity placement — so being able to flip
+   * between them in one click is the fastest way to spot when one of them
+   * drifts. The two private files are absent on any other machine; the select
+   * still lists them and the card reports the 404 rather than failing silently.
+   */
+  panel.append(el('h3', {}, ['Model source']));
+  const sources: Array<{ label: string; model: Floorplan3dCardConfig['model'] }> = [
+    { label: 'Demo house', model: { demo: true } },
+    { label: 'Plan (private)', model: undefined },
+    { label: 'Sweet Home 3D (private)', model: { url: '/private/sample.sh3d' } },
+  ];
+  const sourceSelect = el('select');
+  for (const s of sources) {
+    const option = document.createElement('option');
+    option.value = s.label;
+    option.textContent = s.label;
+    sourceSelect.append(option);
+  }
+  // Whatever `resolveLayout` settled on is what is on screen right now.
+  sourceSelect.value = note.startsWith('private plan') ? 'Plan (private)' : 'Demo house';
+  sourceSelect.addEventListener('change', async () => {
+    const chosen = sources.find((s) => s.label === sourceSelect.value);
+    if (!chosen) return;
+    if (chosen.model === undefined) {
+      const resolved = await resolveLayout();
+      config = { ...structuredClone(resolved.config), ui: config.ui, render: config.render };
+      status.textContent = resolved.note;
+    } else {
+      config = { ...config, model: structuredClone(chosen.model) };
+      status.textContent = `model: ${chosen.label}`;
+    }
+    applyConfig();
+  });
+  addRow('Source', sourceSelect);
+
   panel.append(el('h3', {}, ['Scene']));
 
   let stopChaos: (() => void) | null = null;

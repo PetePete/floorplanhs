@@ -4,6 +4,11 @@ import { fileURLToPath, URL } from 'node:url';
 // Home Assistant loads a custom card as a single ES module from /local or
 // /hacsfiles. Everything (three.js included) must be inlined into one file.
 export default defineConfig({
+  // Keep the dependency cache out of the project tree. This repository may sit
+  // in a synced folder (OneDrive, Dropbox); the sync client holds handles on
+  // `node_modules/.vite/deps` and Vite then fails to clear it with EPERM
+  // whenever the lockfile changes.
+  cacheDir: fileURLToPath(new URL('./.vite-cache', import.meta.url)),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

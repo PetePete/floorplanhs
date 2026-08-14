@@ -14,3 +14,6 @@ private/
 .DS_Store
 .vite/
 coverage/
+
+# Vite dependency cache, relocated out of node_modules (see vite.config.ts).
+.vite-cache/
