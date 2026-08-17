@@ -22,7 +22,7 @@ import { property, query, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
 import { cardStyles, themeTokens } from '@/card/card-styles';
-import { chakraPetchFace } from '@/ui/fonts/chakra-petch';
+import { ensureChakraPetch } from '@/ui/fonts/chakra-petch';
 import type { EditIntent, LoadedModel, ModelLoadProgress } from '@/engine/contracts';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
@@ -139,7 +139,7 @@ const MEDIUM_PX = 660;
 const DISPOSE_GRACE_MS = 300;
 
 export class Floorplan3dCard extends LitElement implements LovelaceCard {
-  static override styles = [chakraPetchFace, themeTokens, cardStyles];
+  static override styles = [themeTokens, cardStyles];
 
   /* ---------------------------------------------------------- HA-set props */
 
@@ -293,6 +293,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // Not a stylesheet: a font face adopted into a shadow root is ignored, so
+    // the family has to be registered on the document. See the font module.
+    ensureChakraPetch();
     if (this.disposeTimer) {
       clearTimeout(this.disposeTimer);
       this.disposeTimer = null;

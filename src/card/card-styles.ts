@@ -13,7 +13,6 @@
  */
 
 import { css } from 'lit';
-import { chakraPetchFace } from '@/ui/fonts/chakra-petch';
 
 /* --------------------------------------------------------------- tokens */
 
@@ -484,11 +483,7 @@ export const a11yStyles = css`
     letter-spacing: var(--fp3d-tracking);
   }
 
-  /*
-   * Lit puts every control in its own shadow root, so the face has to be
-   * declared where it is used. Identical @font-face rules resolve to one
-   * cached download — here, one already-decoded data URI.
-   */
+  /* font: inherit on controls resets to the UA font, not the host's. */
   button,
   select,
   input,
@@ -533,7 +528,6 @@ export const a11yStyles = css`
 
 /** Everything a chrome component needs. Applied by `FpBaseElement`. */
 export const uiBaseStyles = [
-  chakraPetchFace,
   themeTokens,
   surfaceStyles,
   buttonStyles,
@@ -663,7 +657,7 @@ export const cardStyles = css`
    * cube occupies so the zoom control lands underneath rather than behind it.
    */
   .cube-gap {
-    height: var(--fp3d-cube-gap, 104px);
+    height: var(--fp3d-cube-gap, 136px);
     flex: none;
     pointer-events: none;
   }
@@ -683,7 +677,7 @@ export const cardStyles = css`
   }
 
   :host([data-layout='narrow']) .cube-gap {
-    --fp3d-cube-gap: 80px;
+    --fp3d-cube-gap: 112px;
   }
   :host([data-layout='narrow']) .cube-column {
     --fp3d-cube-size: 72px;
