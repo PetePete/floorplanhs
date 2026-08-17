@@ -781,9 +781,14 @@ export class Viewer implements IViewer {
     // Precedence: explicit colour, then the mono palettes — where the lines sit
     // on the flattened surface rather than on the ground — then the backdrop.
     const color = render.edgeColor?.trim();
-    const groundInk = resolveBackground(render.background, this.themeDark).dark
-      ? EDGE_INK_ON_DARK
-      : EDGE_INK_ON_LIGHT;
+    const groundDark = resolveBackground(render.background, this.themeDark).dark;
+    const groundInk = groundDark ? EDGE_INK_ON_DARK : EDGE_INK_ON_LIGHT;
+
+    // The room tint answers to the same ground: a lamp's near-white colour has
+    // to be deepened before it can read against light paper.
+    this.guard('lighting', this._lighting, (l) =>
+      (l as ILightingSystem & { setGroundDark?(dark: boolean): void }).setGroundDark?.(groundDark),
+    );
     const paletteInk =
       palette === 'mono-dark'
         ? EDGE_INK_ON_DARK

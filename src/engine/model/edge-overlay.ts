@@ -304,6 +304,9 @@ export class EdgeOverlay {
         const slot = room.getX(i) - 1;
         const level = slot >= 0 && this.rooms ? this.rooms.levelInto(slot, lit) : 0;
         if (level > 0) {
+          // On a light ground the lamp's near-white hue would pull the line
+          // *towards* the paper; deepened, it pulls away from it instead.
+          lit.multiplyScalar(this.rooms?.litScale ?? 1);
           color.setXYZ(
             i,
             this.ink.r + (lit.r - this.ink.r) * LIT_MIX * level,

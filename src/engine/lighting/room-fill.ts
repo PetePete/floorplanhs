@@ -90,6 +90,11 @@ interface RoomShape {
  * index and mutate it.
  */
 export interface RoomFillSource {
+  /**
+   * How far a lit room's colour should be taken below white before use, so a
+   * near-white lamp still reads against a light ground. 1 on a dark one.
+   */
+  readonly litScale: number;
   /** Room slot for a mesh that declares one, or -1. */
   slotForMesh(mesh: THREE.Object3D): number;
   /**
@@ -114,11 +119,17 @@ export interface RoomFillLight {
 }
 
 /**
- * How opaque a fully lit room's floor tint is. Deliberately faint: it says
- * *where* the light is, the coloured edges say *that* it is on. A stronger
- * value turns the plan into a colour-block diagram and buries the drawing.
+ * How opaque a fully lit room's floor tint is, and how far its hue is taken
+ * below white first — both depending on what the drawing is standing on.
+ *
+ * A lamp's colour is close to white. Over a dark ground it reads as light,
+ * which is exactly right. Over a *light* ground at the same strength it is
+ * very nearly invisible, because it is almost the colour already there. So on
+ * light the hue is deepened and given more weight: the room reads as a richer
+ * wash of the light's colour instead of a paler one.
  */
-const WASH_OPACITY = 0.16;
+const WASH_ON_DARK = { opacity: 0.3, tint: 1 };
+const WASH_ON_LIGHT = { opacity: 0.46, tint: 0.5 };
 
 /**
  * Faces pointing away from the camera are drawn at a fraction of that. A room
@@ -163,6 +174,7 @@ varying vec3 vFpNormal;
 varying vec3 vFpView;
 uniform vec3 fpRoomFill[${MAX_ROOMS}];
 uniform float fpWashOpacity;
+uniform float fpWashTint;
 void main() {
   #include <clipping_planes_fragment>
   int index = int(vFpRoom + 0.5) - 1;
@@ -173,14 +185,16 @@ void main() {
 
   float facing = dot(normalize(vFpNormal), normalize(vFpView)) > 0.0 ? 1.0 : ${WASH_BACKFACE};
   // Normalise the hue out of the level so a dim lamp tints rather than greys.
-  gl_FragColor = vec4(fill / level, clamp(level, 0.0, 1.0) * fpWashOpacity * facing);
+  gl_FragColor = vec4(fill / level * fpWashTint, clamp(level, 0.0, 1.0) * fpWashOpacity * facing);
 }
 `;
 
 export class RoomFill {
   /** Shared by every patched material, so one write updates them all. */
   private readonly uniform = { value: new Float32Array(MAX_ROOMS * 3) };
-  private readonly washOpacity = { value: WASH_OPACITY };
+  private readonly washOpacity = { value: WASH_ON_DARK.opacity };
+  private readonly washTint = { value: WASH_ON_DARK.tint };
+  private groundDark = true;
   private wash: THREE.Mesh | null = null;
   private washMaterial: THREE.ShaderMaterial | null = null;
   private readonly shapes: RoomShape[] = [];
@@ -282,7 +296,11 @@ export class RoomFill {
     geometry.setAttribute(ROOM_ATTRIBUTE, new THREE.Float32BufferAttribute(rooms, 1));
 
     const material = new THREE.ShaderMaterial({
-      uniforms: { fpRoomFill: this.uniform, fpWashOpacity: this.washOpacity },
+      uniforms: {
+        fpRoomFill: this.uniform,
+        fpWashOpacity: this.washOpacity,
+        fpWashTint: this.washTint,
+      },
       vertexShader: WASH_VERTEX,
       fragmentShader: WASH_FRAGMENT,
       transparent: true,
@@ -380,6 +398,25 @@ export class RoomFill {
     // Rewriting the edge colours walks every line vertex, so it happens on a
     // real change rather than on every frame the fill is recomputed.
     if (changed) this.onChange?.();
+  }
+
+  /**
+   * What the drawing stands on. Not the theme: an opaque `render.background`
+   * overrules it, and the tint has to answer to what is actually behind it.
+   */
+  setGroundDark(dark: boolean): void {
+    if (this.groundDark === dark) return;
+    this.groundDark = dark;
+    const wash = dark ? WASH_ON_DARK : WASH_ON_LIGHT;
+    this.washOpacity.value = wash.opacity;
+    this.washTint.value = wash.tint;
+    this.dirty = true;
+    this.onChange?.();
+  }
+
+  /** How far a lit hue is taken below white; see `setGroundDark`. */
+  get litScale(): number {
+    return this.washTint.value;
   }
 
   /** Hide the wash of a storey that is not on screen. */

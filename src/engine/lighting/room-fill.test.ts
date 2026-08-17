@@ -326,6 +326,29 @@ describe('fill overlay', () => {
     }
   });
 
+  it('deepens the tint on a light ground, where a near-white lamp would vanish', () => {
+    const fill = fresh();
+    const material = overlay(fill)!.material as THREE.ShaderMaterial;
+
+    const onDark = {
+      opacity: material.uniforms.fpWashOpacity.value as number,
+      tint: material.uniforms.fpWashTint.value as number,
+    };
+    fill.setGroundDark(false);
+    const onLight = {
+      opacity: material.uniforms.fpWashOpacity.value as number,
+      tint: material.uniforms.fpWashTint.value as number,
+    };
+
+    // Heavier, and taken below white — otherwise it is almost exactly the
+    // colour of the paper it is lying on.
+    expect(onLight.opacity).toBeGreaterThan(onDark.opacity);
+    expect(onLight.tint).toBeLessThan(onDark.tint);
+    // The edges read the same figure, so a lit line deepens with it.
+    expect(fill.litScale).toBe(onLight.tint);
+    fill.dispose();
+  });
+
   it('takes the overlay away again on dispose', () => {
     const fill = fresh();
     const mesh = overlay(fill)!;

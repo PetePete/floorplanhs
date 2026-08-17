@@ -279,6 +279,12 @@ export class LightingSystem implements ILightingSystem {
     this.roomFill.onChange = cb;
   }
 
+  /** What the drawing stands on, so the room tint can read against it. */
+  setGroundDark(dark: boolean): void {
+    this.roomFill.setGroundDark(dark);
+    this.ctx?.invalidate();
+  }
+
   /**
    * Hide the lamps of hidden storeys. Not part of `ILightingSystem`, so the
    * Viewer has to opt in; until it does, section clipping still culls lights.
