@@ -446,10 +446,14 @@ export class Viewer implements IViewer {
     this.tick('placement', this._placement, dt, ctx);
     this.tick('pointer', this._pointer, dt, ctx);
 
-    // The composer only earns its extra full-screen passes when bloom is on.
+    // Always through the post-processing chain, at every quality tier. It is
+    // what applies tone mapping and the sRGB encode to the whole frame; render
+    // straight to the canvas instead and every material that opts out of tone
+    // mapping comes out brighter, so the card visibly changed appearance with
+    // the quality setting. PostFx itself decides whether bloom is affordable.
     const postFx = this._postFx;
     try {
-      if (postFx && !this.failed.has('postfx') && core.qualitySettings.bloom) {
+      if (postFx && !this.failed.has('postfx')) {
         try {
           postFx.render(dt);
           return;

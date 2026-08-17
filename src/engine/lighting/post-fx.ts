@@ -67,7 +67,14 @@ uniform sampler2D baseTexture;
 uniform sampler2D bloomTexture;
 varying vec2 vUv;
 void main() {
-  gl_FragColor = texture2D( baseTexture, vUv ) + vec4( 1.0 ) * texture2D( bloomTexture, vUv );
+  vec4 base = texture2D( baseTexture, vUv );
+  vec4 glow = texture2D( bloomTexture, vUv );
+  // Alpha is handled separately from colour: adding the bloom buffer's alpha
+  // wholesale would make the transparent background opaque wherever the blur
+  // reaches, and the card is meant to show the dashboard through it. A glow
+  // over empty space still has to be visible, so its brightness contributes.
+  float glowAlpha = max( glow.r, max( glow.g, glow.b ) );
+  gl_FragColor = vec4( base.rgb + glow.rgb, clamp( base.a + glowAlpha, 0.0, 1.0 ) );
 }
 `;
 
@@ -120,7 +127,7 @@ export class PostFx implements IPostFx {
     this.width = Math.max(1, ctx.size.width);
     this.height = Math.max(1, ctx.size.height);
     ctx.renderer.toneMappingExposure = this.exposure;
-    if (this.shouldCompose()) this.build();
+    this.build();
   }
 
   dispose(): void {
@@ -147,12 +154,11 @@ export class PostFx implements IPostFx {
       this.bloomPass.threshold = threshold;
     }
 
-    if (this.shouldCompose()) {
-      if (!this.bloomComposer) this.build();
-    } else if (this.bloomComposer) {
-      // Free the render targets rather than keeping four full-screen HalfFloat
-      // buffers alive for a feature the user switched off.
+    // Rebuild when the bloom chain comes or goes, so its four full-screen
+    // HalfFloat buffers are not kept alive for a feature that is switched off.
+    if (this.bloomWanted() !== (this.bloomComposer !== null)) {
       this.teardown();
+      this.build();
     }
     this.ctx?.invalidate();
   }
@@ -193,9 +199,9 @@ export class PostFx implements IPostFx {
     const bloomComposer = this.bloomComposer;
     const finalComposer = this.finalComposer;
 
-    // Plain path: no composer allocated, no extra full-screen passes, and the
-    // renderer's own tone mapping applies as usual.
-    if (!this.shouldCompose() || !bloomComposer || !finalComposer) {
+    // Only when the composer could not be built at all — a lost context, or a
+    // renderer that refused the render target.
+    if (!finalComposer) {
       ctx.renderer.render(ctx.scene, camera);
       return;
     }
@@ -204,6 +210,11 @@ export class PostFx implements IPostFx {
     // runtime, so the passes are re-pointed every frame rather than captured.
     if (this.bloomRenderPass) this.bloomRenderPass.camera = camera;
     if (this.finalRenderPass) this.finalRenderPass.camera = camera;
+
+    if (!bloomComposer) {
+      finalComposer.render(dt);
+      return;
+    }
 
     const scene = ctx.scene;
     const previousBackground = scene.background;
@@ -227,8 +238,11 @@ export class PostFx implements IPostFx {
 
   /* ----------------------------------------------------------- internals */
 
-  private shouldCompose(): boolean {
-    // 'low' means a device that cannot afford four extra full-screen passes.
+  /**
+   * Whether the *bloom* chain is worth its cost. 'low' means a device that
+   * cannot afford four extra full-screen passes.
+   */
+  private bloomWanted(): boolean {
     return this.enabled && this.ctx !== null && this.ctx.quality !== 'low';
   }
 
@@ -259,12 +273,29 @@ export class PostFx implements IPostFx {
 
   private build(): void {
     const ctx = this.ctx;
-    if (!ctx || this.bloomComposer) return;
+    if (!ctx || this.finalComposer) return;
 
     const renderer = ctx.renderer;
     const pixelRatio = renderer.getPixelRatio();
     const width = this.width;
     const height = this.height;
+
+    if (this.bloomWanted()) this.buildBloomChain(ctx, pixelRatio, width, height);
+    this.buildFinalChain(ctx, pixelRatio, width, height);
+    this.resize(width, height);
+  }
+
+  /**
+   * The emitters-on-black pass and its blur. Optional; everything else in the
+   * pipeline works without it.
+   */
+  private buildBloomChain(
+    ctx: RenderContext,
+    pixelRatio: number,
+    width: number,
+    height: number,
+  ): void {
+    const renderer = ctx.renderer;
 
     // HalfFloat: the emitters are deliberately above 1.0 and an 8-bit target
     // would clip them to white before the high-pass filter ever sees them.
@@ -294,6 +325,24 @@ export class PostFx implements IPostFx {
     );
     this.bloomComposer.addPass(this.bloomRenderPass);
     this.bloomComposer.addPass(this.bloomPass);
+  }
+
+  /**
+   * The pass that actually reaches the screen. Always built, at every quality
+   * tier, and that is the point: `OutputPass` is what applies tone mapping and
+   * the sRGB encode to the whole frame. Rendering straight to the canvas
+   * instead leaves that to each material — which means materials that opt out
+   * (`toneMapped: false` on the edge lines) and raw `ShaderMaterial`s (the room
+   * fill) come out visibly brighter, so the card changed appearance with the
+   * quality tier. One extra full-screen blit is a cheaper price than that.
+   */
+  private buildFinalChain(
+    ctx: RenderContext,
+    pixelRatio: number,
+    width: number,
+    height: number,
+  ): void {
+    const renderer = ctx.renderer;
 
     // The canvas' own `antialias: true` does nothing once we render through a
     // composer, because the scene never touches the default framebuffer. Every
@@ -313,28 +362,28 @@ export class PostFx implements IPostFx {
     this.finalComposer = new EffectComposer(renderer, finalTarget);
     this.finalRenderPass = new RenderPass(ctx.scene, ctx.activeCamera);
 
-    this.mixMaterial = new THREE.ShaderMaterial({
-      name: 'PostFx.bloomMix',
-      uniforms: {
-        baseTexture: { value: null },
-        // UnrealBloomPass has needsSwap = false and blends into the composer's
-        // *read* buffer, which is renderTarget2 — that is where the result is.
-        bloomTexture: { value: this.bloomComposer.renderTarget2.texture },
-      },
-      vertexShader: MIX_VERTEX_SHADER,
-      fragmentShader: MIX_FRAGMENT_SHADER,
-      defines: {},
-    });
-    this.mixPass = new ShaderPass(this.mixMaterial, 'baseTexture');
-    this.mixPass.needsSwap = true;
+    if (this.bloomComposer) {
+      this.mixMaterial = new THREE.ShaderMaterial({
+        name: 'PostFx.bloomMix',
+        uniforms: {
+          baseTexture: { value: null },
+          // UnrealBloomPass has needsSwap = false and blends into the
+          // composer's *read* buffer, renderTarget2 — that is where it lands.
+          bloomTexture: { value: this.bloomComposer.renderTarget2.texture },
+        },
+        vertexShader: MIX_VERTEX_SHADER,
+        fragmentShader: MIX_FRAGMENT_SHADER,
+        defines: {},
+      });
+      this.mixPass = new ShaderPass(this.mixMaterial, 'baseTexture');
+      this.mixPass.needsSwap = true;
+    }
 
     this.outputPass = new OutputPass();
 
     this.finalComposer.addPass(this.finalRenderPass);
-    this.finalComposer.addPass(this.mixPass);
+    if (this.mixPass) this.finalComposer.addPass(this.mixPass);
     this.finalComposer.addPass(this.outputPass);
-
-    this.resize(width, height);
   }
 
   private teardown(): void {
