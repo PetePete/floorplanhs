@@ -387,15 +387,21 @@ export class EntityMarker {
 
     const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
     this.body.position.y = lift;
-    if (this.leaderPositions[7] !== lift) {
-      this.leaderPositions[7] = lift;
-      this.leaderGeometry.attributes.position.needsUpdate = true;
-    }
-    // Crowded markers keep their anchor dot — you still see that something is
-    // there — but give up the label that was covering a neighbour.
+    // Crowded markers give up the label that was covering a neighbour, but not
+    // the leader: the line is what says something is there and, when it points
+    // at a room, which room that is. Dropping both leaves a bare crosshair,
+    // which on a dark ground is close to nothing at all.
     const showLabel = !this.crowded || this.hovered || this.selected;
     this.body.visible = showLabel;
-    this.leader.visible = showLabel && (lift > 0.03 || this.roomAnchor !== null);
+    this.leader.visible = showLabel ? lift > 0.03 || this.roomAnchor !== null : this.roomAnchor !== null;
+
+    // Hidden label, so the leader stops at the anchor rather than running up to
+    // a pill that is not being drawn.
+    const tip = showLabel ? lift : 0;
+    if (this.leaderPositions[7] !== tip) {
+      this.leaderPositions[7] = tip;
+      this.leaderGeometry.attributes.position.needsUpdate = true;
+    }
 
     this.object.updateMatrixWorld();
     _worldBody.setFromMatrixPosition(this.body.matrixWorld);

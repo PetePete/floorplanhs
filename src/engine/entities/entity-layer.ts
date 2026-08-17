@@ -61,7 +61,6 @@ interface DeclutterEntry {
   depth: number;
 }
 
-const _declutterVec = new THREE.Vector3();
 /** Seconds between label re-flows; see `declutter`. */
 const DECLUTTER_INTERVAL = 0.12;
 
@@ -422,25 +421,23 @@ export class EntityLayer implements IEntityLayer {
     let changed = false;
 
     for (const marker of this.markers.values()) {
-      if (!marker.isPickable()) {
+      // The label floats above its anchor, so the overlap test has to be run
+      // where the label actually is. Projecting the anchor and then measuring
+      // the *label* around it compares two different points, and hides labels
+      // that are nowhere near each other — while letting overlapping ones
+      // through whenever their anchors happen to be far apart.
+      if (!marker.getScreenRect(ctx.activeCamera, width, height, _rect)) {
         changed = marker.setCrowded(false) || changed;
         continue;
       }
-      _declutterVec.copy(marker.worldPosition).project(ctx.activeCamera);
-      // Behind the camera: project() mirrors the point, so trust nothing.
-      if (_declutterVec.z > 1) {
-        changed = marker.setCrowded(false) || changed;
-        continue;
-      }
-      const size = marker.labelSizePx;
       entries.push({
         marker,
-        x: (_declutterVec.x * 0.5 + 0.5) * width,
-        y: (-_declutterVec.y * 0.5 + 0.5) * height,
-        halfW: Math.max(size.width, 60) / 2,
-        halfH: Math.max(size.height, 22) / 2,
+        x: _rect.x,
+        y: _rect.y,
+        halfW: Math.max(_rect.halfWidth, 30),
+        halfH: Math.max(_rect.halfHeight, 11),
         priority: marker.declutterPriority,
-        depth: _declutterVec.z,
+        depth: _rect.depth,
       });
     }
 

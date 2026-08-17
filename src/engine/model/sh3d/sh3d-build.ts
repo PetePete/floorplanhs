@@ -310,6 +310,67 @@ function detectWallJoins(walls: readonly Sh3dWall[]): WallJoins {
 }
 
 /**
+ * How far each wall end has to be pulled back so it stops *on* the wall it runs
+ * into, rather than inside it.
+ *
+ * Sweet Home 3D draws walls to their centrelines, so an interior wall meeting
+ * another one part-way along — a T, not a corner — ends half the other wall's
+ * thickness inside it. Its end face and the two vertical edges of that face are
+ * then buried in solid, while the line you actually want, where the partition
+ * meets the visible face of the wall, belongs to neither body and is not drawn
+ * at all. Trimming the end back to that face puts both edges exactly where the
+ * plan needs them.
+ *
+ * Corners are excluded: an end that meets another wall's *end* is mitred
+ * instead, which is a different join with a different answer.
+ */
+function detectWallTees(walls: readonly Sh3dWall[], joins: WallJoins): Map<Sh3dWall, [number, number]> {
+  const tees = new Map<Sh3dWall, [number, number]>();
+  for (const wall of walls) tees.set(wall, [0, 0]);
+
+  for (const wall of walls) {
+    const ends: Vec2[] = [
+      [wall.xStart, wall.zStart],
+      [wall.xEnd, wall.zEnd],
+    ];
+    // Direction the wall points *at* each of its ends.
+    const axes: Array<Vec2 | null> = [unit(ends[1], ends[0]), unit(ends[0], ends[1])];
+
+    for (let side = 0; side < 2; side += 1) {
+      if (joins.get(wall)![side]) continue; // a corner; already mitred
+      const axis = axes[side];
+      if (!axis) continue;
+
+      for (const other of walls) {
+        if (other === wall || other.levelId !== wall.levelId) continue;
+        const a: Vec2 = [other.xStart, other.zStart];
+        const b: Vec2 = [other.xEnd, other.zEnd];
+        const along = unit(a, b);
+        if (!along) continue;
+
+        // Only a genuine T: an end sitting on the other wall's *run*, clear of
+        // both of its own ends, which would be a corner.
+        const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const t = ((ends[side][0] - a[0]) * along[0] + (ends[side][1] - a[1]) * along[1]) / span;
+        if (t <= 0.001 || t >= 0.999) continue;
+
+        const normal: Vec2 = [-along[1], along[0]];
+        const offset = (ends[side][0] - a[0]) * normal[0] + (ends[side][1] - a[1]) * normal[1];
+        if (Math.abs(offset) > other.thickness / 2 + wall.thickness) continue;
+
+        // The face is reached obliquely when the walls do not meet at a right
+        // angle, so the trim grows with the angle.
+        const facing = axis[0] * normal[0] + axis[1] * normal[1];
+        if (Math.abs(facing) < 0.05) continue;
+        tees.get(wall)![side] = other.thickness / 2 / Math.abs(facing);
+        break;
+      }
+    }
+  }
+  return tees;
+}
+
+/**
  * Mitre shear for one wall end, as `du/dz` in the wall's own frame.
  *
  * Walls used to be squared off and pushed half a thickness into the neighbour.
@@ -371,7 +432,13 @@ function applyMitre(geometry: THREE.BufferGeometry, atU: number, shear: number):
  * `wallAtStart` / `wallAtEnd` for walls drawn as one connected run, and walls
  * that merely meet are left unmarked.
  */
-function wallSegments(wall: Sh3dWall, joinAtStart: Vec2 | null, joinAtEnd: Vec2 | null): WallSegment[] {
+function wallSegments(
+  wall: Sh3dWall,
+  joinAtStart: Vec2 | null,
+  joinAtEnd: Vec2 | null,
+  trimStart = 0,
+  trimEnd = 0,
+): WallSegment[] {
   const start: [number, number] = [wall.xStart, wall.zStart];
   const end: [number, number] = [wall.xEnd, wall.zEnd];
   const heightEnd = wall.heightAtEnd ?? wall.height;
@@ -401,6 +468,22 @@ function wallSegments(wall: Sh3dWall, joinAtStart: Vec2 | null, joinAtEnd: Vec2 
       }
       if (arc.every(([x, z]) => Number.isFinite(x) && Number.isFinite(z))) points = arc;
     }
+  }
+
+  // Pull the ends back onto the face of whatever they butt into.
+  if (trimStart > 0 && points.length >= 2) {
+    const [a, b] = [points[0], points[1]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    points[0] = [a[0] + ((b[0] - a[0]) / len) * trimStart, a[1] + ((b[1] - a[1]) / len) * trimStart];
+  }
+  if (trimEnd > 0 && points.length >= 2) {
+    const a = points[points.length - 1];
+    const b = points[points.length - 2];
+    const len = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+    points[points.length - 1] = [
+      a[0] - ((a[0] - b[0]) / len) * trimEnd,
+      a[1] - ((a[1] - b[1]) / len) * trimEnd,
+    ];
   }
 
   const total = points.slice(1).reduce(
@@ -783,9 +866,11 @@ export function buildSh3dHome(home: Sh3dHome, options: Sh3dHouseOptions = {}): S
 
     const segments: WallSegment[] = [];
     const joins = detectWallJoins(walls);
+    const tees = detectWallTees(walls, joins);
     for (const wall of walls) {
       const [atStart, atEnd] = joins.get(wall) ?? [null, null];
-      segments.push(...wallSegments(wall, atStart, atEnd));
+      const [trimStart, trimEnd] = tees.get(wall) ?? [0, 0];
+      segments.push(...wallSegments(wall, atStart, atEnd, trimStart, trimEnd));
     }
     unmatchedOpenings += attachOpenings(openings, segments);
 

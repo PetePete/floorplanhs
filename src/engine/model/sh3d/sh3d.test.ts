@@ -5,6 +5,7 @@ import { parseHomeXml } from '@/engine/model/sh3d/sh3d-parse';
 import { buildFromSh3d, buildSh3dHome } from '@/engine/model/sh3d/sh3d-build';
 import {
   TEST_HOME_XML as HOME_XML,
+  TEST_HOME_TWO_ROOMS_XML as TWO_ROOMS_XML,
   sh3dArchive as archive,
 } from '@/engine/model/sh3d/test-home';
 
@@ -215,6 +216,32 @@ describe('sh3d build', () => {
       footprints.add(`${v.x.toFixed(2)},${v.z.toFixed(2)}`);
     }
     expect([...footprints].sort()).toEqual(['-2.90,-1.90', '-3.10,-2.10']);
+  });
+
+  it('stops an interior wall on the face of the one it runs into', () => {
+    // Sweet Home 3D draws to centrelines, so a partition meeting a wall
+    // part-way along ends half that wall's thickness *inside* it. Its end face
+    // and both of that face's vertical edges are then buried in solid, while
+    // the line a plan actually wants — where the partition meets the visible
+    // face — belongs to neither body and is drawn nowhere.
+    const home = buildSh3dHome(parseHomeXml(TWO_ROOMS_XML), { textures: false });
+    const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
+    mesh.updateWorldMatrix(true, false);
+    const position = mesh.geometry.getAttribute('position');
+    const v = new THREE.Vector3();
+
+    // The 10 cm partition runs along x = 0. The north wall is 20 cm thick on
+    // the z = -2.00 centreline, so its inside face is at z = -1.90 and that is
+    // where the partition has to stop.
+    let nearest = -Infinity;
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      if (Math.abs(v.x) > 0.06) continue;
+      if (v.z > 0) continue;
+      nearest = Math.max(nearest, v.z);
+      expect(v.z, 'no partition geometry inside the wall').toBeGreaterThan(-1.95);
+    }
+    expect(nearest).toBeCloseTo(-1.9, 2);
   });
 
   it('slopes a wall top when heightAtEnd differs', () => {
