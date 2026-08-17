@@ -311,6 +311,8 @@ export interface IViewer {
   /** Push new HA state. Cheap — called on every hass update. */
   updateHass(hass: HomeAssistant): void;
   setEditMode(enabled: boolean): void;
+  /** Frame the visible geometry without changing the viewing direction. */
+  fitToView(animate?: boolean): void;
   on<K extends ViewerEventName>(event: K, cb: (payload: ViewerEvents[K]) => void): () => void;
   resize(): void;
   dispose(): void;

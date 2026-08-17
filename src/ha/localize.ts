@@ -20,7 +20,7 @@ const EN = {
   'ui.toolbar.levels': 'Levels',
   'ui.toolbar.section': 'Section',
   'ui.toolbar.reset_view': 'Reset view',
-  'ui.toolbar.fit_view': 'Fit to model',
+  'ui.toolbar.fit_view': 'Fit to screen',
   'ui.toolbar.orthographic': 'Floorplan view',
   'ui.toolbar.perspective': 'Perspective view',
   'ui.toolbar.auto_rotate': 'Auto rotate',

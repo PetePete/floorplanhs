@@ -803,6 +803,53 @@ export class Viewer implements IViewer {
     this.core?.invalidate();
   }
 
+  /**
+   * Recentre and zoom so the building fills the canvas, keeping the current
+   * viewing direction — the CAD "fit to screen".
+   *
+   * It frames what is actually on screen, not the whole model: with a storey
+   * isolated, fitting to the entire house would zoom *out* to include the
+   * storeys the user just hid, which is the opposite of what the button says.
+   */
+  fitToView(animate = true): void {
+    const box = this.visibleBounds();
+    if (!box || box.isEmpty()) return;
+    this.guard('camera', this._cameraCtl, (c) => c.frameObject(box, animate));
+  }
+
+  /** World bounds of the geometry currently drawn, or null when there is none. */
+  private visibleBounds(): THREE.Box3 | null {
+    const root = this.core?.modelRoot;
+    if (!root) return null;
+
+    const levels = this._model?.getVisibleLevels?.() ?? null;
+    const wanted = levels && levels.length > 0 ? new Set(levels) : null;
+    const box = new THREE.Box3();
+
+    root.traverseVisible((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      // Edge lines, cut caps and the room-fill wash mirror the model; including
+      // them changes nothing and the wash floats above the floor.
+      if (mesh.userData.fp3dInternal === true) return;
+      if (wanted) {
+        const level = mesh.userData.level;
+        // Geometry belonging to no storey (site, terrain) is always drawn, so
+        // it must not drag the frame open when one storey is isolated.
+        if (typeof level !== 'string' || !wanted.has(level)) return;
+      }
+      box.expandByObject(mesh);
+    });
+
+    // Nothing matched — an unlevelled model, or a level id that no longer
+    // exists. Falling back to the whole model beats framing nothing.
+    if (box.isEmpty()) {
+      const bounds = this._model?.model?.bounds;
+      return bounds && !bounds.isEmpty() ? bounds.clone() : null;
+    }
+    return box;
+  }
+
   setVisibleLevels(levelIds: string[] | null): void {
     this.edges.setVisibleLevels(levelIds);
     this.guard('model', this._model, (m) => m.setVisibleLevels(levelIds));

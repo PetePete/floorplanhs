@@ -564,6 +564,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'reset':
         this.resetView();
         break;
+      case 'fit':
+        viewer?.fitToView(!this.prefersReducedMotion());
+        break;
       case 'projection':
         if (!viewer) break;
         this.orthographic = !this.orthographic;

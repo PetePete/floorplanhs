@@ -16,6 +16,7 @@ import { icon, type IconName } from '@/ui/icons';
 
 export type ToolbarAction =
   | 'reset'
+  | 'fit'
   | 'projection'
   | 'section'
   | 'autorotate'
@@ -204,6 +205,12 @@ export class Fp3dToolbar extends FpBaseElement {
       },
       // Saved views live in the bottom bar and nowhere else — a toolbar
       // button that opens a list of them is the hierarchy the bar replaces.
+      {
+        action: 'fit',
+        glyph: 'fitToScreen',
+        label: this.t('ui.toolbar.fit_view', 'Fit to screen'),
+        rank: 1,
+      },
       {
         action: 'section',
         glyph: 'section',
