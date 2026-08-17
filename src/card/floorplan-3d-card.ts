@@ -21,7 +21,7 @@ import { LitElement, html, nothing, type PropertyValues, type TemplateResult } f
 import { property, query, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
-import { cardStyles } from '@/card/card-styles';
+import { cardStyles, themeTokens } from '@/card/card-styles';
 import { chakraPetchFace } from '@/ui/fonts/chakra-petch';
 import type { EditIntent, LoadedModel, ModelLoadProgress } from '@/engine/contracts';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
@@ -139,7 +139,7 @@ const MEDIUM_PX = 660;
 const DISPOSE_GRACE_MS = 300;
 
 export class Floorplan3dCard extends LitElement implements LovelaceCard {
-  static override styles = [chakraPetchFace, cardStyles];
+  static override styles = [chakraPetchFace, themeTokens, cardStyles];
 
   /* ---------------------------------------------------------- HA-set props */
 
@@ -168,7 +168,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private autoRotate = false;
   @state() private fullscreen = false;
   @state() private editing = false;
-  @state() private dark = false;
+  @property({ type: Boolean, reflect: true }) private dark = false;
   @state() private bounds: Bounds | null = null;
   /** Session-only preset thumbnails; see `capturePresetThumbnail`. */
   @state() private thumbnails: Record<string, string> = {};

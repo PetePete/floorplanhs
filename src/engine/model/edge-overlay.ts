@@ -238,8 +238,6 @@ export class EdgeOverlay {
 
   private applyStyle(): void {
     if (!this.built) return;
-    const showEdges = this.style !== 'solid';
-    this.group.visible = showEdges;
 
     // `wireframe` is a hidden-line drawing, not an X-ray. The surfaces stay in
     // the scene and keep writing depth, but stop writing colour — so a wall
@@ -248,9 +246,12 @@ export class EdgeOverlay {
     // over it. Simply hiding the meshes would let every edge in the building
     // show through every other one, which is unreadable.
     //
-    // Nothing is lit in this mode: there is no visible surface for a lamp to
-    // fall on. The luminaires still glow, the rooms do not brighten.
+    // No surface is painted, so no surface can be shaded: a lit room shows
+    // through the floor wash instead (see room-fill.ts), and the luminaires
+    // still glow.
     const wire = this.style === 'wireframe';
+    const showEdges = wire;
+    this.group.visible = showEdges;
     for (const mesh of this.surfaces) {
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       // Glass must not occlude — you are supposed to see through a window.
@@ -283,8 +284,7 @@ export class EdgeOverlay {
       }
     }
 
-    // Lines read heavier without shaded surfaces behind them, so ease off.
-    this.material.opacity = wire ? 0.9 : 0.55;
+    this.material.opacity = 0.9;
   }
 
   private clearGeometry(): void {

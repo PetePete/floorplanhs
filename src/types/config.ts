@@ -282,12 +282,14 @@ export type EntityRole =
 /* ----------------------------------------------------------------- render */
 
 /**
- * `shaded` is solid surfaces plus crisp architectural edge lines — the CAD
- * look, and the default. `wireframe` drops the surfaces and leaves only the
- * lines; note that nothing is lit in that mode, because there is no surface
- * for a lamp to fall on. `solid` is surfaces with no edges at all.
+ * `wireframe` is a hidden-line drawing and the default: the surfaces still
+ * occlude what is behind them, but only the edges are painted. `solid` is the
+ * opposite — shaded surfaces with no edge lines at all.
+ *
+ * A lit room reads in both: the room fill is washed onto the floor area, not
+ * only shaded onto the walls a hidden-line drawing does not paint.
  */
-export type RenderStyle = 'solid' | 'shaded' | 'wireframe';
+export type RenderStyle = 'solid' | 'wireframe';
 
 /**
  * `model` keeps the materials the model ships with. The two `mono` values
@@ -471,7 +473,7 @@ export const DEFAULT_CAMERA_CONFIG: Required<
 export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
   // A floorplan is a drawing. Hidden-line is what a drawing looks like, and the
   // room fill still reads because it is washed onto the floor rather than
-  // shaded onto the walls.
+  // washed onto the room floor.
   style: 'wireframe',
   palette: 'model',
   // A dashboard card answers "which rooms are lit", not "where exactly does the

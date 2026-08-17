@@ -808,7 +808,7 @@ function readRender(raw: unknown, path: string): RenderConfig {
     if (value !== undefined) render[key] = value;
   };
 
-  assign('style', readEnum(obj, 'style', path, ['solid', 'shaded', 'wireframe'] as const));
+  assign('style', readEnum(obj, 'style', path, ['solid', 'wireframe'] as const));
   assign(
     'palette',
     readEnum(obj, 'palette', path, ['model', 'mono-light', 'mono-dark'] as const),

@@ -89,7 +89,9 @@ const DEFAULTS = {
   compactSize: 72,
   compactBelow: 420,
   // 44px of vertical clearance keeps the cube clear of the overlay toolbar.
-  margin: { x: 12, y: 48 },
+  // x must equal the card chrome's `--fp3d-chrome-inset`, and y is that inset
+  // plus the toolbar above the cube, or the zoom slider below stops aligning.
+  margin: { x: 16, y: 56 },
   animate: true,
 };
 

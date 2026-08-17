@@ -52,6 +52,7 @@ export const themeTokens = css`
     --fp3d-radius-sm: 8px;
     --fp3d-touch: 44px;
     --fp3d-gap: 8px;
+    --fp3d-chrome-inset: 16px;
 
     --fp3d-surface: rgba(252, 252, 253, 0.74);
     --fp3d-surface-strong: rgba(252, 252, 253, 0.92);
@@ -544,12 +545,6 @@ export const uiBaseStyles = [
 
 export const cardStyles = css`
   :host {
-    /* The card host has its own shadow root and does not get themeTokens;
-       these two are repeated rather than the whole set, so the font reaches the
-       title chip and the error panel without changing any colour. */
-    --fp3d-font: 'Chakra Petch', var(--paper-font-body1_-_font-family, system-ui),
-      -apple-system, 'Segoe UI', Roboto, sans-serif;
-    --fp3d-tracking: 0.015em;
     font-family: var(--fp3d-font);
     letter-spacing: var(--fp3d-tracking);
 
@@ -632,7 +627,13 @@ export const cardStyles = css`
       'left     center  right'
       'bottom   bottom  bottom';
     gap: var(--fp3d-gap);
-    padding: var(--fp3d-gap);
+    /*
+     * Breathing room between the controls and the card edge. This has to stay
+     * equal to the ViewCube's own canvas margin (view-cube.ts DEFAULTS.margin.x)
+     * or the zoom control below the cube stops lining up with it — the cube is
+     * painted on the canvas and knows nothing about this box.
+     */
+    padding: var(--fp3d-chrome-inset);
   }
 
   .chrome > * {
@@ -668,14 +669,14 @@ export const cardStyles = css`
   }
 
   /*
-   * Centres the zoom control on the cube's axis rather than on the right edge.
-   * These two values mirror the engine's ViewCube layout (view-cube.ts
-   * DEFAULTS: size 96 / compactSize 72, margin.x 12); the cube is drawn on the
+   * Centres the zoom control on the cube's axis rather than on the right edge:
+   * a box exactly the cube's width, right-aligned inside the same inset the
+   * cube uses, puts its centre on the cube's centre. The width mirrors
+   * view-cube.ts DEFAULTS (size 96 / compactSize 72); the cube is drawn on the
    * canvas and has no DOM box to align against.
    */
   .cube-column {
     width: var(--fp3d-cube-size, 96px);
-    margin-right: var(--fp3d-cube-margin-x, 12px);
     display: flex;
     justify-content: center;
     flex: none;

@@ -337,7 +337,7 @@ async function boot(): Promise<void> {
     addRow(label, select);
   };
 
-  renderSelect('Style', 'style', ['shaded', 'solid', 'wireframe'] as const);
+  renderSelect('Style', 'style', ['wireframe', 'solid'] as const);
   renderSelect('Palette', 'palette', ['model', 'mono-light', 'mono-dark'] as const);
   renderSelect('Background', 'background', ['transparent', 'system', 'light', 'dark'] as const);
   renderSelect('Lighting', 'lightMode', ['room', 'realistic'] as const);

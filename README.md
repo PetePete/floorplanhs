@@ -516,7 +516,7 @@ tour:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `style` | `solid` \| `shaded` \| `wireframe` | `wireframe` | `shaded` adds crisp architectural edge lines to solid surfaces. `wireframe` is a hidden-line drawing: surfaces still occlude, but only the lines are drawn — and nothing is lit, because there is no visible surface for a lamp to fall on. |
+| `style` | `solid` \| `wireframe` | `wireframe` | `wireframe` is a hidden-line drawing: surfaces still occlude what is behind them, but only the edges are painted. `solid` is shaded surfaces with no edge lines. A lit room reads in both — the fill is washed onto the floor area. |
 | `palette` | `model` \| `mono-light` \| `mono-dark` | `model` | `mono-*` flattens every surface to one neutral tone and drops textures, so the only colour left is the light your lamps cast. Pair with the opposite `background` — `mono-dark` on a dark theme is invisible. |
 | `lightMode` | `room` \| `realistic` | `room` | `room` lights the whole room a lamp stands in, evenly and up to its walls. `realistic` puts a physically based light at the lamp instead: inverse-square falloff, a hotspot underneath and dark corners. |
 | `roomFillStrength` | number | `1` | How strongly a lit room is tinted, 0–2. Only used by `lightMode: room`. |
