@@ -420,7 +420,7 @@ function readModel(raw: unknown, path: string): ModelConfig {
 
 /* ----------------------------------------------------------------- section */
 
-const SECTION_MODES: readonly SectionMode[] = ['none', 'level', 'plane', 'box'];
+const SECTION_MODES: readonly SectionMode[] = ['none', 'level', 'plane'];
 const AXES: readonly Axis[] = ['x', 'y', 'z'];
 
 const SECTION_ALIASES: Record<string, string> = {
@@ -460,12 +460,6 @@ function readSection(raw: unknown, path: string): SectionState {
   if ('levelId' in obj) {
     const levelId = readString(obj, 'levelId', path);
     section.levelId = levelId ?? null;
-  }
-
-  const box = readRecord(obj, 'box', path);
-  if (box) {
-    const here = child(path, 'box');
-    section.box = { min: requireVec3(box, 'min', here), max: requireVec3(box, 'max', here) };
   }
 
   const caps = readBoolean(obj, 'caps', path);

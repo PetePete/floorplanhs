@@ -50,7 +50,7 @@ export interface ModelConfig {
 
 /* ---------------------------------------------------------------- section */
 
-export type SectionMode = 'none' | 'level' | 'plane' | 'box';
+export type SectionMode = 'none' | 'level' | 'plane';
 export type Axis = 'x' | 'y' | 'z';
 
 export interface ClipPlaneState {
@@ -67,8 +67,6 @@ export interface SectionState {
   planes: ClipPlaneState[];
   /** For mode `level`: which storey is isolated. */
   levelId?: string | null;
-  /** For mode `box`: world-space AABB that is kept. */
-  box?: { min: Vec3; max: Vec3 };
   /** Render solid caps on cut surfaces instead of hollow shells. */
   caps?: boolean;
   capColor?: string;

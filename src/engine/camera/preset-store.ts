@@ -98,7 +98,7 @@ function normalizeVisibleLevels(value: unknown): string[] | null | undefined {
 function normalizeSection(value: unknown): SectionState | undefined {
   if (!isDict(value)) return undefined;
   const mode = value.mode;
-  if (mode !== 'none' && mode !== 'level' && mode !== 'plane' && mode !== 'box') return undefined;
+  if (mode !== 'none' && mode !== 'level' && mode !== 'plane') return undefined;
   return value as unknown as SectionState;
 }
 

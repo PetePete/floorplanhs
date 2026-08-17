@@ -114,7 +114,6 @@ export function renderAdvancedSection(ctx: EditorContext): TemplateResult {
           { value: 'none', label: ctx.t('editor.section_none', 'None — whole house') },
           { value: 'level', label: ctx.t('editor.section_level', 'Isolate one level') },
           { value: 'plane', label: ctx.t('editor.section_plane', 'Cut planes') },
-          { value: 'box', label: ctx.t('editor.section_box', 'Clip box') },
         ],
         onChange: (v) => patchSection(ctx, { mode: v as SectionMode }, true),
       })}
@@ -153,16 +152,6 @@ export function renderAdvancedSection(ctx: EditorContext): TemplateResult {
               })}
             </div>`,
           )}`
-        : ''}
-      ${section.mode === 'box'
-        ? alertBox(
-            'info',
-            ctx.t(
-              'editor.section_box_hint',
-              'Drag the box handles in the card and save a preset — the clip box is written back ' +
-                'from there rather than typed here.',
-            ),
-          )
         : ''}
       ${switchRow({
         label: ctx.t('editor.section_caps', 'Solid cut caps'),

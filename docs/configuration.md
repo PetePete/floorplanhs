@@ -237,17 +237,6 @@ section:
   caps: true
 ```
 
-**Clip box** — keep only one room:
-
-```yaml
-section:
-  mode: box
-  box:
-    min: [-4.2, 0, -3.0]
-    max: [0.5, 2.9, 2.4]
-  caps: true
-```
-
 - `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
@@ -266,8 +255,6 @@ section:
     ghostAbove: false    # never; `true` = always; omit = let each preset decide
   ```
 - `invert: true` keeps the other half of a plane cut.
-- The box is easiest to produce by dragging its handles in the card and saving a
-  preset; the editor does not ask you to type an AABB.
 
 ---
 

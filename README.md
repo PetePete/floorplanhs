@@ -2,8 +2,7 @@
 
 An interactive 3D floorplan for your Home Assistant dashboard. Load a **Sweet
 Home 3D `.sh3d` file or a glTF/GLB model** of your own house — or start with the
-built-in demo house — and the card
-turns it into a live view: lights that actually light the room they are in,
+and the card turns it into a live view: lights that actually light the room they are in,
 cross-sections that slice the building open, camera presets you can fly between,
 and drag & drop placement of entities straight onto the geometry. It is one
 self-contained ES module, with no add-on, no backend and no external service:
@@ -22,8 +21,8 @@ and your model file never leaves your Home Assistant instance.
   and up to the walls — the reading a floorplan wants. Brightness, RGB colour
   and colour temperature from Home Assistant drive it, not a coloured icon.
   Switch to `lightMode: realistic` for physically based falloff instead.
-- **Cross-sections.** Isolate one storey, slide cut planes along X/Y/Z, or clip
-  to a box — with solid cut caps so walls do not look like empty shells.
+- **Cross-sections.** Isolate one storey or slide cut planes along X/Y/Z, with
+  solid cut caps so walls do not look like empty shells.
 - **Camera presets.** Save a viewpoint (plus its cross-section and level
   visibility), give it a name and an icon, and fly to it in one tap. Optional
   slideshow tour and idle return.
@@ -277,7 +276,6 @@ plus a fixed `color` when you want a constant tint.
 - `level` — isolate one storey; everything above and below is clipped away (or
   faded, with `ghostAbove: true`).
 - `plane` — up to three clipping planes, one per axis, draggable in the card.
-- `box` — keep only what is inside a world-space box.
 
 Cut surfaces are filled with solid caps using a stencil pass so a sliced wall
 reads as a wall. If the WebGL context has no stencil buffer available, the card
@@ -424,10 +422,9 @@ tour:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | `none` \| `level` \| `plane` \| `box` | `none` | Which cutting technique is active. |
+| `mode` | `none` \| `level` \| `plane` | `none` | Which cutting technique is active. |
 | `planes` | `ClipPlaneState[]` | one disabled plane per axis at `position: 0` | Used when `mode: plane`. |
 | `levelId` | string \| null | `null` | Used when `mode: level`. |
-| `box` | `{ min: [x,y,z], max: [x,y,z] }` | — | Used when `mode: box`; the AABB that is kept. |
 | `caps` | boolean | `true` | Fill cut surfaces so walls read as solid. |
 | `capColor` | string | `#8a8f98` | Colour of the cut caps. |
 | `ghostAbove` | boolean | `false` | Fade levels above the active one instead of hiding them. |

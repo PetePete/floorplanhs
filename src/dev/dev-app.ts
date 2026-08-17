@@ -8,6 +8,7 @@
 
 import '@/main';
 import { createMockHass, type MockHass } from '@/dev/mock-hass';
+import { ensureChakraPetch } from '@/ui/fonts/chakra-petch';
 import {
   TEST_HOME_TWO_ROOMS_SH3D,
   TWO_ROOM_CENTRES,
@@ -191,6 +192,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 async function boot(): Promise<void> {
+  // index.html names the face; nothing registers it until a card connects, and
+  // the panel is painted before that happens.
+  ensureChakraPetch();
   const hass = createMockHass();
   const stage = document.getElementById('stage')!;
   const panel = document.getElementById('panel')!;

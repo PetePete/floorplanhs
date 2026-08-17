@@ -303,7 +303,10 @@ export class LightRig {
   }
 
   private buildFixture(): void {
-    const show = this.config.fixture?.show ?? true;
+    // Room fill already says which room is on, and the marker chip says which
+    // entity. A glowing blob with a bloom halo on top of both is a third answer
+    // to a question nobody asked twice.
+    const show = this.emissiveOnly ? this.config.fixture?.show === true : this.config.fixture?.show ?? true;
     if (!show) return;
 
     const radius = Math.max(0.005, this.config.fixture?.radius ?? DEFAULT_FIXTURE_RADIUS_M);

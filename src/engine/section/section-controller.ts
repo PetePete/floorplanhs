@@ -18,7 +18,7 @@ import * as THREE from 'three';
 import type { Axis, ClipPlaneState, LevelDefinition, SectionState } from '@/types/config';
 import { DEFAULT_SECTION_STATE } from '@/types/config';
 import type { ISectionController, RenderContext } from '@/engine/contracts';
-import { easeInOutCubic, isVec3 } from '@/util/math';
+import { easeInOutCubic } from '@/util/math';
 import { Tween, TweenRunner, tweenValue } from '@/engine/camera/tween';
 import { CapRenderer } from '@/engine/section/cap-renderer';
 import { SectionHandles, type SectionHandleSpec } from '@/engine/section/section-handles';
@@ -182,7 +182,6 @@ export class SectionController implements ISectionController {
       mode: this.state.mode,
       planes: this.state.planes.map((p) => ({ ...p })),
       levelId: this.state.levelId ?? null,
-      box: this.state.box ? { min: [...this.state.box.min], max: [...this.state.box.max] } : undefined,
       caps: this.state.caps,
       capColor: this.state.capColor,
       ghostAbove: this.state.ghostAbove,
@@ -216,11 +215,9 @@ export class SectionController implements ISectionController {
     this.bounds.copy(bounds);
     this.caps.setBounds(this.bounds);
     this.refreshMaterials();
-    // A box section with no explicit box defaults to the model bounds, which we
-    // only just learned; everything else is in absolute world coordinates and
-    // does not care.
-    if (this.state.mode === 'box' && !this.state.box) this.rebuild(false);
-    else this.syncHandles();
+    // Cut planes are in absolute world coordinates, so new bounds move only the
+    // handles, never the cut.
+    this.syncHandles();
   }
 
   setHandlesVisible(visible: boolean): void {
@@ -325,19 +322,6 @@ export class SectionController implements ISectionController {
             target: level.elevation + Math.max(height - ceilingCut, height * 0.6) + LEVEL_EPS,
           },
         ];
-      }
-
-      case 'box': {
-        const box = this.state.box;
-        const min = box && isVec3(box.min) ? box.min : this.bounds.min.toArray();
-        const max = box && isVec3(box.max) ? box.max : this.bounds.max.toArray();
-        const desired: DesiredClip[] = [];
-        for (const axis of AXIS_ORDER) {
-          const index = AXIS_INDEX[axis];
-          desired.push({ key: `box:${axis}:min`, axis, dir: 1, target: min[index] });
-          desired.push({ key: `box:${axis}:max`, axis, dir: -1, target: max[index] });
-        }
-        return desired;
       }
 
       default:
@@ -711,16 +695,12 @@ function sanitizePlanes(planes: ClipPlaneState[] | undefined): ClipPlaneState[] 
 function sanitize(state: SectionState | undefined): SectionState {
   const mode = state?.mode;
   const result: SectionState = {
-    mode: mode === 'level' || mode === 'plane' || mode === 'box' ? mode : 'none',
+    mode: mode === 'level' || mode === 'plane' ? mode : 'none',
     planes: sanitizePlanes(state?.planes),
     levelId: state?.levelId ?? null,
     caps: state?.caps !== false,
     capColor: state?.capColor ?? DEFAULT_SECTION_STATE.capColor,
     ghostAbove: state?.ghostAbove === true,
   };
-  const box = state?.box;
-  if (box && isVec3(box.min) && isVec3(box.max)) {
-    result.box = { min: [...box.min], max: [...box.max] };
-  }
   return result;
 }

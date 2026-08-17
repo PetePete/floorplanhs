@@ -54,7 +54,10 @@
         grid-template-columns: 1fr 320px;
         background: var(--primary-background-color);
         color: var(--primary-text-color);
-        font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        /* The harness panel is plain HTML and gets nothing from the card, so
+           it names the same face the card registers on the document. */
+        font: 14px/1.45 "Chakra Petch", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        letter-spacing: 0.015em;
         overflow: hidden;
       }
 

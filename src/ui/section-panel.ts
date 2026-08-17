@@ -264,7 +264,6 @@ export class Fp3dSectionPanel extends FpBaseElement {
       { mode: 'none', label: this.t('ui.section.none', 'Off') },
       { mode: 'level', label: this.t('ui.section.level', 'Level') },
       { mode: 'plane', label: this.t('ui.section.plane', 'Plane') },
-      { mode: 'box', label: this.t('ui.section.box', 'Box') },
     ];
     return html`<div class="modes" role="group" aria-label=${this.t('ui.toolbar.section', 'Section')}>
       ${modes.map(
@@ -333,7 +332,7 @@ export class Fp3dSectionPanel extends FpBaseElement {
 
   protected override render(): TemplateResult {
     const mode = this.section.mode;
-    const showPlanes = mode === 'plane' || mode === 'box';
+    const showPlanes = mode === 'plane';
 
     return html`
       <div class="panel surface solid" role="region" aria-label=${this.t('ui.toolbar.section', 'Section')}>

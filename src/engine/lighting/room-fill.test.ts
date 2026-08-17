@@ -217,69 +217,65 @@ describe('fill levels', () => {
 });
 
 /**
- * The shader patch is string replacement against three.js's own chunks. If an
- * anchor ever stops existing — a three upgrade renaming a chunk — `.replace()`
- * fails silently and the feature is dead with nothing to see: no error, no
- * warning, just rooms that never light. These assertions are the alarm.
+ * The overlay is the whole feature: without it a lit room tints nothing at all,
+ * and in the default hidden-line style there is no other surface it could tint.
  */
-describe('shader anchors', () => {
-  const physical = THREE.ShaderLib.physical;
+describe('fill overlay', () => {
+  function overlay(fill: RoomFill): THREE.Mesh | null {
+    return (fill as unknown as { wash: THREE.Mesh | null }).wash;
+  }
 
-  it('has every chunk the patch splices into', () => {
-    expect(physical.vertexShader).toContain('#include <common>');
-    expect(physical.vertexShader).toContain('#include <begin_vertex>');
-    expect(physical.fragmentShader).toContain('#include <common>');
-    expect(physical.fragmentShader).toContain('#include <lights_fragment_end>');
+  it('builds one mesh covering the rooms', () => {
+    const fill = fresh();
+    const mesh = overlay(fill);
+    expect(mesh, 'the overlay mesh').not.toBeNull();
+    expect(mesh!.geometry.getAttribute('position').count).toBeGreaterThan(0);
+    expect(mesh!.geometry.getAttribute('fpRoom')).toBeDefined();
+    fill.dispose();
   });
 
-  it('splices into a real material, not into nothing', () => {
+  it('covers walls, not only floors', () => {
     const fill = fresh();
-    const material = new THREE.MeshStandardMaterial();
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
-    (fill as unknown as { patch(m: THREE.Mesh): void }).patch(mesh);
+    const mesh = overlay(fill)!;
+    const position = mesh.geometry.getAttribute('position');
+    const rooms = mesh.geometry.getAttribute('fpRoom');
 
-    const shader = {
-      uniforms: {} as Record<string, unknown>,
-      vertexShader: physical.vertexShader,
-      fragmentShader: physical.fragmentShader,
-    };
-    material.onBeforeCompile(
-      shader as unknown as THREE.WebGLProgramParametersWithUniforms,
-      null as unknown as THREE.WebGLRenderer,
-    );
-
-    expect(shader.uniforms.fpRoomFill).toBeDefined();
-    expect(shader.vertexShader).toContain('attribute float fpRoom;');
-    expect(shader.vertexShader).toContain('vFpRoom = fpRoom;');
-    // `flat` matters: without it the index is interpolated across the triangle
-    // and every wall gets a gradient of wrong rooms.
-    expect(shader.fragmentShader).toContain('flat varying float vFpRoom;');
-    expect(shader.fragmentShader).toContain('reflectedLight.indirectDiffuse += fpRoomFill[');
+    // Wall geometry is the only thing reaching well above the floor slab, and
+    // it is the part that has to be classified per vertex rather than by mesh.
+    let highLit = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      if (position.getY(i) > 1 && rooms.getX(i) > 0) highLit += 1;
+    }
+    expect(highLit, 'vertices above 1 m carrying a room').toBeGreaterThan(0);
     fill.dispose();
-    material.dispose();
   });
 
-  it('shares one uniform object across materials, so one write lights them all', () => {
+  it('reads the same uniform the fill is written into', () => {
     const fill = fresh();
-    const shaders = [new THREE.MeshStandardMaterial(), new THREE.MeshStandardMaterial()].map(
-      (material) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
-        (fill as unknown as { patch(m: THREE.Mesh): void }).patch(mesh);
-        const shader = {
-          uniforms: {} as Record<string, unknown>,
-          vertexShader: physical.vertexShader,
-          fragmentShader: physical.fragmentShader,
-        };
-        material.onBeforeCompile(
-          shader as unknown as THREE.WebGLProgramParametersWithUniforms,
-          null as unknown as THREE.WebGLRenderer,
-        );
-        return shader;
-      },
-    );
-
-    expect(shaders[0].uniforms.fpRoomFill).toBe(shaders[1].uniforms.fpRoomFill);
+    const material = overlay(fill)!.material as THREE.ShaderMaterial;
+    const own = (fill as unknown as { uniform: { value: Float32Array } }).uniform;
+    expect(material.uniforms.fpRoomFill).toBe(own);
     fill.dispose();
+  });
+
+  it('never occludes, never picks, and grows no edges', () => {
+    const fill = fresh();
+    const mesh = overlay(fill)!;
+    const material = mesh.material as THREE.ShaderMaterial;
+    expect(material.transparent).toBe(true);
+    expect(material.depthWrite).toBe(false);
+    // fp3dInternal keeps it out of the ghost clone and the edge overlay;
+    // noPick keeps a dropped entity from landing on it.
+    expect(mesh.userData.fp3dInternal).toBe(true);
+    expect(mesh.userData.noPick).toBe(true);
+    fill.dispose();
+  });
+
+  it('takes the overlay away again on dispose', () => {
+    const fill = fresh();
+    const mesh = overlay(fill)!;
+    fill.dispose();
+    expect(mesh.parent).toBeNull();
   });
 });
 
