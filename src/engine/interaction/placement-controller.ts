@@ -106,6 +106,10 @@ const SURFACE_THRESHOLD = 0.5;
 /** Tolerance for the clipping-plane test; the hit point sits *on* a surface. */
 const CLIP_EPSILON = 1e-4;
 
+const UP = new THREE.Vector3(0, 1, 0);
+/** Reused by `resolveFree`; the plane moves, the object does not. */
+const _freePlane = new THREE.Plane();
+
 export class PlacementController implements IPlacementController {
   private readonly emitter = new Emitter<PlacementEvents>();
   private readonly indicator: DropIndicator;
@@ -136,6 +140,8 @@ export class PlacementController implements IPlacementController {
   /** `ui.snapPlacement`; see the offset table above. */
   private snapPlacement = false;
   private originalPosition: Vec3 | null = null;
+  /** Latched once a drag leaves the building. See `resolve`. */
+  private freePlacement = false;
   /** Injected by the Viewer; see `setRoomResolver`. */
   private roomAt: ((x: number, y: number, z: number) => string | null) | null = null;
   private lastResult: PlacementResult | null = null;
@@ -244,6 +250,7 @@ export class PlacementController implements IPlacementController {
     this.mode = 'move';
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
+    this.freePlacement = false;
     this.lastResult = null;
     this.applyPreview({
       icon: placed?.marker?.icon,
@@ -409,9 +416,20 @@ export class PlacementController implements IPlacementController {
     }
 
     const hit = this.firstUnclippedHit();
-    if (!hit) {
+
+    // A drag that leaves the building latches into free placement for the rest
+    // of the gesture. Without the latch, dragging a marker out and along the
+    // outside of a wall keeps catching that wall — the ray still grazes it on
+    // its way down to the ground — and the marker snaps back onto it every few
+    // pixels. Only landing on a *floor* clears the latch, because that is the
+    // one surface that unambiguously means "back inside a room": walls and
+    // roofs are exactly what you cross on the way out.
+    if (!hit) this.freePlacement = true;
+    else if (hit.object.userData.part === 'floor') this.freePlacement = false;
+
+    if (!hit || this.freePlacement) {
       this.hits.length = 0;
-      return this.reject('Drop on the house to place it');
+      return this.resolveFree();
     }
 
     this.point.copy(hit.point);
@@ -441,6 +459,72 @@ export class PlacementController implements IPlacementController {
       nodeName: hit.object.name || undefined,
       room: this.resolveRoom(),
     };
+  }
+
+  /**
+   * Placement with no surface under the pointer: onto a horizontal plane at the
+   * storey's own floor level.
+   *
+   * This is what makes the wall crossable at all. Beside the building the ray
+   * hits nothing — there is no ground plane in the model, by design — so
+   * requiring a hit meant a marker could never be dragged clear of the plan,
+   * however far you pulled it.
+   */
+  private resolveFree(): PlacementResult | null {
+    const ctx = this.ctx;
+    if (!ctx) return null;
+
+    const level = this.freeLevel();
+    const y = level?.elevation ?? this.model.model?.bounds.min.y ?? 0;
+    _freePlane.set(UP, -y);
+
+    const ray = this.raycaster.ray;
+    if (!ray.intersectPlane(_freePlane, this.point)) {
+      return this.reject('Drop beside the house, not above the horizon');
+    }
+    if (level && this.isLevelHidden(level)) {
+      return this.reject(`${level.name} is hidden`, level);
+    }
+
+    this.normal.copy(UP);
+    this.anchor.copy(this.point);
+    this.anchor.y += FLOOR_LIFT;
+    snapToGrid(this.anchor);
+
+    this.feedback.point.copy(this.point);
+    this.feedback.normal.copy(this.normal);
+    this.feedback.anchor.copy(this.anchor);
+    this.feedback.valid = true;
+    this.feedback.levelName = level?.name ?? null;
+    this.feedback.levelElevation = level?.elevation ?? null;
+    this.feedback.reason = undefined;
+
+    return {
+      position: vRound([this.anchor.x, this.anchor.y, this.anchor.z]),
+      normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
+      levelId: level?.id ?? null,
+      room: this.resolveRoom(),
+    };
+  }
+
+  /**
+   * Which storey a free-placed marker belongs to. The one it already had, so
+   * dragging a first-floor sensor out of the window does not quietly move it to
+   * the ground floor; otherwise whichever storey is on screen alone, and
+   * failing that the one the model puts at the bottom.
+   */
+  private freeLevel(): LevelDefinition | null {
+    const original = this.originalPosition;
+    if (original) {
+      const level = this.model.levelAt(original);
+      if (level) return level;
+    }
+    const visible = this.model.getVisibleLevels();
+    const levels = this.model.model?.levels ?? [];
+    if (visible && visible.length === 1) {
+      return levels.find((entry) => entry.id === visible[0]) ?? null;
+    }
+    return levels[0] ?? null;
   }
 
   /**

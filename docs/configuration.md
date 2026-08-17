@@ -490,7 +490,11 @@ render:
 
   You do not have to type any of it. In edit mode, **drag the marker out of its
   room** and drop it beside the building: the drop records the room it came
-  from and the leader appears. Drag it back into a room and the override is
+  from and the leader appears. There is no ground plane in the model, so a drop
+  beside the house lands on a horizontal plane at that storey's own floor
+  level — and once a drag has left the building it stays free until it passes
+  over a floor again, so dragging along the outside of a facade does not keep
+  catching the wall. Drag it back into a room and the override is
   removed again, because the position says which room it is in and an override
   written now would go stale the next time the model changes.
 - `onDemand: true` idles the render loop when nothing changed. Leave it on.
