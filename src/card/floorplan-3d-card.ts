@@ -656,11 +656,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'move-entity': {
         const index = entities.findIndex((entry) => entry.entity === intent.entityId);
         if (index < 0) return;
-        entities[index] = {
+        const moved: PlacedEntity = {
           ...entities[index],
           position: vRound(intent.position),
           level: intent.level,
         };
+        // `undefined` means the drop landed inside a room and the position
+        // speaks for itself, so the old override is dropped rather than kept.
+        if (intent.room === undefined) delete moved.room;
+        else if (intent.room) moved.room = intent.room;
+        entities[index] = moved;
         next.entities = entities;
         break;
       }
@@ -880,19 +885,37 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const existing = this.config?.entities?.find((entry) => entry.entity === entityId);
     if (existing) {
       this.applyIntent(
-        { kind: 'move-entity', entityId, position: vRound(result.position), level: result.levelId },
+        {
+          kind: 'move-entity',
+          entityId,
+          position: vRound(result.position),
+          level: result.levelId,
+          room: result.room ?? undefined,
+        },
         false,
       );
       return;
     }
-    this.applyIntent({ kind: 'add-entity', entity: this.newPlacement(entityId, result.position, result.levelId) }, false);
+    this.applyIntent(
+      {
+        kind: 'add-entity',
+        entity: this.newPlacement(entityId, result.position, result.levelId, result.room),
+      },
+      false,
+    );
     this.selectedEntity = entityId;
   }
 
   /** Sensible defaults so a dropped light lights the room without extra clicks. */
-  private newPlacement(entityId: string, position: Vec3, levelId: string | null): PlacedEntity {
+  private newPlacement(
+    entityId: string,
+    position: Vec3,
+    levelId: string | null,
+    room?: string | null,
+  ): PlacedEntity {
     const level = levelId ?? suggestPlacementLevel(this._hass, entityId, this.levels);
     const placed: PlacedEntity = { entity: entityId, position: vRound(position), level };
+    if (room) placed.room = room;
     if (domainOf(entityId) === 'light') {
       placed.light = { kind: 'point', distance: 6, fixture: { show: true } };
     }

@@ -136,6 +136,8 @@ export class PlacementController implements IPlacementController {
   /** `ui.snapPlacement`; see the offset table above. */
   private snapPlacement = false;
   private originalPosition: Vec3 | null = null;
+  /** Injected by the Viewer; see `setRoomResolver`. */
+  private roomAt: ((x: number, y: number, z: number) => string | null) | null = null;
   private lastResult: PlacementResult | null = null;
   private domDrag = false;
   private cameraWasEnabled = true;
@@ -437,6 +439,7 @@ export class PlacementController implements IPlacementController {
       normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
       levelId: level?.id ?? null,
       nodeName: hit.object.name || undefined,
+      room: this.resolveRoom(),
     };
   }
 
@@ -538,6 +541,31 @@ export class PlacementController implements IPlacementController {
     this.feedback.levelElevation = level?.elevation ?? null;
     this.feedback.reason = reason;
     return null;
+  }
+
+  /**
+   * How to name the room a world point falls in. Without it every drop is
+   * treated as landing outside a room, which is also the correct answer for a
+   * model that has no rooms at all.
+   */
+  setRoomResolver(resolver: ((x: number, y: number, z: number) => string | null) | null): void {
+    this.roomAt = resolver;
+  }
+
+  /**
+   * Which room the *result* should record.
+   *
+   * Dropped inside a room: none, because the position already says which one,
+   * and an override written now would go stale the moment the model changes.
+   * Dropped outside: the room it came from — that is the whole gesture of
+   * dragging a chip clear of the plan, and it is what makes the leader appear.
+   */
+  private resolveRoom(): string | null {
+    if (!this.roomAt) return null;
+    const here = this.roomAt(this.anchor.x, this.anchor.y, this.anchor.z);
+    if (here) return null;
+    const from = this.originalPosition;
+    return from ? this.roomAt(from[0], from[1], from[2]) : null;
   }
 
   /** Opt into fixture-aware drop heights instead of what-you-see placement. */

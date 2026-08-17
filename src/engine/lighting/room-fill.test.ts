@@ -71,6 +71,16 @@ describe('room index', () => {
     fill.dispose();
   });
 
+  it('names the room a point falls in, for drag-and-drop', () => {
+    // Dropping a marker outside a room records the one it came from, which is
+    // what makes the leader line appear; that needs a name, not a slot index.
+    const fill = fresh();
+    expect(fill.roomNameAt(...TWO_ROOM_CENTRES.west)).toBe(TWO_ROOMS.west);
+    expect(fill.roomNameAt(...TWO_ROOM_CENTRES.east)).toBe(TWO_ROOMS.east);
+    expect(fill.roomNameAt(40, 2.2, 40), 'outside the building').toBeNull();
+    fill.dispose();
+  });
+
   it('puts a point outside the building in no room at all', () => {
     const fill = fresh();
     expect(fill.roomAt(new THREE.Vector3(500, 1.5, 500))).toBeNull();

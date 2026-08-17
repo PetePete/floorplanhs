@@ -253,6 +253,15 @@ export interface PlacementResult {
   levelId: string | null;
   /** Node name that was hit, useful for bindNode. */
   nodeName?: string;
+  /**
+   * The room this entity should be recorded as belonging to.
+   *
+   * `null` when the drop landed inside a room — the position already says
+   * which, so no override is written. A name when it landed *outside* one, in
+   * which case it is the room the entity was dragged out of, and the marker
+   * draws a leader back to it.
+   */
+  room?: string | null;
 }
 
 export interface IPlacementController extends Subsystem {
@@ -285,7 +294,14 @@ export interface IPlacementController extends Subsystem {
 
 export type EditIntent =
   | { kind: 'add-entity'; entity: PlacedEntity }
-  | { kind: 'move-entity'; entityId: string; position: Vec3; level: string | null }
+  | {
+      kind: 'move-entity';
+      entityId: string;
+      position: Vec3;
+      level: string | null;
+      /** Room to record; absent clears any existing one. See PlacementResult. */
+      room?: string;
+    }
   | { kind: 'update-entity'; entityId: string; patch: Partial<PlacedEntity> }
   | { kind: 'remove-entity'; entityId: string }
   | { kind: 'add-preset'; preset: CameraPreset }

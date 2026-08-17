@@ -349,7 +349,19 @@ export class Viewer implements IViewer {
           fillSource?: RoomFillSource;
           setFillListener?(cb: (() => void) | null): void;
         };
-        if (lighting.fillSource) this.edges.setRoomSource(lighting.fillSource);
+        const rooms = lighting.fillSource;
+        if (rooms) {
+          this.edges.setRoomSource(rooms);
+          // Dropping a marker outside a room records the one it came from, so
+          // placement needs the same room index the fill and the edges use.
+          this.guard('placement', this._placement, (p) =>
+            (
+              p as IPlacementController & {
+                setRoomResolver?(fn: (x: number, y: number, z: number) => string | null): void;
+              }
+            ).setRoomResolver?.((x, y, z) => rooms.roomNameAt(x, y, z)),
+          );
+        }
         lighting.setFillListener?.(() => this.edges.refreshRoomColors());
       });
 

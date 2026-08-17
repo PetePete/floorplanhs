@@ -98,6 +98,8 @@ export interface RoomFillSource {
    * polygon it faces, and its outer face a wall thickness beyond it.
    */
   slotAt(x: number, y: number, z: number): number;
+  /** Name of the room a world point falls in, or null when it is outside. */
+  roomNameAt(x: number, y: number, z: number): string | null;
   /** Current fill of a slot into `out`; returns its 0..1 level, 0 when dark. */
   levelInto(slot: number, out: THREE.Color): number;
 }
@@ -400,6 +402,11 @@ export class RoomFill {
 
   slotAt(x: number, y: number, z: number): number {
     return this.locate(x, y, z);
+  }
+
+  roomNameAt(x: number, y: number, z: number): string | null {
+    const slot = this.locate(x, y, z);
+    return slot < 0 ? null : this.shapes[slot].room;
   }
 
   /** Reads back what `apply` wrote. Returns the 0..1 level, 0 when unlit. */

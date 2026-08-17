@@ -487,6 +487,12 @@ render:
   The line appears on its own once the marker is more than about half a metre
   from the room, measured in plan — a sensor mounted high on that room's own
   wall does not get one. `marker.leader: true` or `false` overrules that.
+
+  You do not have to type any of it. In edit mode, **drag the marker out of its
+  room** and drop it beside the building: the drop records the room it came
+  from and the leader appears. Drag it back into a room and the override is
+  removed again, because the position says which room it is in and an override
+  written now would go stale the next time the model changes.
 - `onDemand: true` idles the render loop when nothing changed. Leave it on.
 
 A tablet-friendly profile:
