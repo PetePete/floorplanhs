@@ -126,7 +126,19 @@ const WASH_OPACITY = 0.16;
  */
 const WASH_BACKFACE = 0.45;
 
+/**
+ * The clipping chunks are included by hand. three.js splices them into its own
+ * materials but leaves a `ShaderMaterial` alone — it only supplies the uniform
+ * and `NUM_CLIPPING_PLANES` — so without these the overlay is the one thing in
+ * the scene a cross-section does not cut, and a lit room bleeds straight
+ * through the cut face.
+ *
+ * `clipping_planes_vertex` reads a variable literally named `mvPosition`, hence
+ * the name below.
+ */
 const WASH_VERTEX = /* glsl */ `
+#include <common>
+#include <clipping_planes_pars_vertex>
 attribute float fpRoom;
 flat varying float vFpRoom;
 varying vec3 vFpNormal;
@@ -134,20 +146,23 @@ varying vec3 vFpView;
 void main() {
   vFpRoom = fpRoom;
   vFpNormal = normalize(normalMatrix * normal);
-  vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-  vFpView = -viewPosition.xyz;
-  gl_Position = projectionMatrix * viewPosition;
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vFpView = -mvPosition.xyz;
+  gl_Position = projectionMatrix * mvPosition;
+  #include <clipping_planes_vertex>
 }
 `;
 
 const WASH_FRAGMENT = /* glsl */ `
-precision highp float;
+#include <common>
+#include <clipping_planes_pars_fragment>
 flat varying float vFpRoom;
 varying vec3 vFpNormal;
 varying vec3 vFpView;
 uniform vec3 fpRoomFill[${MAX_ROOMS}];
 uniform float fpWashOpacity;
 void main() {
+  #include <clipping_planes_fragment>
   int index = int(vFpRoom + 0.5) - 1;
   if (index < 0) discard;
   vec3 fill = fpRoomFill[index];
@@ -273,7 +288,10 @@ export class RoomFill {
       // surfaces that already wrote the depth it is being tested against.
       depthWrite: false,
       side: THREE.DoubleSide,
-      clipping: clippingPlanes !== null && clippingPlanes.length > 0,
+      // Unconditional: the planes array is shared and starts empty, so deciding
+      // this from its length at build time means the overlay is compiled
+      // without clipping and never picks it up when a cut is made later.
+      clipping: true,
     });
     if (clippingPlanes) material.clippingPlanes = clippingPlanes;
 

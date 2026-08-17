@@ -766,12 +766,17 @@ export class LightRig {
   }
 
   /**
-   * How strongly this lamp fills its room, 0..1. Culling is included: a lamp on
-   * a hidden storey, or one cut away by a section plane, must not keep lighting
-   * a room that is still on screen.
+   * How strongly this lamp fills its room, 0..1.
+   *
+   * A hidden storey stops lighting — its rooms are not on screen and its lamps
+   * have no business tinting the ones that are. A *cut* one does not: slicing
+   * the building open is a way of looking at it, not a power cut, and a lamp
+   * sitting above the ceiling cut of its own storey is the normal case rather
+   * than the exception. Culling those is what made every room go dark the
+   * moment a section was applied.
    */
   get fillWeight(): number {
-    if (this.culledByLevel || this.culledByClip) return 0;
+    if (this.culledByLevel) return 0;
     return this.currentFill * this.effectMultiplier();
   }
 

@@ -287,6 +287,35 @@ describe('fill overlay', () => {
     fill.dispose();
   });
 
+  it('is cut by the section, like everything else in the model', () => {
+    const fill = fresh();
+    const material = overlay(fill)!.material as THREE.ShaderMaterial;
+
+    // three.js splices the clipping chunks into its own materials but leaves a
+    // ShaderMaterial alone, so these have to be in the source by hand. Miss
+    // them and the overlay is the one thing a cross-section does not cut —
+    // silently, with a lit room bleeding through the cut face.
+    expect(material.clipping, 'clipping enabled').toBe(true);
+    expect(material.vertexShader).toContain('#include <clipping_planes_pars_vertex>');
+    expect(material.vertexShader).toContain('#include <clipping_planes_vertex>');
+    expect(material.fragmentShader).toContain('#include <clipping_planes_pars_fragment>');
+    expect(material.fragmentShader).toContain('#include <clipping_planes_fragment>');
+    // The chunk reads this exact name out of the surrounding scope.
+    expect(material.vertexShader).toContain('vec4 mvPosition =');
+    fill.dispose();
+  });
+
+  it('names chunks three.js actually ships', () => {
+    for (const chunk of [
+      'clipping_planes_pars_vertex',
+      'clipping_planes_vertex',
+      'clipping_planes_pars_fragment',
+      'clipping_planes_fragment',
+    ]) {
+      expect(THREE.ShaderChunk[chunk as keyof typeof THREE.ShaderChunk], chunk).toBeTruthy();
+    }
+  });
+
   it('takes the overlay away again on dispose', () => {
     const fill = fresh();
     const mesh = overlay(fill)!;

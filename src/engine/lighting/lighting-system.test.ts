@@ -187,6 +187,28 @@ describe('room fill, end to end', () => {
     system.dispose();
   });
 
+  it('keeps the room lit when a section plane cuts the lamp away', () => {
+    const built = home();
+    const ctx = stubContext();
+    ctx.modelRoot.add(built.root);
+
+    const system = new LightingSystem({ lightMode: 'room' });
+    system.init(ctx);
+    system.setModel(built.root, built.levels);
+    system.syncLight(lamp(), sample(true));
+    system.update(1, ctx);
+    expect(fillTotal(system)).toBeGreaterThan(0);
+
+    // The isolate-level cut lands below the ceiling so you can see into the
+    // storey, which puts every ceiling lamp on the discarded side. Slicing the
+    // building open is a way of looking at it, not a power cut.
+    ctx.clippingPlanes.push(new THREE.Plane(new THREE.Vector3(0, -1, 0), 2));
+    system.update(1, ctx);
+    expect(fillTotal(system), 'still lit below the cut').toBeGreaterThan(0);
+
+    system.dispose();
+  });
+
   it('goes dark when the lamp is on a hidden storey', () => {
     const built = home();
     const ctx = stubContext();
