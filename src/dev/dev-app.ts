@@ -11,6 +11,7 @@ import { createMockHass, type MockHass } from '@/dev/mock-hass';
 import { ensureChakraPetch } from '@/ui/fonts/chakra-petch';
 import {
   TEST_HOME_TWO_ROOMS_SH3D,
+  TWO_ROOMS,
   TWO_ROOM_CENTRES,
 } from '@/engine/model/sh3d/test-home';
 import type {
@@ -42,6 +43,7 @@ interface DevEntity {
   position: Vec3;
   storey: Storey;
   light?: LightVisualConfig;
+  room?: string;
 }
 
 /**
@@ -62,6 +64,14 @@ const DEV_ENTITIES: DevEntity[] = [
     position: [TWO_ROOM_CENTRES.east[0], 2.3, TWO_ROOM_CENTRES.east[2]],
     storey: 'main',
     light: { kind: 'point', distance: 8 },
+  },
+  // Parked well clear of the plan, on the north side. The `room` is what makes
+  // it draw a leader across to the kitchen instead of sitting there unexplained.
+  {
+    entity: 'sensor.living_room_temperature',
+    position: [TWO_ROOM_CENTRES.east[0], 0.1, TWO_ROOM_CENTRES.east[2] - 3.4],
+    storey: 'main',
+    room: TWO_ROOMS.east,
   },
 ];
 

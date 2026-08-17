@@ -75,6 +75,7 @@ function isClipped(point: THREE.Vector3, planes: readonly THREE.Plane[]): boolea
 
 export class EntityLayer implements IEntityLayer {
   private readonly markers = new Map<string, EntityMarker>();
+  private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private readonly group = new THREE.Group();
   private readonly atlas: MarkerAtlas;
   private readonly raycaster = new THREE.Raycaster();
@@ -200,6 +201,8 @@ export class EntityLayer implements IEntityLayer {
       const existing = this.markers.get(placed.entity);
       if (existing) {
         existing.setPlaced(placed);
+        // `room` may have changed with the config, so the leader is re-resolved.
+        existing.setRoomAnchors(this.roomAnchors);
         continue;
       }
 
@@ -209,6 +212,7 @@ export class EntityLayer implements IEntityLayer {
         accent: this.options.accent,
         animateIn: true,
       });
+      marker.setRoomAnchors(this.roomAnchors);
       this.markers.set(placed.entity, marker);
       this.group.add(marker.object);
     }
@@ -256,6 +260,17 @@ export class EntityLayer implements IEntityLayer {
     if (this.selected) this.markers.get(this.selected)?.setSelected(false);
     this.selected = entityId;
     if (entityId) this.markers.get(entityId)?.setSelected(true);
+    this.ctx?.invalidate();
+  }
+
+  /**
+   * Room positions for the leader lines. Held so a marker created later — a
+   * drag-and-drop placement, a config edit — gets them without the viewer
+   * having to push again.
+   */
+  setRoomAnchors(anchors: ReadonlyMap<string, Vec3> | null): void {
+    this.roomAnchors = anchors;
+    for (const marker of this.markers.values()) marker.setRoomAnchors(anchors);
     this.ctx?.invalidate();
   }
 

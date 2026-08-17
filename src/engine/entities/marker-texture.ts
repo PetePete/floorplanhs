@@ -144,7 +144,8 @@ export class MarkerAtlas {
   /** The master texture. Never assigned to a sprite directly — clone it. */
   readonly texture: THREE.Texture;
 
-  private readonly canvas: HTMLCanvasElement;
+  /** Null where there is no DOM at all — Node, SSR, unit tests. */
+  private readonly canvas: HTMLCanvasElement | null;
   private readonly c2d: Ctx2D | null;
   private readonly maxCells: number;
   private readonly maxSizePx: number;
@@ -178,11 +179,15 @@ export class MarkerAtlas {
     this.maxSizePx = Math.max(256, options.maxSizePx ?? 2048);
     this.dpr = clampDpr(options.pixelRatio ?? globalDevicePixelRatio());
 
-    this.canvas = document.createElement('canvas');
+    // The class already copes with a canvas that yields no 2D context; not
+    // having a `document` at all is the same situation one step earlier, and
+    // pretending otherwise means nothing that constructs a marker can be
+    // unit-tested without a DOM.
+    this.canvas = typeof document === 'undefined' ? null : document.createElement('canvas');
     this.resizeCanvas();
-    this.c2d = this.canvas.getContext('2d');
+    this.c2d = this.canvas?.getContext('2d') ?? null;
 
-    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture = this.canvas ? new THREE.CanvasTexture(this.canvas) : new THREE.Texture();
     this.texture.name = 'marker-atlas';
     this.texture.colorSpace = THREE.SRGBColorSpace;
     // Sprites are drawn at (roughly) 1:1 texel size, so mipmaps buy nothing and
@@ -297,8 +302,10 @@ export class MarkerAtlas {
     for (const clone of this.clones) clone.dispose();
     this.clones.clear();
     this.texture.dispose();
-    this.canvas.width = 1;
-    this.canvas.height = 1;
+    if (this.canvas) {
+      this.canvas.width = 1;
+      this.canvas.height = 1;
+    }
   }
 
   /* ------------------------------------------------------------- rastering */
@@ -306,8 +313,10 @@ export class MarkerAtlas {
   private resizeCanvas(): void {
     const wanted = Math.ceil(768 * this.dpr);
     this.sizePx = Math.min(this.maxSizePx, Math.max(512, nextPowerOfTwo(wanted)));
-    this.canvas.width = this.sizePx;
-    this.canvas.height = this.sizePx;
+    if (this.canvas) {
+      this.canvas.width = this.sizePx;
+      this.canvas.height = this.sizePx;
+    }
     this.resetShelves();
   }
 

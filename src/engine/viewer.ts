@@ -22,6 +22,7 @@ import {
   type PlacedEntity,
   type RenderConfig,
   type SectionState,
+  type Vec3,
 } from '@/types/config';
 import type { HassEntity, HomeAssistant } from '@/types/hass';
 import type {
@@ -324,6 +325,10 @@ export class Viewer implements IViewer {
         s.setLevels(loaded.levels);
       });
       this.guard('camera', this._cameraCtl, (c) => c.setBounds(loaded.bounds));
+
+      // Markers that name a room draw a leader back to it, so they need to know
+      // where the rooms are before the first frame.
+      this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(loaded.root)));
 
       // Room-fill lighting indexes the rooms and stamps the geometry, so it has
       // to see the model before the first frame is drawn with it.
@@ -1009,6 +1014,36 @@ function numberAttr(value: unknown, fallback: number): number {
  * a safe clone and avoids `structuredClone` on the older Android WebViews the
  * HA companion app ships.
  */
+/**
+ * Where each room sits, taken from its floor slab: the centre of the footprint,
+ * lifted just off the floor so a leader drawn to it is not buried in the slab.
+ *
+ * Floors rather than the room's whole geometry, because furniture and ceilings
+ * would drag the centre off the part of the room a reader is looking at.
+ */
+function roomAnchors(root: THREE.Object3D): Map<string, Vec3> {
+  const boxes = new Map<string, THREE.Box3>();
+  root.updateMatrixWorld(true);
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || mesh.userData.part !== 'floor') return;
+    const room = mesh.userData.room;
+    if (typeof room !== 'string' || !room) return;
+    const box = boxes.get(room) ?? new THREE.Box3().makeEmpty();
+    box.expandByObject(mesh);
+    boxes.set(room, box);
+  });
+
+  const anchors = new Map<string, Vec3>();
+  const centre = new THREE.Vector3();
+  for (const [room, box] of boxes) {
+    if (box.isEmpty()) continue;
+    box.getCenter(centre);
+    anchors.set(room, [centre.x, box.max.y + 0.02, centre.z]);
+  }
+  return anchors;
+}
+
 function cloneConfig(config: Floorplan3dCardConfig): Floorplan3dCardConfig {
   return JSON.parse(JSON.stringify(config)) as Floorplan3dCardConfig;
 }

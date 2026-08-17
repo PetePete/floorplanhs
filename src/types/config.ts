@@ -179,6 +179,12 @@ export type MarkerShape = 'auto' | 'pill' | 'dot' | 'icon' | 'label' | 'none';
 
 export interface MarkerConfig {
   shape?: MarkerShape;
+  /**
+   * Force the leader line back to `room` on or off. Left unset it appears
+   * whenever the marker is placed clear of the room it names, which is the
+   * only time it says anything.
+   */
+  leader?: boolean;
   /** Show the state value next to the name. */
   showState?: boolean;
   showName?: boolean;
@@ -252,9 +258,14 @@ export interface PlacedEntity {
   role?: EntityRole;
   light?: LightVisualConfig;
   /**
-   * Room this entity lights, for `lightMode: room`. Normally derived from the
-   * position; set it when a lamp sits in a doorway or a wall recess and lands
-   * in the wrong room.
+   * The room this entity belongs to.
+   *
+   * Two jobs, because they are the same statement. For a light in
+   * `lightMode: room` it says which room to fill, overriding the one its
+   * position falls in — useful when a lamp sits in a doorway or a wall recess.
+   * For anything placed *outside* that room it also draws a leader line back
+   * to it, so a row of temperature readings can sit clear of the plan and
+   * still say which room each one is measuring.
    */
   room?: string;
   marker?: MarkerConfig;

@@ -625,6 +625,8 @@ function readMarker(raw: unknown, path: string): MarkerConfig {
   const obj = withAliases(raw, MARKER_ALIASES);
   const marker: MarkerConfig = {};
 
+  const leader = readBoolean(obj, 'leader', path);
+  if (leader !== undefined) marker.leader = leader;
   const shape = readEnum(obj, 'shape', path, MARKER_SHAPES);
   if (shape) marker.shape = shape;
   const showState = readBoolean(obj, 'showState', path);

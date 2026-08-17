@@ -237,6 +237,11 @@ export interface IEntityLayer extends Subsystem {
   /** Hide markers whose level is hidden. */
   setVisibleLevels(levelIds: string[] | null): void;
   setMarkersVisible(visible: boolean): void;
+  /**
+   * Where each room is, in world space, so a marker placed outside one can draw
+   * a leader back to it. Keyed by the room name the model carries.
+   */
+  setRoomAnchors(anchors: ReadonlyMap<string, Vec3> | null): void;
 }
 
 /* ------------------------------------------------------------ interaction */

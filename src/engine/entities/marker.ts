@@ -3,13 +3,22 @@
  *
  * Anatomy, bottom to top:
  *
- *     ( o )   <- anchor ring, sits exactly on the surface the user dropped on
- *       |     <- leader line, always vertical in world space
+ *     ( o )   <- anchor crosshair, on the surface the user dropped on
+ *       |     <- leader, vertical in world space
  *   [ o Name ]<- pill: icon + name + state, billboarded
  *
- * The leader line is what makes a floating billboard read as "attached to that
- * spot" rather than "somewhere in this general direction", which matters a lot
- * once the camera orbits.
+ * The leader is what makes a floating billboard read as "attached to that spot"
+ * rather than "somewhere in this general direction", which matters a lot once
+ * the camera orbits.
+ *
+ * It has a second, longer form. An entity that names a `room` it is not
+ * standing in — a temperature sensor parked outside the plan, say — extends the
+ * leader from its anchor across to that room, the way a drawing labels a part
+ * it has no space to write inside:
+ *
+ *   [ o Kitchen 21.4° ]
+ *      |
+ *      +--------------o   <- the room it is talking about
  */
 
 import * as THREE from 'three';
@@ -26,6 +35,13 @@ import {
 } from '@/engine/entities/marker-texture';
 
 /* ----------------------------------------------------------------- tuning */
+
+/**
+ * How far a marker has to sit from the room it names before the leader across
+ * to that room is worth drawing. Inside the room the line says nothing and
+ * merely crosses the plan.
+ */
+const ROOM_LEADER_MIN_M = 0.6;
 
 /** Metres the pill floats above its anchor when no offset is configured. */
 const DEFAULT_LIFT = 0.34;
@@ -114,6 +130,10 @@ export class EntityMarker {
   private crowded = false;
 
   private baseLift = DEFAULT_LIFT;
+  /** World point of the room this entity names, if it names one. */
+  private roomAnchor: THREE.Vector3 | null = null;
+  /** Local-space copy of it, recomputed when the marker or the model moves. */
+  private readonly roomLocal = new THREE.Vector3();
   private appliedState: MarkerVisualState = 'idle';
   /** Logical-pixel size of the visible art, refreshed every frame. */
   private pillPxWidth = 0;
@@ -148,7 +168,10 @@ export class EntityMarker {
     this.anchor = new THREE.Sprite(this.anchorMaterial);
     this.anchor.renderOrder = RENDER_ORDER_ANCHOR;
 
-    this.leaderPositions = new Float32Array([0, 0, 0, 0, DEFAULT_LIFT, 0]);
+    // Three points: the room being labelled, this marker's anchor, and the
+    // pill above it. With no room the first two coincide and the extra segment
+    // is zero length, which costs nothing and keeps one buffer for both forms.
+    this.leaderPositions = new Float32Array([0, 0, 0, 0, 0, 0, 0, DEFAULT_LIFT, 0]);
     this.leaderGeometry = new THREE.BufferGeometry();
     this.leaderGeometry.setAttribute('position', new THREE.BufferAttribute(this.leaderPositions, 3));
     this.leaderMaterial = new THREE.LineBasicMaterial({
@@ -211,8 +234,56 @@ export class EntityMarker {
     this.rebuildArt();
   }
 
+  /** The room this marker labels, for the layer's anchor lookup. */
+  get roomName(): string | undefined {
+    return this.placedEntity.room;
+  }
+
   setPosition(position: Vec3): void {
     this.object.position.set(position[0], position[1], position[2]);
+    this.syncRoomLeader();
+  }
+
+  /**
+   * Where the room this entity names sits in the world, or null if it names
+   * none. The layer hands the whole table down whenever the model changes.
+   */
+  setRoomAnchors(anchors: ReadonlyMap<string, Vec3> | null): void {
+    const room = this.placedEntity.room;
+    const point = room && anchors ? anchors.get(room) : undefined;
+    this.roomAnchor = point ? new THREE.Vector3(point[0], point[1], point[2]) : null;
+    this.syncRoomLeader();
+  }
+
+  /**
+   * Point the first leader segment at the room, in the marker's own frame.
+   *
+   * Collapsed onto the anchor when there is no room, when the marker is already
+   * standing in it, or when `marker.leader` says no — a zero-length segment
+   * draws nothing and keeps one geometry serving both forms.
+   */
+  private syncRoomLeader(): void {
+    const wanted = this.placedEntity.marker?.leader;
+    let local: THREE.Vector3 | null = null;
+
+    if (this.roomAnchor && wanted !== false) {
+      this.roomLocal.copy(this.roomAnchor).sub(this.object.position);
+      // Horizontal distance only: a sensor on a wall is metres above the floor
+      // the room's anchor sits on, and that height is not what makes a leader
+      // worth drawing.
+      const spread = Math.hypot(this.roomLocal.x, this.roomLocal.z);
+      if (wanted === true || spread > ROOM_LEADER_MIN_M) local = this.roomLocal;
+    }
+
+    const p = this.leaderPositions;
+    const x = local ? local.x : 0;
+    const y = local ? local.y : 0;
+    const z = local ? local.z : 0;
+    if (p[0] === x && p[1] === y && p[2] === z) return;
+    p[0] = x;
+    p[1] = y;
+    p[2] = z;
+    this.leaderGeometry.attributes.position.needsUpdate = true;
   }
 
   setVisual(visual: EntityVisualState): void {
@@ -316,15 +387,15 @@ export class EntityMarker {
 
     const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
     this.body.position.y = lift;
-    if (this.leaderPositions[4] !== lift) {
-      this.leaderPositions[4] = lift;
+    if (this.leaderPositions[7] !== lift) {
+      this.leaderPositions[7] = lift;
       this.leaderGeometry.attributes.position.needsUpdate = true;
     }
     // Crowded markers keep their anchor dot — you still see that something is
     // there — but give up the label that was covering a neighbour.
     const showLabel = !this.crowded || this.hovered || this.selected;
     this.body.visible = showLabel;
-    this.leader.visible = showLabel && lift > 0.03;
+    this.leader.visible = showLabel && (lift > 0.03 || this.roomAnchor !== null);
 
     this.object.updateMatrixWorld();
     _worldBody.setFromMatrixPosition(this.body.matrixWorld);

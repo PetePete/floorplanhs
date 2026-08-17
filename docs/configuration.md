@@ -468,6 +468,25 @@ render:
       position: [1.1, 2.4, 3.2]
       room: hall
   ```
+
+  `room` does a second job for anything placed *outside* the room it names: the
+  marker draws a leader line back to it, the way a drawing labels a part it has
+  no space to write inside. That is how to get a legible column of temperature
+  readings without covering the plan:
+
+  ```yaml
+  entities:
+    - entity: sensor.kitchen_temperature
+      position: [8.0, 0.1, -2.0]   # clear of the building
+      room: kitchen
+    - entity: sensor.living_temperature
+      position: [8.0, 0.1, -0.8]
+      room: living
+  ```
+
+  The line appears on its own once the marker is more than about half a metre
+  from the room, measured in plan — a sensor mounted high on that room's own
+  wall does not get one. `marker.leader: true` or `false` overrules that.
 - `onDemand: true` idles the render loop when nothing changed. Leave it on.
 
 A tablet-friendly profile:
