@@ -12,7 +12,6 @@ import type {
   Floorplan3dCardConfig,
   LightVisualConfig,
   ModelConfig,
-  PlanSpec,
   SectionState,
   Vec3,
 } from '@/types/config';
@@ -29,7 +28,7 @@ interface CardElement extends HTMLElement {
 /**
  * Which storey an entity belongs on, independent of what the loaded house calls
  * its levels. The harness resolves this against whichever house it ended up
- * with, so the same placements work for the demo house and for a plan.
+ * with, so the same placements work for the demo house and for an imported one.
  */
 type Storey = 'lower' | 'main' | 'top';
 
@@ -41,13 +40,10 @@ interface DevEntity {
 }
 
 /**
- * Placements worked out against the private plan (see `resolveLayout` below).
- * `buildFromPlan` recentres on the footprint, so plan coordinates map to world
- * coordinates by subtracting half the footprint in X and Z.
- *
- * Against the demo house a few of these land in the wrong room or just outside
- * the shell. That is fine and is exactly what the drag-and-drop placement UI is
- * for; nothing here assumes a particular geometry.
+ * Placements worked out against the demo house. Against an imported home a few
+ * of these land in the wrong room or just outside the shell. That is fine and is
+ * exactly what the drag-and-drop placement UI is for; nothing here assumes a
+ * particular geometry.
  */
 const DEV_ENTITIES: DevEntity[] = [
   /* Top floor — the open living level. Ceiling lights hang under the roof
@@ -128,16 +124,6 @@ const DEMO_LAYOUT: Layout = {
   topElevation: 2.9,
 };
 
-function layoutForPlan(plan: PlanSpec): Layout {
-  const levels = plan.levels.slice().sort((a, b) => a.elevation - b.elevation);
-  return {
-    model: { plan },
-    title: 'Home',
-    levelIds: levels.map((level) => level.id),
-    topElevation: levels[levels.length - 1].elevation,
-  };
-}
-
 function buildConfig(layout: Layout): Floorplan3dCardConfig {
   const ids = layout.levelIds;
   const levelId = (storey: Storey): string => {
@@ -215,37 +201,6 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
   };
 }
 
-/**
- * The demo house is the default, which is also what every other user of the
- * card sees. A private plan — a real building, kept out of the repository by
- * `.gitignore` — is picked up when it happens to be there.
- *
- * Deliberately a `fetch` and not an `import`: importing a file that only exists
- * on one machine would break `npm run dev` for everyone else. Vite serves the
- * project root, so the path works with no extra configuration.
- */
-const PRIVATE_PLAN_URL = '/private/house-plan.json';
-
-async function resolveLayout(): Promise<{ config: Floorplan3dCardConfig; note: string }> {
-  try {
-    const response = await fetch(PRIVATE_PLAN_URL, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const plan = (await response.json()) as PlanSpec;
-    if (!Array.isArray(plan?.levels) || plan.levels.length === 0) {
-      throw new Error('no "levels" in the file');
-    }
-    return {
-      config: buildConfig(layoutForPlan(plan)),
-      note: `private plan (${PRIVATE_PLAN_URL})`,
-    };
-  } catch (err) {
-    return {
-      config: buildConfig(DEMO_LAYOUT),
-      note: `demo house — ${PRIVATE_PLAN_URL}: ${(err as Error).message}`,
-    };
-  }
-}
-
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   props: Partial<HTMLElementTagNameMap[K]> = {},
@@ -274,14 +229,13 @@ async function boot(): Promise<void> {
     return;
   }
 
-  const { config: baseConfig, note } = await resolveLayout();
-  let config: Floorplan3dCardConfig = structuredClone(baseConfig);
+  let config: Floorplan3dCardConfig = buildConfig(DEMO_LAYOUT);
   const card = document.createElement('floorplan-3d-card') as CardElement;
 
   const applyConfig = () => {
     try {
       card.setConfig(structuredClone(config));
-      status.textContent = `ok — ${note}`;
+      status.textContent = 'ok';
       status.classList.remove('bad');
     } catch (err) {
       status.textContent = `setConfig threw: ${(err as Error).message}`;
@@ -344,7 +298,6 @@ async function boot(): Promise<void> {
   panel.append(el('h3', {}, ['Model source']));
   const sources: Array<{ label: string; model: Floorplan3dCardConfig['model'] }> = [
     { label: 'Demo house', model: { demo: true } },
-    { label: 'Plan (private)', model: undefined },
     { label: 'Sweet Home 3D (private)', model: { url: '/private/sample.sh3d' } },
   ];
   const sourceSelect = el('select');
@@ -354,19 +307,12 @@ async function boot(): Promise<void> {
     option.textContent = s.label;
     sourceSelect.append(option);
   }
-  // Whatever `resolveLayout` settled on is what is on screen right now.
-  sourceSelect.value = note.startsWith('private plan') ? 'Plan (private)' : 'Demo house';
+  sourceSelect.value = 'Demo house';
   sourceSelect.addEventListener('change', async () => {
     const chosen = sources.find((s) => s.label === sourceSelect.value);
     if (!chosen) return;
-    if (chosen.model === undefined) {
-      const resolved = await resolveLayout();
-      config = { ...structuredClone(resolved.config), ui: config.ui, render: config.render };
-      status.textContent = resolved.note;
-    } else {
-      config = { ...config, model: structuredClone(chosen.model) };
-      status.textContent = `model: ${chosen.label}`;
-    }
+    config = { ...config, model: structuredClone(chosen.model) };
+    status.textContent = `model: ${chosen.label}`;
     applyConfig();
   });
   addRow('Source', sourceSelect);
@@ -402,7 +348,9 @@ async function boot(): Promise<void> {
       option.textContent = String(value);
       select.append(option);
     }
-    select.value = String(config.render?.[key] ?? values[0]);
+    // `background` defaults to '' rather than being absent, and '' matches no
+    // option, so the select would come up blank instead of on its default.
+    select.value = String(config.render?.[key] || values[0]);
     select.addEventListener('change', () => {
       config = {
         ...config,
@@ -415,6 +363,7 @@ async function boot(): Promise<void> {
 
   renderSelect('Style', 'style', ['shaded', 'solid', 'wireframe'] as const);
   renderSelect('Palette', 'palette', ['model', 'mono-light', 'mono-dark'] as const);
+  renderSelect('Background', 'background', ['transparent', 'system', 'light', 'dark'] as const);
   renderSelect('Quality', 'quality', ['high', 'medium', 'low'] as const);
 
   const bloomBtn = el('button', { className: 'chip on' }, ['Bloom']);
@@ -472,7 +421,7 @@ async function boot(): Promise<void> {
 
   const reloadBtn = el('button', { className: 'chip' }, ['Reset config']);
   reloadBtn.addEventListener('click', () => {
-    config = structuredClone(baseConfig);
+    config = buildConfig(DEMO_LAYOUT);
     applyConfig();
   });
   addRow('Config', reloadBtn);

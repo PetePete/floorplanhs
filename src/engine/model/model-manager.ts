@@ -1,10 +1,10 @@
 /**
- * Owns the house: loads it (glTF, a Sweet Home 3D .sh3d, a floor plan spec, or
- * the procedural demo), normalises its placement, works out its storeys and
+ * Owns the house: loads it (a Sweet Home 3D .sh3d, a glTF mesh, or the
+ * procedural demo), normalises its placement, works out its storeys and
  * answers every "what is where" question the rest of the engine asks.
  *
- * Source precedence is `demo: true` > `plan` > `url`, and any failure along the
- * way falls through to the demo house with an actionable message rather than
+ * Source precedence is `demo: true` > `url`, and any failure along the way
+ * falls through to the demo house with an actionable message rather than
  * leaving the card blank.
  *
  * Loading deliberately does the download itself instead of handing the URL to
@@ -25,7 +25,6 @@ import type {
 } from '@/engine/contracts';
 import { disposeObject3D } from '@/engine/core/dispose';
 import { buildDemoHouse, type DemoHouse } from '@/engine/model/demo-house';
-import { buildFromPlan } from '@/engine/model/plan-house';
 import { looksLikeZip } from '@/engine/model/sh3d/sh3d-archive';
 import { buildFromSh3d } from '@/engine/model/sh3d/sh3d-build';
 import {
@@ -88,41 +87,12 @@ export class ModelManager implements IModelManager {
     this.disposeModel();
 
     let content: THREE.Object3D | null = null;
-    /** Demo, plan or .sh3d — all three are authored around their own y = 0. */
+    /** Demo or .sh3d — both are authored around their own y = 0. */
     let procedural: DemoHouse | null = null;
     let isDemo = false;
 
     const forceDemo = config?.demo === true;
-    const plan = forceDemo ? undefined : config?.plan;
-    const url = forceDemo || plan ? undefined : config?.url;
-
-    if (plan) {
-      try {
-        let spec: unknown = plan;
-        if (typeof plan === 'string') {
-          report({ phase: 'download', loaded: 0, total: 0, message: 'Downloading plan' });
-          const buffer = await fetchWithProgress(plan, (loaded, total) => {
-            report({ phase: 'download', loaded, total });
-          });
-          spec = parsePlanJson(buffer, plan);
-        }
-        report({ phase: 'parse', message: 'Building from plan' });
-        procedural = buildFromPlan(spec, { anisotropy: this.maxAnisotropy() });
-        content = procedural.root;
-        this.proceduralMaterials = procedural.materials;
-      } catch (err) {
-        // Rule 7: a broken plan must not take the card down. Say exactly what is
-        // wrong — the message names the path inside the plan — then fall back.
-        procedural = null;
-        content = null;
-        report({
-          phase: 'error',
-          message: `${describe(err)} — showing the demo house instead. Check model.plan${
-            typeof plan === 'string' ? ` (${plan})` : ''
-          }.`,
-        });
-      }
-    }
+    const url = forceDemo ? undefined : config?.url;
 
     if (!content && url) {
       try {
@@ -187,7 +157,7 @@ export class ModelManager implements IModelManager {
 
     // Recentre imported models only: XZ centre on the origin, lowest point on
     // y = 0, which is what makes orbiting an arbitrary export feel right.
-    // Procedurally built houses — the demo one and anything from a plan — are
+    // Procedurally built houses — the demo one and Sweet Home 3D homes — are
     // authored around their own origin with a basement below zero, and
     // ARCHITECTURE.md pins level 0's floor to y = 0. Moving them would break
     // every coordinate the user has already placed against them.
@@ -412,23 +382,6 @@ function compileGlassMatcher(pattern: string): (name: string) => boolean {
 
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/**
- * A hosted plan is a `.json` file, so a 404 served as an HTML error page is the
- * likeliest failure by far. Say that, rather than letting a raw
- * "Unexpected token <" reach the dashboard.
- */
-function parsePlanJson(buffer: ArrayBuffer, url: string): unknown {
-  const text = new TextDecoder().decode(new Uint8Array(buffer)).trim();
-  if (text.startsWith('<')) {
-    throw new Error(`${url} returned a web page, not a JSON plan — check the path`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    throw new Error(`${url} is not valid JSON — ${describe(err)}`);
-  }
 }
 
 async function fetchWithProgress(

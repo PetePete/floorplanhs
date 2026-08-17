@@ -42,6 +42,7 @@ import { vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
+import { resolveBackground } from '@/engine/core/background';
 import { ModelManager } from '@/engine/model/model-manager';
 import { SectionController } from '@/engine/section/section-controller';
 import { CameraController } from '@/engine/camera/camera-controller';
@@ -181,6 +182,7 @@ export class Viewer implements IViewer {
         container,
         render: rawRender,
         camera: this.config.camera,
+        themeDark: this.themeDark,
         onContextLost: () =>
           this.emitError('The 3D view lost its graphics context and is being restored'),
         onContextRestored: () => this.core?.invalidate(),
@@ -277,6 +279,7 @@ export class Viewer implements IViewer {
   setThemeDark(dark: boolean): void {
     if (this.themeDark === dark) return;
     this.themeDark = dark;
+    this.core?.setThemeDark(dark);
     if (this.mounted) this.applyRenderStyle();
   }
 
@@ -720,18 +723,23 @@ export class Viewer implements IViewer {
     const palette = render.palette ?? DEFAULT_RENDER_CONFIG.palette;
     this.edges.setPalette(palette);
 
-    // The background is transparent — it is the Home Assistant card showing
-    // through — so the ink has to follow the *theme*, not the palette. Getting
-    // this wrong makes `style: wireframe` render nothing visible at all.
-    // Precedence: explicit colour, then the mono palettes, then the theme.
+    // The ink has to contrast with whatever ends up *behind* the model: the
+    // configured background if it is opaque, otherwise the Home Assistant card
+    // showing through a transparent canvas. Getting this wrong makes
+    // `style: wireframe` render nothing visible at all.
+    //
+    // Precedence: explicit colour, then the mono palettes — where the lines sit
+    // on the flattened surface rather than on the ground — then the backdrop.
     const color = render.edgeColor?.trim();
-    const themeInk = this.themeDark ? EDGE_INK_ON_DARK : EDGE_INK_ON_LIGHT;
+    const groundInk = resolveBackground(render.background, this.themeDark).dark
+      ? EDGE_INK_ON_DARK
+      : EDGE_INK_ON_LIGHT;
     const paletteInk =
       palette === 'mono-dark'
         ? EDGE_INK_ON_DARK
         : palette === 'mono-light'
           ? EDGE_INK_ON_LIGHT
-          : themeInk;
+          : groundInk;
     this.edges.setColor(color || paletteInk);
     this.edges.setStyle(render.style ?? DEFAULT_RENDER_CONFIG.style);
     // `wireframe` hides every surface, so the shadows they cast must go too.

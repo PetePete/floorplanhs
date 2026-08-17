@@ -5,7 +5,6 @@ The card takes your house from any of three places:
 | Source | `model` | Good for |
 | --- | --- | --- |
 | **Sweet Home 3D** | `url: /local/house.sh3d` | The easiest route by a wide margin. Draw the house, save, point the card at the save file. |
-| **A floor plan you type out** | `plan:` | No modelling tool at all — just a drawing and a ruler. See [`configuration.md`](configuration.md#modelplan). |
 | **glTF 2.0** | `url: /local/house.glb` | Blender, SketchUp, IFC — anything that can export a mesh. Most control, most work. |
 
 If you just want to see the card work, skip all of this: with no `model` at all

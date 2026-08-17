@@ -90,12 +90,6 @@ Metres, Y up, Draco and meshopt compression supported, KTX2/Basis textures are
 not. Name your nodes `<level>/<room>/<part>` and the card picks up your storeys
 and rooms; otherwise it detects storeys from the geometry.
 
-### Type the dimensions instead
-
-If you have accurate drawings but no wish to install anything, describe the
-building directly — walls, rooms, openings and roof as plain data. See
-[`docs/configuration.md`](docs/configuration.md) for the `model.plan` format.
-
 ## Installation
 
 ### HACS (recommended)
@@ -499,7 +493,7 @@ tour:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `style` | `solid` \| `shaded` \| `wireframe` | `shaded` | `shaded` adds crisp architectural edge lines to solid surfaces. `wireframe` is a hidden-line drawing: surfaces still occlude, but only the lines are drawn — and nothing is lit, because there is no visible surface for a lamp to fall on. |
-| `palette` | `model` \| `mono-light` \| `mono-dark` | `model` | `mono-*` flattens every surface to one neutral tone and drops textures, so the only colour left is the light your lamps cast. |
+| `palette` | `model` \| `mono-light` \| `mono-dark` | `model` | `mono-*` flattens every surface to one neutral tone and drops textures, so the only colour left is the light your lamps cast. Pair with the opposite `background` — `mono-dark` on a dark theme is invisible. |
 | `edgeColor` | string | `''` (theme) | Edge-line colour. Empty follows the dashboard theme — light ink on dark, dark on light. |
 | `quality` | `low` \| `medium` \| `high` \| `auto` | `auto` | Tier picks shadow map size, pixel ratio and post-processing — never geometry. |
 | `shadows` | boolean | `false` | Shadow maps. The single most expensive setting: a shadow-casting point light costs six cube-face passes per refresh. |
@@ -511,7 +505,7 @@ tour:
 | `ambientIntensity` | number | `0.34` | Base fill so an all-lights-off house is not pitch black. |
 | `daylight` | boolean | `false` | Sun and sky rig. Off by default so the card looks the same at 3am as at noon and the lamps stay the only thing that changes. |
 | `daylightEntity` | string | `sun.sun` | Entity whose elevation/azimuth drives the sun. |
-| `background` | string | `''` (theme) | CSS colour behind the model. Empty follows the dashboard theme. |
+| `background` | string | `transparent` | `transparent` lets the card show through; `light` / `dark` pin a neutral backdrop against the theme; `system` follows the theme but stays opaque. Any CSS colour also works. |
 | `maxPixelRatio` | number | `2` | Device pixel-ratio cap. Set to `1` on tablets. |
 | `onDemand` | boolean | `true` | Idle the render loop when nothing changed. |
 | `fpsLimit` | number | `60` | Frame cap while animating. |

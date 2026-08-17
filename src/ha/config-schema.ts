@@ -31,7 +31,6 @@ import {
   type MarkerShape,
   type ModelConfig,
   type PlacedEntity,
-  type PlanSpec,
   type RenderConfig,
   type SectionMode,
   type SectionState,
@@ -386,39 +385,6 @@ function readLevels(raw: unknown[], path: string): LevelDefinition[] {
   });
 }
 
-/** `/local/plan.json`, `https://…/plan.json`, or a relative path next to it. */
-const PLAN_PATH_RE = /^(?:https?:\/\/|\/|\.{1,2}\/)[^\s]+$/i;
-
-/**
- * A plan is either a path to a `.json` file or the spec itself. The spec is a
- * whole second schema with its own validator in the engine (`validatePlan`),
- * which produces far better messages than anything reimplemented here — so this
- * only checks the shape well enough to tell the two forms apart and to catch
- * the mistakes that would otherwise surface as a blank card: a plan that is
- * neither, or an inline plan with no storeys in it.
- */
-function readPlan(value: unknown, path: string): PlanSpec | string {
-  if (typeof value === 'string') {
-    const text = value.trim();
-    if (!PLAN_PATH_RE.test(text)) {
-      return fail(
-        path,
-        `"plan" must be a path to a .json plan (like "/local/haus-plan.json") or the plan itself (got "${value}")`,
-      );
-    }
-    return text;
-  }
-  if (!isRecord(value)) {
-    return fail(path, '"plan" must be a mapping, or a path to a .json plan file');
-  }
-  if (!Array.isArray(value.levels) || value.levels.length === 0) {
-    return fail(child(path, 'plan'), '"levels" is required and must list at least one storey');
-  }
-  // Passed through untouched: the engine owns this schema, and silently
-  // dropping a field we do not know about would be worse than not checking it.
-  return value as unknown as PlanSpec;
-}
-
 function readModel(raw: unknown, path: string): ModelConfig {
   if (!isRecord(raw)) return fail(path, 'must be a mapping (use "url:" to point at a glTF file)');
   const obj = withAliases(raw, MODEL_ALIASES);
@@ -426,7 +392,6 @@ function readModel(raw: unknown, path: string): ModelConfig {
 
   const url = readString(obj, 'url', path);
   if (url) model.url = url;
-  if (obj.plan !== undefined && obj.plan !== null) model.plan = readPlan(obj.plan, path);
   const demo = readBoolean(obj, 'demo', path);
   if (demo !== undefined) model.demo = demo;
   const scale = readNumber(obj, 'scale', path, { min: 0.0001 });

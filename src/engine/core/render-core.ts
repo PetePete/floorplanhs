@@ -10,6 +10,7 @@ import { DEFAULT_CAMERA_CONFIG, DEFAULT_RENDER_CONFIG } from '@/types/config';
 import type { QualityTier, RenderContext } from '@/engine/contracts';
 import { resolveQuality, type QualitySettings } from '@/engine/core/quality';
 import { disposeObject3D } from '@/engine/core/dispose';
+import { resolveBackground } from '@/engine/core/background';
 
 /** Thrown when the browser cannot give us a WebGL2 context at all. */
 export class WebGLUnavailableError extends Error {
@@ -37,6 +38,8 @@ export interface RenderCoreOptions {
    */
   render?: RenderConfig;
   camera?: CameraConfig;
+  /** Dashboard polarity, for the `system` / `light` / `dark` backgrounds. */
+  themeDark?: boolean;
   onContextLost?: () => void;
   onContextRestored?: () => void;
 }
@@ -84,10 +87,12 @@ export class RenderCore implements RenderContext {
    * even if a caller forgets to mark.
    */
   private shadowDirtyUntil = performance.now() + 4000;
+  private themeDark: boolean;
   private disposed = false;
 
   constructor(options: RenderCoreOptions) {
     this.container = options.container;
+    this.themeDark = options.themeDark ?? true;
     this.onContextLost = options.onContextLost ?? null;
     this.onContextRestored = options.onContextRestored ?? null;
 
@@ -395,27 +400,33 @@ export class RenderCore implements RenderContext {
   }
 
   setBackground(css: string): void {
+    this.renderConfig.background = css;
     this.applyBackground(css);
     this.invalidate();
   }
 
-  private applyBackground(css: string): void {
-    const value = (css ?? '').trim().toLowerCase();
+  /** `light` / `dark` / `system` backgrounds change meaning with the theme. */
+  setThemeDark(dark: boolean): void {
+    if (this.themeDark === dark) return;
+    this.themeDark = dark;
+    this.applyBackground(this.renderConfig.background);
+    this.invalidate();
+  }
 
-    // Default is transparent, so the Home Assistant card background shows
-    // through and the view matches the user's theme in both light and dark
-    // without anyone configuring a colour.
-    if (value === '' || value === 'transparent' || value === 'none') {
+  private applyBackground(css: string): void {
+    const { color } = resolveBackground(css, this.themeDark);
+
+    if (color === null) {
       this.scene.background = null;
       this.renderer.setClearColor(0x000000, 0);
       return;
     }
 
-    const color = new THREE.Color(value);
+    const parsed = new THREE.Color(color);
     // alpha:false means something is always composited; keep the clear colour
     // and the scene background identical so postfx passes match too.
-    this.scene.background = color;
-    this.renderer.setClearColor(color, 1);
+    this.scene.background = parsed;
+    this.renderer.setClearColor(parsed, 1);
   }
 
   /* ------------------------------------------------------- context loss */

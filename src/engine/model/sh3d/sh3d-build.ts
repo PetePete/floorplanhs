@@ -9,9 +9,9 @@
  * ## What Sweet Home 3D gives you, and what it does not
  *
  * Walls are **arbitrary segments** with a thickness, a height at each end and
- * an optional arc. Rooms are **arbitrary polygons**. Neither is forced through
- * `PlanSpec`, whose rectangle-and-grid model would flatten exactly the geometry
- * that makes a real home look like itself.
+ * an optional arc. Rooms are **arbitrary polygons**. Both are built as authored
+ * rather than snapped to a grid, because rectangles would flatten exactly the
+ * geometry that makes a real home look like itself.
  *
  * What the format does *not* record is which wall belongs to which room — there
  * is no association at all — so walls, glazing and door leaves land in the
