@@ -36,7 +36,6 @@ function stubContext(): RenderContext {
     overlayRoot: new THREE.Group(),
     size: { width: 800, height: 600, pixelRatio: 1 },
     invalidate: () => {},
-    markShadowsDirty: () => {},
     holdContinuous: () => () => {},
     clippingPlanes: [],
     quality: 'high',

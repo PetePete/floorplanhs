@@ -187,7 +187,6 @@ entities:
       angle: 48
       penumbra: 0.5
       distance: 8
-      castShadow: true
       fixture:
         show: true
         radius: 0.07
@@ -211,8 +210,6 @@ entities:
       action: toggle
 render:
   quality: auto
-  shadows: true
-  bloom: true
   daylight: true
   daylightEntity: sun.sun
 ui:
@@ -240,12 +237,11 @@ spot under the bulb and leaves the corners dark.
   by looking a few centimetres along the surface normal into the room the face
   points at. That is what makes a shared wall light on the correct side.
 - **Cost.** The rooms are resolved once, at load, and baked into the geometry;
-  a lit room is one array lookup per pixel. No shadow maps, no extra draw calls.
+  a lit room is one array lookup per pixel.
 - **Two lamps in one room** do not add up to twice the brightness. The colours
   mix, the strongest lamp sets the level.
 - **Override** with `room:` on the placed entity when a lamp sits in a doorway
   and lands on the wrong side. Tune the overall level with `roomFillStrength`.
-- The luminaire itself still glows and blooms, so you can see *which* lamp is on.
 
 Rooms come from `userData.room`, or from `<level>/<room>/<part>` node names in
 glTF. A model with no rooms at all falls back to no fill — use `realistic`.
@@ -260,10 +256,6 @@ A real three.js light at the lamp position:
 - **Falloff.** Point and spot lights default to an **8 m falloff radius** rather
   than infinite range, with `decay: 2` (physically correct). That keeps a single
   bulb from washing out the whole model. `distance: 0` restores infinite range.
-- **Shadow budget.** At most **four lights cast real shadows at once** on the
-  high quality tier; the engine picks them by brightness and camera proximity
-  and swaps them as you move. Mark the important ones with
-  `light.castShadow: true`; the rest still illuminate, they just do not occlude.
 
 Both modes share the colour handling: `rgb_color`, `hs_color` and
 `color_temp_kelvin` are converted to linear RGB. Set `useEntityColor: false`
@@ -308,9 +300,9 @@ the engine uses when the key is absent.
 
 ### Key naming
 
-**Option names are camelCase — `levelPresets`, `showToolbar`, `bloomStrength`.**
+**Option names are camelCase — `levelPresets`, `showToolbar`, `roomFillStrength`.**
 The snake_case spelling of every one of them (`level_presets`, `show_toolbar`,
-`bloom_strength`) is accepted as well, because most Home Assistant cards use it
+`room_fill_strength`) is accepted as well, because most Home Assistant cards use it
 and reaching for it is a reasonable reflex.
 
 camelCase is the canonical form for one concrete reason: this card **writes its
@@ -471,11 +463,9 @@ tour:
 | `targetOffset` | `[x, y, z]` | `[0, -1, 0]` *(engine default)* | Spot only. Where the cone points, relative to the light. |
 | `color` | string | — | Static colour override; ignored while the entity reports its own. |
 | `useEntityColor` | boolean | `true` *(engine default)* | Let the entity's colour drive the light. |
-| `castShadow` | boolean | `false` *(engine default)* | Request a real shadow map (max 4 active at once). |
 | `fixture.show` | boolean | `true` *(engine default)* | Draw a visible luminaire body. |
 | `fixture.radius` | number | `0.06` *(engine default)* | Luminaire radius, metres. |
 | `fixture.emissive` | number | `2` *(engine default)* | Luminaire emissive strength. |
-| `bloom` | number | `1` *(engine default)* | Per-light bloom weight. |
 | `size` | `[width, height]` | `[1, 1]` *(engine default)* | Rect area light dimensions, metres. |
 
 #### Marker options
@@ -518,12 +508,7 @@ tour:
 | `lightMode` | `room` \| `realistic` | `room` | `room` lights the whole room a lamp stands in, evenly and up to its walls. `realistic` puts a physically based light at the lamp instead: inverse-square falloff, a hotspot underneath and dark corners. |
 | `roomFillStrength` | number | `1` | How strongly a lit room is tinted, 0–2. Only used by `lightMode: room`. |
 | `edgeColor` | string | `''` (theme) | Edge-line colour. Empty follows the dashboard theme — light ink on dark, dark on light. |
-| `quality` | `low` \| `medium` \| `high` \| `auto` | `auto` | Tier picks shadow map size, pixel ratio and post-processing — never geometry. |
-| `shadows` | boolean | `false` | Shadow maps. The single most expensive setting: a shadow-casting point light costs six cube-face passes per refresh. |
-| `bloom` | boolean | `true` | Selective bloom on lit fixtures and emissive markers. |
-| `bloomStrength` | number | `0.55` | Glow intensity. |
-| `bloomRadius` | number | `0.5` | Glow spread. |
-| `bloomThreshold` | number | `0.72` | Luminance above which pixels bloom. Lower = more glow. |
+| `quality` | `low` \| `medium` \| `high` \| `auto` | `auto` | Tier picks pixel ratio and antialiasing — never geometry. |
 | `toneMapping` | `aces` \| `linear` \| `none` | `aces` | The filmic curve, and what the card is tuned against. `linear` applies `exposure` and nothing else, so a surface comes out exactly the colour you gave it — flatter, and a fair choice for a pure line drawing. |
 | `exposure` | number | `1.0` | Brightness multiplier. Ignored by `toneMapping: none`. |
 | `ambientIntensity` | number | `0.34` | Base fill so an all-lights-off house is not pitch black. |
@@ -565,20 +550,10 @@ tour:
   locked-down kiosk browsers and very old Android WebViews do not. The card
   shows an explicit message rather than a black rectangle when it is missing.
 - **Wall tablets.** Start with `render.quality: medium`, `maxPixelRatio: 1`,
-  `shadows: false`, `onDemand: true` and `fpsLimit: 30`. That combination keeps
+  `onDemand: true` and `fpsLimit: 30`. That combination keeps
   an older Fire HD or iPad usable.
 - **On-demand rendering** is the difference between a card that idles at ~0% GPU
   and one that pins a tablet's battery. Leave it on unless you are debugging.
-- **Shadow budget.** Only four lights cast real shadows at once. Adding a
-  fifth `castShadow: true` light does not cost more — it just means the engine
-  picks a different four.
-- **Model size is the real budget.** Aim for well under 300 k triangles and a
-  handful of materials; see [`docs/model-guide.md`](docs/model-guide.md). The
-  demo house is 4 646 triangles across 94 draw calls for comparison.
-- **Texture formats.** Draco and meshopt compression are supported. KTX2/Basis
-  textures are explicitly rejected with an actionable error — re-export those
-  textures as PNG/JPEG.
-
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for symptom → cause →

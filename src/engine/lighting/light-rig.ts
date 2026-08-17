@@ -29,12 +29,10 @@
 
 import * as THREE from 'three';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
-import { BLOOM_LAYER } from '@/engine/contracts';
 import type { LightSample, QualityTier } from '@/engine/contracts';
 import type { LightKind, LightVisualConfig, Vec3 } from '@/types/config';
 import { clamp01, parseCssColor, rgb255ToLinear } from '@/util/color';
 import { clamp, degToRad, easeInOutCubic, easeOutCubic } from '@/util/math';
-import type { ShadowCandidate } from '@/engine/lighting/shadow-budget';
 
 /* ------------------------------------------------------------- constants */
 
@@ -91,34 +89,9 @@ const DEFAULT_FIXTURE_RADIUS_M = 0.06;
 /** Turning on eases out over a quarter second; turning off is snappier. */
 const FADE_IN_S = 0.26;
 const FADE_OUT_S = 0.18;
-/** Shadow hand-off fade when a light loses its budget slot. */
-const SHADOW_FADE_S = 0.35;
-
-/**
- * Shadow map edge per quality tier. A point light spends this six times over
- * (cube map), which is why `low` has no real-time shadows at all.
- */
-const SHADOW_MAP_SIZE: Readonly<Record<QualityTier, number>> = {
-  low: 0,
-  medium: 512,
-  high: 1024,
-};
-
-/**
- * Depth bias. At 1024² covering a 90° face at 4 m, one texel is ≈ 8 mm, so a
- * 2 cm normalBias pushes the sample two to three texels off the surface — enough
- * to kill acne on the large flat walls that dominate a floorplan without the
- * peter-panning a large constant `bias` would cause. `bias` itself stays tiny
- * and negative purely to clean up grazing-angle shimmer on the floor.
- */
-const SHADOW_BIAS = -0.0004;
-const SHADOW_NORMAL_BIAS = 0.02;
-/** Clears the luminaire shell (6 cm) without wasting depth precision. */
-const SHADOW_NEAR_M = 0.15;
 
 /* ------------------------------------------------------------- utilities */
 
-type ShadowedLight = THREE.PointLight | THREE.SpotLight;
 type RigLight = THREE.PointLight | THREE.SpotLight | THREE.RectAreaLight;
 
 let rectUniformsReady = false;
@@ -135,12 +108,11 @@ export function brightnessToOutput(brightness: number): number {
   return DIM_FLOOR + (1 - DIM_FLOOR) * Math.pow(b, BRIGHTNESS_EXPONENT);
 }
 
-/** Mutable twin of {@link ShadowCandidate}; reused, never allocated per frame. */
+/** Reused, never allocated per frame; see `getCandidate`. */
 interface MutableCandidate {
   id: string;
   on: boolean;
   culled: boolean;
-  wantsShadow: boolean;
   intensity: number;
   worldPosition: THREE.Vector3;
 }
@@ -169,7 +141,6 @@ export class LightRig {
   private clippingPlanes: THREE.Plane[] | null;
 
   private light: RigLight | null = null;
-  private shadowLight: ShadowedLight | null = null;
   private target: THREE.Object3D | null = null;
 
   private fixture: THREE.Mesh | null = null;
@@ -209,10 +180,6 @@ export class LightRig {
   private effectPhase = 0;
   private effectMode: 'none' | 'flicker' | 'pulse' = 'none';
 
-  private shadowsEnabled = true;
-  private shadowGranted = false;
-  private shadowFade = 0;
-  private shadowFadeTarget = 0;
 
   private culledByLevel = false;
   private culledByClip = false;
@@ -237,7 +204,6 @@ export class LightRig {
       id: this.entityId,
       on: false,
       culled: false,
-      wantsShadow: false,
       intensity: 0,
       worldPosition: this.group.position,
     };
@@ -260,23 +226,19 @@ export class LightRig {
       spot.angle = degToRad(clamp(this.config.angle ?? DEFAULT_SPOT_ANGLE_DEG, 1, 89));
       spot.penumbra = clamp01(this.config.penumbra ?? DEFAULT_SPOT_PENUMBRA);
       this.light = spot;
-      this.shadowLight = spot;
     } else if (this.kind === 'rect') {
       ensureRectUniforms();
       const [w, h] = this.resolveRectSize();
       const rect = new THREE.RectAreaLight(0xffffff, 0, w, h);
       this.light = rect;
-      this.shadowLight = null; // RectAreaLight cannot cast shadows in three.js.
     } else if (this.kind === 'point') {
       const point = new THREE.PointLight(0xffffff, 0, distance, decay);
       this.light = point;
-      this.shadowLight = point;
     } else {
       // 'emissive': a glowing luminaire with no light source at all. Free, and
       // the right choice for decorative strips that should not cost a shader
       // slot.
       this.light = null;
-      this.shadowLight = null;
     }
 
     if (this.light) {
@@ -298,7 +260,6 @@ export class LightRig {
     }
 
     this.buildFixture();
-    this.configureShadow();
     this.aim();
   }
 
@@ -367,28 +328,6 @@ export class LightRig {
     }
   }
 
-  private configureShadow(): void {
-    const light = this.shadowLight;
-    if (!light) return;
-    const size = SHADOW_MAP_SIZE[this.tier];
-    const shadow = light.shadow;
-    if (size > 0 && shadow.mapSize.width !== size) {
-      shadow.mapSize.set(size, size);
-      if (shadow.map) {
-        shadow.map.dispose();
-        shadow.map = null;
-      }
-      shadow.needsUpdate = true;
-    }
-    shadow.bias = SHADOW_BIAS;
-    shadow.normalBias = SHADOW_NORMAL_BIAS;
-    shadow.camera.near = SHADOW_NEAR_M;
-    // Fit the far plane to the actual reach of the light so the depth range is
-    // not wasted on empty space behind the walls.
-    shadow.camera.far = Math.max(1, this.resolveDistance() || DEFAULT_DISTANCE_M);
-    shadow.camera.updateProjectionMatrix();
-  }
-
   private resolveDistance(): number {
     const d = this.config.distance;
     if (d === undefined) return DEFAULT_DISTANCE_M;
@@ -436,7 +375,6 @@ export class LightRig {
       this.target.position.set(off[0], off[1], off[2]);
       this.aim();
     }
-    this.configureShadow();
     this.recomputeTargets(false);
   }
 
@@ -454,7 +392,6 @@ export class LightRig {
   setQuality(tier: QualityTier): void {
     if (this.tier === tier) return;
     this.tier = tier;
-    this.configureShadow();
   }
 
   setPosition(position: Vec3): void {
@@ -521,14 +458,12 @@ export class LightRig {
     // 1 % readable as on.
     this.targetFill = this.on ? FILL_MIN + (1 - FILL_MIN) * clamp01(this.brightness) : 0;
 
-    const bloomWeight = this.config.bloom ?? 1;
     const fixtureScale = this.config.fixture?.emissive ?? 1;
     this.targetEmissive = this.on
       ? (FIXTURE_EMISSIVE_MIN +
           (FIXTURE_EMISSIVE_MAX - FIXTURE_EMISSIVE_MIN) *
             Math.pow(clamp01(this.brightness), FIXTURE_EMISSIVE_EXPONENT)) *
-        fixtureScale *
-        bloomWeight
+        fixtureScale
       : 0;
 
     this.resolveColorInto(this.targetColor);
@@ -555,7 +490,6 @@ export class LightRig {
 
     this.candidate.on = this.on;
     this.candidate.intensity = this.targetIntensityValue;
-    this.candidate.wantsShadow = this.canCastShadow();
   }
 
   /**
@@ -601,32 +535,6 @@ export class LightRig {
     return this.culledByLevel || this.culledByClip;
   }
 
-  /* ------------------------------------------------------------- shadows */
-
-  setShadowsEnabled(enabled: boolean): void {
-    this.shadowsEnabled = enabled;
-    this.candidate.wantsShadow = this.canCastShadow();
-    if (!enabled) this.shadowFadeTarget = 0;
-  }
-
-  /** The budget grants or revokes this rig's shadow slot. */
-  setShadowGranted(granted: boolean): void {
-    const want = granted && this.canCastShadow();
-    if (want === this.shadowGranted) return;
-    this.shadowGranted = want;
-    this.shadowFadeTarget = want ? 1 : 0;
-    if (want && this.shadowLight) {
-      this.shadowLight.castShadow = true;
-      this.shadowLight.shadow.needsUpdate = true;
-    }
-  }
-
-  private canCastShadow(): boolean {
-    if (!this.shadowsEnabled) return false;
-    if (!this.shadowLight) return false;
-    if (SHADOW_MAP_SIZE[this.tier] === 0) return false;
-    return this.config.castShadow !== false;
-  }
 
   /* -------------------------------------------------------------- update */
 
@@ -656,15 +564,6 @@ export class LightRig {
 
     if (this.effectMode !== 'none' && this.on) {
       this.effectPhase += dt;
-      animating = true;
-    }
-
-    if (this.shadowFade !== this.shadowFadeTarget) {
-      const step = dt / SHADOW_FADE_S;
-      this.shadowFade =
-        this.shadowFadeTarget > this.shadowFade
-          ? Math.min(this.shadowFadeTarget, this.shadowFade + step)
-          : Math.max(this.shadowFadeTarget, this.shadowFade - step);
       animating = true;
     }
 
@@ -701,17 +600,6 @@ export class LightRig {
         this.light.intensity = intensity;
         this.light.color.copy(this.currentColor);
       }
-      if (this.shadowLight) {
-        // Stay a caster until the fade has actually reached zero: revoking the
-        // slot only moves the target, so a lost slot dissolves instead of
-        // popping. shadow.intensity is r165+.
-        const shadowOn = visible && this.shadowFade > 0.001;
-        this.shadowLight.shadow.intensity = this.shadowFade;
-        if (this.shadowLight.castShadow !== shadowOn) {
-          this.shadowLight.castShadow = shadowOn;
-          this.shadowLight.shadow.needsUpdate = true;
-        }
-      }
     }
 
     const fixture = this.fixture;
@@ -722,21 +610,18 @@ export class LightRig {
       material.emissiveIntensity = emissive;
       if (emissive > 0.001) {
         material.emissive.copy(this.currentColor);
-        if (!fixture.layers.isEnabled(BLOOM_LAYER)) fixture.layers.enable(BLOOM_LAYER);
       } else {
         material.emissive.setRGB(0, 0, 0, THREE.LinearSRGBColorSpace);
-        if (fixture.layers.isEnabled(BLOOM_LAYER)) fixture.layers.disable(BLOOM_LAYER);
       }
     }
   }
 
   /* --------------------------------------------------------------- reads */
 
-  getCandidate(): ShadowCandidate {
+  getCandidate(): Readonly<MutableCandidate> {
     this.candidate.on = this.on;
     this.candidate.culled = this.isCulled();
     this.candidate.intensity = this.targetIntensityValue;
-    this.candidate.wantsShadow = this.canCastShadow();
     return this.candidate;
   }
 
@@ -795,16 +680,11 @@ export class LightRig {
   /* ------------------------------------------------------------- dispose */
 
   private teardownObjects(): void {
-    if (this.shadowLight) {
-      this.shadowLight.castShadow = false;
-      this.shadowLight.shadow.dispose();
-    }
     if (this.light) {
       this.light.parent?.remove(this.light);
       this.light.dispose();
       this.light = null;
     }
-    this.shadowLight = null;
     if (this.target) {
       this.target.parent?.remove(this.target);
       this.target = null;
@@ -817,9 +697,6 @@ export class LightRig {
     this.fixtureGeometry = null;
     this.fixtureMaterial?.dispose();
     this.fixtureMaterial = null;
-    this.shadowGranted = false;
-    this.shadowFade = 0;
-    this.shadowFadeTarget = 0;
   }
 
   dispose(): void {

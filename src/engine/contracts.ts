@@ -35,13 +35,6 @@ export interface RenderContext {
   readonly size: { width: number; height: number; pixelRatio: number };
   /** Request a frame. Required when render.onDemand is on. */
   invalidate(): void;
-  /**
-   * Shadow maps are refreshed only on demand — they do not depend on the
-   * camera, so re-rendering them while the user merely orbits is pure waste.
-   * Anything that moves geometry, a light, a cut plane or level visibility
-   * must call this, or it will render against a stale map.
-   */
-  markShadowsDirty(durationMs?: number): void;
   /** Keep rendering continuously until released; returns the release fn. */
   holdContinuous(): () => void;
   /** Global clipping planes array shared with the renderer. */
@@ -50,13 +43,6 @@ export interface RenderContext {
 }
 
 export type QualityTier = 'low' | 'medium' | 'high';
-
-/**
- * Layer index for selective bloom. Only lit luminaires and emissive markers are
- * enabled on it, so a bright white wall never blooms. Declared here (rather
- * than in the lighting module) because the entity layer needs it too.
- */
-export const BLOOM_LAYER = 1;
 
 /**
  * Module manifest — the exact paths and class names the Viewer imports.
@@ -68,7 +54,6 @@ export const BLOOM_LAYER = 1;
  *   @/engine/section/section-controller.ts  class SectionController (ISectionController)
  *   @/engine/camera/camera-controller.ts    class CameraController  (ICameraController)
  *   @/engine/lighting/lighting-system.ts    class LightingSystem    (ILightingSystem)
- *   @/engine/lighting/post-fx.ts            class PostFx            (IPostFx)
  *   @/engine/entities/entity-layer.ts       class EntityLayer       (IEntityLayer)
  *   @/engine/interaction/placement-controller.ts
  *                                           class PlacementController (IPlacementController)
@@ -201,15 +186,6 @@ export interface ILightingSystem extends Subsystem {
   moveLight(entityId: string, position: Vec3): void;
   /** All entity ids that currently have a light rig. */
   getLightIds(): string[];
-  setShadowsEnabled(enabled: boolean): void;
-}
-
-export interface IPostFx extends Subsystem {
-  render(dt: number): void;
-  setBloom(enabled: boolean, strength: number, radius: number, threshold: number): void;
-  setExposure(value: number): void;
-  /** Objects on the bloom layer glow; used for lit fixtures. */
-  readonly bloomLayer: number;
 }
 
 /* --------------------------------------------------------------- entities */

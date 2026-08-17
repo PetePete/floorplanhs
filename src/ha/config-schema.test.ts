@@ -96,8 +96,8 @@ describe('actionable error messages', () => {
   it('enforces numeric bounds', () => {
     expectMessage(minimal({ camera: { fov: 400 } }), 'camera: "fov" must be at most 150');
     expectMessage(
-      minimal({ render: { bloomThreshold: 4 } }),
-      'render: "bloomThreshold" must be at most 1',
+      minimal({ render: { roomFillStrength: 4 } }),
+      'render: "roomFillStrength" must be at most 2',
     );
   });
 
@@ -194,13 +194,12 @@ describe('coercion of things that are obviously intended', () => {
     const config = validateConfig(
       minimal({
         ui: { show_toolbar: false, aspect_ratio: '16/9' },
-        render: { bloom_strength: 0.9, on_demand: false },
+        render: { on_demand: false },
         camera: { auto_rotate: true, max_distance: 40 },
       }),
     );
     expect(config.ui?.showToolbar).toBe(false);
     expect(config.ui?.aspectRatio).toBe('16/9');
-    expect(config.render?.bloomStrength).toBe(0.9);
     expect(config.render?.onDemand).toBe(false);
     expect(config.camera?.autoRotate).toBe(true);
     expect(config.camera?.maxDistance).toBe(40);

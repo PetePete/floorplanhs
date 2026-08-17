@@ -285,8 +285,6 @@ entities:
       decay: 2
       targetOffset: [0, -1, 0]
       useEntityColor: true
-      castShadow: true
-      bloom: 1.2
       fixture:
         show: true
         radius: 0.07
@@ -310,12 +308,6 @@ How the light behaves:
 - **`distance: 8`** is the default falloff radius — deliberately *not* infinite,
   so one bulb does not wash out the whole model. `distance: 0` restores infinite
   range.
-- **`castShadow: true`** requests a real shadow map. At most **four** lights cast
-  shadows at once on the high quality tier; the engine picks them by brightness
-  and camera proximity. A fifth costs nothing, it just may not be chosen.
-- **The luminaire** (`fixture`) is a small emissive body drawn at the light
-  position, on the selective-bloom layer — that is what glows when the light is
-  on. A bright wall never blooms.
 
 Light kinds:
 
@@ -406,11 +398,7 @@ Available actions: `more-info` (default), `toggle`, `call-service`,
 ```yaml
 render:
   quality: auto
-  shadows: true
-  bloom: true
-  bloomStrength: 0.55
-  bloomRadius: 0.5
-  bloomThreshold: 0.72
+  toneMapping: aces
   exposure: 1.0
   ambientIntensity: 0.28
   daylight: true
@@ -421,10 +409,9 @@ render:
   fpsLimit: 60
 ```
 
-- `quality` picks a tier: shadow map size, pixel ratio and post-processing.
-  `auto` decides from the device. It never reduces geometry. The `low` tier
-  disables post-processing, so bloom will not appear there regardless of
-  `bloom: true`.
+- `quality` picks a tier: pixel ratio and antialiasing. `auto` decides from the
+  device. It never reduces geometry, and it never changes how the card looks —
+  only how finely it is sampled.
 - `daylight` adds a sun/sky rig driven by `daylightEntity`'s `elevation` and
   `azimuth` attributes. Point it at `sun.sun` (the default) and the model gets
   darker in the evening on its own.
@@ -506,8 +493,6 @@ A tablet-friendly profile:
 ```yaml
 render:
   quality: medium
-  shadows: false
-  bloom: true
   maxPixelRatio: 1
   onDemand: true
   fpsLimit: 30

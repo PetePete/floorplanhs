@@ -216,11 +216,8 @@ export interface LightVisualConfig {
   /** Static override; ignored when the entity reports a colour. */
   color?: string;
   useEntityColor?: boolean;
-  castShadow?: boolean;
   /** Visible luminaire geometry at the light position. */
   fixture?: { show?: boolean; radius?: number; emissive?: number };
-  /** Per-light bloom weight. */
-  bloom?: number;
   /** Rect area light dimensions. */
   size?: [number, number];
 }
@@ -339,13 +336,8 @@ export interface RenderConfig {
   roomFillStrength?: number;
   /** Colour of the edge lines; defaults to a theme-derived ink. */
   edgeColor?: string;
-  /** 'high' = shadows + bloom + SSAO-ish, 'auto' picks by device. */
+  /** Tier for pixel ratio and antialiasing; 'auto' picks by device. */
   quality?: 'low' | 'medium' | 'high' | 'auto';
-  shadows?: boolean;
-  bloom?: boolean;
-  bloomStrength?: number;
-  bloomRadius?: number;
-  bloomThreshold?: number;
   exposure?: number;
   /** Base ambient level so an all-lights-off house is not pitch black. */
   ambientIntensity?: number;
@@ -508,15 +500,6 @@ export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
   toneMapping: 'aces',
   edgeColor: '',
   quality: 'auto',
-  // Off by default. Real-time shadows are the most expensive thing this card
-  // can do — a shadow-casting point light costs six cube-face passes over the
-  // whole house per refresh — and a floorplan reads as a cleaner diagram
-  // without them. Turn them on per dashboard if you want the extra realism.
-  shadows: false,
-  bloom: true,
-  bloomStrength: 0.55,
-  bloomRadius: 0.5,
-  bloomThreshold: 0.72,
   exposure: 1.0,
   ambientIntensity: 0.34,
   // Off by default: a floorplan should look the same at 3am as at noon, so the

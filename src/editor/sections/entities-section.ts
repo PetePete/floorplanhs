@@ -314,15 +314,6 @@ function renderLightOptions(
         })
       : ''}
     ${switchRow({
-      label: ctx.t('editor.light_cast_shadow', 'Cast shadows'),
-      checked: light.castShadow ?? false,
-      helper: ctx.t(
-        'editor.light_cast_shadow_help',
-        'At most four lights cast real shadows at a time — the brightest ones nearest the camera win.',
-      ),
-      onChange: (v) => patch({ castShadow: v }, true),
-    })}
-    ${switchRow({
       label: ctx.t('editor.light_fixture', 'Show luminaire'),
       checked: fixture.show ?? true,
       helper: ctx.t('editor.light_fixture_help', 'A small glowing body at the light position.'),
@@ -349,14 +340,6 @@ function renderLightOptions(
           })}
         </div>`
       : ''}
-    ${sliderRow({
-      label: ctx.t('editor.light_bloom', 'Bloom weight'),
-      value: light.bloom ?? 1,
-      min: 0,
-      max: 3,
-      step: 0.05,
-      onChange: (v) => patch({ bloom: v }),
-    })}
   `;
 }
 

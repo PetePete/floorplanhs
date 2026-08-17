@@ -9,7 +9,6 @@ import {
   type UiConfig,
 } from '@/types/config';
 import {
-  alertBox,
   colorField,
   entityField,
   numberField,
@@ -42,7 +41,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
   const ui = uiOf(ctx);
   const d = DEFAULT_RENDER_CONFIG;
   const du = DEFAULT_UI_CONFIG;
-  const bloomOn = r.bloom ?? d.bloom;
   const daylightOn = r.daylight ?? d.daylight;
 
   return html`
@@ -78,12 +76,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
           onChange: (v) => patchRender(ctx, { maxPixelRatio: v }),
         })}
       </div>
-      ${switchRow({
-        label: ctx.t('editor.shadows', 'Shadows'),
-        checked: r.shadows ?? d.shadows,
-        helper: ctx.t('editor.shadows_help', 'The single biggest cost. Turn off first when frames drop.'),
-        onChange: (v) => patchRender(ctx, { shadows: v }, true),
-      })}
       ${switchRow({
         label: ctx.t('editor.on_demand', 'On-demand rendering'),
         checked: r.onDemand ?? d.onDemand,
@@ -153,57 +145,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
         helper: ctx.t('editor.background_help', 'CSS colour for the area around the house.'),
         onChange: (v) => patchRender(ctx, { background: v || undefined }),
       })}
-
-      ${sectionTitle(
-        ctx.t('editor.bloom', 'Bloom'),
-        ctx.t(
-          'editor.bloom_desc',
-          'Selective: only lit luminaires and emissive markers glow, never a bright wall.',
-        ),
-      )}
-      ${switchRow({
-        label: ctx.t('editor.bloom_enabled', 'Enable bloom'),
-        checked: bloomOn,
-        onChange: (v) => patchRender(ctx, { bloom: v }, true),
-      })}
-      ${bloomOn
-        ? html`
-            ${sliderRow({
-              label: ctx.t('editor.bloom_strength', 'Strength'),
-              value: r.bloomStrength ?? d.bloomStrength,
-              min: 0,
-              max: 2,
-              step: 0.01,
-              onChange: (v) => patchRender(ctx, { bloomStrength: v }),
-            })}
-            ${sliderRow({
-              label: ctx.t('editor.bloom_radius', 'Radius'),
-              value: r.bloomRadius ?? d.bloomRadius,
-              min: 0,
-              max: 1,
-              step: 0.01,
-              onChange: (v) => patchRender(ctx, { bloomRadius: v }),
-            })}
-            ${sliderRow({
-              label: ctx.t('editor.bloom_threshold', 'Threshold'),
-              value: r.bloomThreshold ?? d.bloomThreshold,
-              min: 0,
-              max: 1,
-              step: 0.01,
-              helper: ctx.t('editor.bloom_threshold_help', 'Lower = more of the image glows.'),
-              onChange: (v) => patchRender(ctx, { bloomThreshold: v }),
-            })}
-          `
-        : ''}
-      ${(r.quality ?? d.quality) === 'low' && bloomOn
-        ? alertBox(
-            'info',
-            ctx.t(
-              'editor.bloom_low_quality',
-              'The low quality tier disables post-processing, so bloom will not appear.',
-            ),
-          )
-        : ''}
 
       ${sectionTitle(
         ctx.t('editor.ui', 'Card interface'),

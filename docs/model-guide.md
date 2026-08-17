@@ -204,7 +204,7 @@ view updates as you type.
 
 ---
 
-## 4. Materials, glass and shadows
+## 4. Materials and glass
 
 - **Use PBR materials** (`Principled BSDF` in Blender). glTF exports metallic /
   roughness / base colour cleanly; anything else gets approximated.
@@ -216,19 +216,16 @@ view updates as you type.
     glassNodes: [window, glass, "*_pane"]
   ```
 
-  Matching materials are switched to a transmissive, non-shadow-casting setup so
-  you can see indoor lights through the façade. Without this, glass exported as
-  an opaque grey material will hide the entire interior.
-- **What casts shadows.** Walls, floors, ceilings, roofs and furniture cast and
-  receive. Glass, markers, the luminaire bodies and anything on the bloom layer
-  do not cast — shadow-casting glass is both wrong-looking and expensive.
+  Matching materials are switched to a transmissive setup so you can see indoor
+  lights through the façade. Without this, glass exported as an opaque grey
+  material will hide the entire interior.
 - **Double-sided materials** cost fill rate and break cut caps. Model walls with
   real thickness rather than single-sided planes; a zero-thickness wall cannot be
   capped when you slice it, so it will look hollow no matter what `caps` is set
   to.
-- **Emissive materials** are not automatically bloomed. Only lit luminaires and
-  emissive markers are on the selective-bloom layer, which is why a white wall
-  never glows.
+- **Emissive materials** are drawn as they are. A lit room is shown by tinting
+  the room, not by making its surfaces glow, so an emissive material in the
+  model is simply a bright surface.
 
 ---
 

@@ -469,7 +469,7 @@ export class CameraController implements ICameraController {
    * Draw the camera's screen-space gizmos (currently the ViewCube).
    *
    * The viewer must call this once per frame **after** the main pass and after
-   * `PostFx.render()`: the cube renders itself into a scissored corner rect
+   * the main pass: the cube renders itself into a scissored corner rect
    * with `autoClear = false`, which is what keeps it out of bloom and tone
    * mapping. Calling it earlier would let the main render overwrite it.
    */

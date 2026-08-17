@@ -81,12 +81,6 @@ export class RenderCore implements RenderContext {
   private orthographic = false;
   private contextLost = false;
   private hasSize = false;
-  /**
-   * Deadline until which shadow maps keep refreshing. Starts as a grace window
-   * so the first seconds — model load, daylight settling — are always covered
-   * even if a caller forgets to mark.
-   */
-  private shadowDirtyUntil = performance.now() + 4000;
   private themeDark: boolean;
   private disposed = false;
 
@@ -146,15 +140,6 @@ export class RenderCore implements RenderContext {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.applyToneMapping();
     this.renderer.localClippingEnabled = true;
-    this.renderer.shadowMap.enabled = this.settings.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Shadow maps do not depend on the camera, but three re-renders every one
-    // of them on every frame by default. With four shadow-casting point lights
-    // that is 4 x 6 cube faces + the sun = 25 extra passes over the whole house
-    // per frame, all of it wasted while the user is merely orbiting. We drive
-    // the refresh explicitly instead; see `markShadowsDirty`.
-    this.renderer.shadowMap.autoUpdate = false;
-    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.setPixelRatio(this.settings.pixelRatio);
 
     this.scene = new THREE.Scene();
@@ -206,24 +191,6 @@ export class RenderCore implements RenderContext {
 
   invalidate(): void {
     this.scheduler?.invalidate();
-  }
-
-  /**
-   * Request a shadow-map refresh. Called when geometry, level visibility, cut
-   * planes or lights change — never for camera movement, which is the whole
-   * point. The window (rather than a single frame) covers the light and
-   * daylight tweens, which keep moving for a while after the state change that
-   * started them.
-   */
-  markShadowsDirty(durationMs = 1800): void {
-    this.shadowDirtyUntil = Math.max(this.shadowDirtyUntil, performance.now() + durationMs);
-    this.invalidate();
-  }
-
-  /** Applied by the frame callback immediately before anything is drawn. */
-  applyShadowUpdate(): void {
-    if (!this.renderer.shadowMap.enabled) return;
-    this.renderer.shadowMap.needsUpdate = performance.now() <= this.shadowDirtyUntil;
   }
 
   holdContinuous(): () => void {
@@ -385,10 +352,6 @@ export class RenderCore implements RenderContext {
     this.renderConfig = { ...DEFAULT_RENDER_CONFIG, ...raw };
 
     this.applyToneMapping();
-    this.renderer.shadowMap.enabled = this.settings.shadows;
-    // Turning shadows on only flips the switch; with autoUpdate off nothing
-    // would ever render a map, so shadows would simply be absent.
-    this.markShadowsDirty();
     this.applyBackground(this.renderConfig.background);
     this.applySize(true);
   }
@@ -402,7 +365,7 @@ export class RenderCore implements RenderContext {
   /**
    * `render.toneMapping`. Applies to both render paths: the composer's
    * `OutputPass` reads these same two renderer fields, which is what keeps the
-   * card looking identical whether or not the bloom chain is running.
+   * card looking identical at every quality tier.
    */
   private applyToneMapping(): void {
     const mode = this.renderConfig.toneMapping;
@@ -440,7 +403,7 @@ export class RenderCore implements RenderContext {
 
     const parsed = new THREE.Color(color);
     // alpha:false means something is always composited; keep the clear colour
-    // and the scene background identical so postfx passes match too.
+    // and the scene background identical, whatever ends up reading them.
     this.scene.background = parsed;
     this.renderer.setClearColor(parsed, 1);
   }
@@ -461,12 +424,6 @@ export class RenderCore implements RenderContext {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.applyToneMapping();
     this.renderer.localClippingEnabled = true;
-    this.renderer.shadowMap.enabled = this.settings.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.shadowMap.autoUpdate = false;
-    // The GPU-side shadow maps died with the context; nothing else would ever
-    // ask for them to be redrawn.
-    this.markShadowsDirty();
     this.applyBackground(this.renderConfig.background);
     this.applySize(true);
     this.onContextRestored?.();

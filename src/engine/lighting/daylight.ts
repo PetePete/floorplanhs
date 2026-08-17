@@ -24,21 +24,11 @@ import { clamp, degToRad, easeInOutCubic } from '@/util/math';
 /** Daylight state transition. Slow enough to read as a change of light. */
 const DAYLIGHT_TWEEN_S = 1.5;
 
-/** Sun shadow map edge per tier. The sun is one ortho pass — far cheaper than a
- *  point light cube map — so it gets a bigger map than the lamps do. */
-const SUN_SHADOW_SIZE: Readonly<Record<QualityTier, number>> = {
-  low: 0,
-  medium: 1024,
-  high: 2048,
-};
-
 /**
  * At 2048² over a 20 m radius one texel is ≈ 2 cm, so a 4 cm normalBias offsets
  * the sample by ~2 texels: enough for acne-free large flat floors, small enough
  * that door reveals do not detach from their shadows.
  */
-const SUN_SHADOW_BIAS = -0.0005;
-const SUN_SHADOW_NORMAL_BIAS = 0.04;
 
 /** Fallback scene radius before the model reports its bounds. */
 const DEFAULT_SCENE_RADIUS_M = 15;
@@ -268,7 +258,6 @@ export class DaylightRig {
   private ambientIntensity: number;
   private tier: QualityTier;
   private wantEnvironment: boolean;
-  private shadowsEnabled = true;
 
   private elevation = 45;
   private azimuth = 180;
@@ -296,8 +285,6 @@ export class DaylightRig {
     this.sun = new THREE.DirectionalLight(0xffffff, 0);
     this.sun.name = 'sun';
     this.sun.castShadow = false;
-    this.sun.shadow.bias = SUN_SHADOW_BIAS;
-    this.sun.shadow.normalBias = SUN_SHADOW_NORMAL_BIAS;
     this.group.add(this.sun);
     this.group.add(this.sun.target);
 
@@ -319,7 +306,6 @@ export class DaylightRig {
   init(ctx: RenderContext): void {
     this.ctx = ctx;
     ctx.scene.add(this.group);
-    this.applyShadowQuality();
     this.applyState();
     if (this.wantEnvironment) this.buildEnvironment();
   }
@@ -359,25 +345,17 @@ export class DaylightRig {
     this.applyState();
   }
 
-  setShadowsEnabled(enabled: boolean): void {
-    if (this.shadowsEnabled === enabled) return;
-    this.shadowsEnabled = enabled;
-    this.applyShadowQuality();
-  }
-
   setQuality(tier: QualityTier): void {
     if (this.tier === tier) return;
     this.tier = tier;
-    this.applyShadowQuality();
   }
 
-  /** Fit the sun's shadow frustum to the house. Call after the model loads. */
+  /** Fit the sun rig to the house. Call after the model loads. */
   setBounds(bounds: THREE.Box3): void {
     if (bounds.isEmpty()) return;
     bounds.getCenter(this.center);
     const sphere = bounds.getBoundingSphere(scratchSphere);
     this.radius = Math.max(2, sphere.radius);
-    this.applyShadowFrustum();
     this.applyState();
   }
 
@@ -439,47 +417,6 @@ export class DaylightRig {
     const scene = this.ctx?.scene;
     if (scene && this.ownsEnvironment) scene.environmentIntensity = s.envIntensity;
 
-    // Below the horizon there is nothing worth shadowing and the frustum is
-    // degenerate, so drop the sun's shadow entirely at night.
-    const wantShadow = this.shadowsEnabled && SUN_SHADOW_SIZE[this.tier] > 0 && s.sunIntensity > 0.3;
-    if (this.sun.castShadow !== wantShadow) {
-      this.sun.castShadow = wantShadow;
-      this.sun.shadow.needsUpdate = true;
-    }
-  }
-
-  private applyShadowQuality(): void {
-    const size = SUN_SHADOW_SIZE[this.tier];
-    const shadow = this.sun.shadow;
-    if (size > 0 && shadow.mapSize.width !== size) {
-      shadow.mapSize.set(size, size);
-      if (shadow.map) {
-        shadow.map.dispose();
-        shadow.map = null;
-      }
-      shadow.needsUpdate = true;
-    }
-    if (size === 0 || !this.shadowsEnabled) {
-      this.sun.castShadow = false;
-      if (shadow.map) {
-        shadow.map.dispose();
-        shadow.map = null;
-      }
-    }
-    this.applyShadowFrustum();
-    this.applyState();
-  }
-
-  private applyShadowFrustum(): void {
-    const cam = this.sun.shadow.camera;
-    const r = this.radius * 1.15;
-    cam.left = -r;
-    cam.right = r;
-    cam.top = r;
-    cam.bottom = -r;
-    cam.near = 0.5;
-    cam.far = this.radius * 2.5 + this.radius * 1.5;
-    cam.updateProjectionMatrix();
   }
 
   /**

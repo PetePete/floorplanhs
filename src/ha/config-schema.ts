@@ -559,7 +559,6 @@ const MARKER_SHAPES: readonly MarkerShape[] = ['auto', 'pill', 'dot', 'icon', 'l
 const LIGHT_ALIASES: Record<string, string> = {
   target_offset: 'targetOffset',
   use_entity_color: 'useEntityColor',
-  cast_shadow: 'castShadow',
 };
 
 const MARKER_ALIASES: Record<string, string> = {
@@ -597,10 +596,6 @@ function readLightVisual(raw: unknown, path: string): LightVisualConfig {
   if (color) light.color = color;
   const useEntityColor = readBoolean(obj, 'useEntityColor', path);
   if (useEntityColor !== undefined) light.useEntityColor = useEntityColor;
-  const castShadow = readBoolean(obj, 'castShadow', path);
-  if (castShadow !== undefined) light.castShadow = castShadow;
-  const bloom = readNumber(obj, 'bloom', path, { min: 0 });
-  if (bloom !== undefined) light.bloom = bloom;
   const size = readVec2(obj, 'size', path);
   if (size) light.size = size;
 
@@ -786,9 +781,6 @@ const RENDER_ALIASES: Record<string, string> = {
   light_mode: 'lightMode',
   tone_mapping: 'toneMapping',
   room_fill_strength: 'roomFillStrength',
-  bloom_strength: 'bloomStrength',
-  bloom_radius: 'bloomRadius',
-  bloom_threshold: 'bloomThreshold',
   ambient_intensity: 'ambientIntensity',
   daylight_entity: 'daylightEntity',
   max_pixel_ratio: 'maxPixelRatio',
@@ -815,11 +807,6 @@ function readRender(raw: unknown, path: string): RenderConfig {
   assign('roomFillStrength', readNumber(obj, 'roomFillStrength', path, { min: 0, max: 2 }));
   assign('edgeColor', readString(obj, 'edgeColor', path));
   assign('quality', readEnum(obj, 'quality', path, ['low', 'medium', 'high', 'auto'] as const));
-  assign('shadows', readBoolean(obj, 'shadows', path));
-  assign('bloom', readBoolean(obj, 'bloom', path));
-  assign('bloomStrength', readNumber(obj, 'bloomStrength', path, { min: 0, max: 5 }));
-  assign('bloomRadius', readNumber(obj, 'bloomRadius', path, { min: 0, max: 5 }));
-  assign('bloomThreshold', readNumber(obj, 'bloomThreshold', path, { min: 0, max: 1 }));
   assign('exposure', readNumber(obj, 'exposure', path, { min: 0.05, max: 10 }));
   assign('ambientIntensity', readNumber(obj, 'ambientIntensity', path, { min: 0, max: 10 }));
   assign('daylight', readBoolean(obj, 'daylight', path));

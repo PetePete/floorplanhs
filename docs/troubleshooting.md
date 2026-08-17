@@ -146,12 +146,6 @@ Work down this list:
    like it does nothing. Try `0.15`.
 7. **Is it a `kind: emissive` light?** Those glow but do not illuminate.
 
-**The bulb glows but casts no shadow.** Only four lights cast real shadows at a
-time (high tier), chosen by brightness and camera proximity — and `castShadow`
-defaults to `false`. Set `castShadow: true` on the ones that matter and accept
-that the engine still picks four. Also confirm `render.shadows: true` and that
-`quality` is not `low`.
-
 ---
 
 ## Everything is too dark
@@ -168,7 +162,6 @@ that the engine still picks four. Also confirm `render.shadows: true` and that
 
 - Lower `render.exposure` (try `0.8`).
 - Lower `render.ambientIntensity` (try `0.15`).
-- Reduce `bloomStrength` or raise `bloomThreshold` (`0.85` blooms much less).
 - Too many overlapping lights at full intensity: reduce per-light `intensity`,
   or reduce `distance` so they stop stacking.
 
@@ -180,7 +173,6 @@ Apply in this order — each step is bigger than the one after it:
 
 ```yaml
 render:
-  shadows: false        # 1. by far the biggest win
   maxPixelRatio: 1      # 2. quarter the pixels on a retina panel
   quality: medium       # 3. or low
   fpsLimit: 30          # 4. halves the work when animating

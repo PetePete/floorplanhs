@@ -383,11 +383,6 @@ export class Fp3dEntityInspector extends FpBaseElement {
           `
         : nothing}
       ${this.renderSwitch(
-        this.t('ui.inspector.cast_shadow', 'Cast shadows'),
-        light.castShadow === true,
-        () => this.patchLight({ castShadow: !light.castShadow }),
-      )}
-      ${this.renderSwitch(
         this.t('ui.inspector.fixture', 'Show fixture'),
         light.fixture?.show !== false,
         () => this.patchLight({ fixture: { ...(light.fixture ?? {}), show: light.fixture?.show === false } }),

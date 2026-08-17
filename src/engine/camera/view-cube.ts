@@ -8,12 +8,6 @@
  * scissored corner rect with `autoClear = false`. That choice falls out of the
  * requirements rather than being a preference:
  *
- * - `PostFx` owns the final image, and its bloom path renders the main scene
- *   into render targets. Anything living in the main scene therefore goes
- *   *through* bloom and tone mapping. A separate scene drawn after the composer
- *   cannot be bloomed, cannot be clipped by the section planes (the section
- *   controller only ever walks `ctx.modelRoot`) and does not care about the
- *   section state at all.
  * - A second `WebGLRenderer` would cost a second GL context — browsers cap
  *   those, and a dashboard cycles through cards.
  *
@@ -258,7 +252,7 @@ export class ViewCube {
 
   /**
    * Draw the cube. Must be called once per frame *after* the main pass (and
-   * after `PostFx.render`, which owns the final image).
+   * after the main pass, which owns the final image).
    */
   render(): void {
     const ctx = this.ctx;

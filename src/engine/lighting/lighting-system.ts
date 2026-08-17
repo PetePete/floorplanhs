@@ -1,7 +1,7 @@
 /**
  * The lighting subsystem: one {@link LightRig} per placed light entity, the
- * sun/sky rig, and the shadow budget that decides which lamps are allowed to
- * cost a real-time shadow.
+ * sun/sky rig, and the budget that decides which lamps are allowed to stay
+ * live at all.
  *
  * `syncLight` is on the hot path — it runs for every light entity on every HA
  * state push — so it does nothing but compare numbers and stage tween targets.
@@ -20,7 +20,7 @@ import type {
 } from '@/engine/contracts';
 import { LightRig } from '@/engine/lighting/light-rig';
 import { DaylightRig } from '@/engine/lighting/daylight';
-import { ShadowBudget, type ShadowCandidate } from '@/engine/lighting/shadow-budget';
+import { LightBudget, type LightCandidate } from '@/engine/lighting/light-budget';
 import { RoomFill, type RoomFillLight, type RoomFillSource } from '@/engine/lighting/room-fill';
 
 /** A sample staged before `init(ctx)` — three.js objects may not exist yet. */
@@ -34,7 +34,7 @@ export class LightingSystem implements ILightingSystem {
 
   private readonly root = new THREE.Group();
   private readonly rigs = new Map<string, LightRig>();
-  private readonly budget = new ShadowBudget();
+  private readonly budget = new LightBudget();
   private readonly daylightRig: DaylightRig;
   private readonly roomFill = new RoomFill();
   /** Explicit `entities[].room` overrides, by entity id. */
@@ -50,11 +50,10 @@ export class LightingSystem implements ILightingSystem {
   private readonly appliedConfigs = new Map<string, PlacedEntity['light']>();
 
   /** Reused every evaluation; the budget runs on every light state change. */
-  private readonly candidates: ShadowCandidate[] = [];
+  private readonly candidates: LightCandidate[] = [];
 
   private renderCfg: Required<RenderConfig>;
   private tier: QualityTier = 'high';
-  private shadowsEnabled: boolean;
   private visibleLevels: Set<string> | null = null;
 
   private releaseLease: (() => void) | null = null;
@@ -64,7 +63,6 @@ export class LightingSystem implements ILightingSystem {
 
   constructor(render?: RenderConfig) {
     this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...(render ?? {}) };
-    this.shadowsEnabled = this.renderCfg.shadows;
     this.roomFill.setEnabled(this.renderCfg.lightMode === 'room');
     this.roomFill.setStrength(this.renderCfg.roomFillStrength);
     this.root.name = 'lighting';
@@ -82,10 +80,8 @@ export class LightingSystem implements ILightingSystem {
     ctx.scene.add(this.root);
 
     this.budget.setQuality(this.tier);
-    this.budget.setEnabled(this.shadowsEnabled);
 
     this.daylightRig.setQuality(this.tier);
-    this.daylightRig.setShadowsEnabled(this.shadowsEnabled);
     this.daylightRig.init(ctx);
 
     for (const [entityId, entry] of this.pending) {
@@ -160,7 +156,6 @@ export class LightingSystem implements ILightingSystem {
         quality: this.tier,
         clippingPlanes: ctx.clippingPlanes,
       });
-      rig.setShadowsEnabled(this.shadowsEnabled);
       rig.setEmissiveOnly(this.roomFillActive);
       this.root.add(rig.group);
       this.rigs.set(entityId, rig);
@@ -169,7 +164,6 @@ export class LightingSystem implements ILightingSystem {
     } else if (this.appliedConfigs.get(entityId) !== placed.light) {
       this.appliedConfigs.set(entityId, placed.light);
       rig.applyConfig(placed.light);
-      rig.setShadowsEnabled(this.shadowsEnabled);
       this.budget.markDirty();
     }
 
@@ -220,24 +214,13 @@ export class LightingSystem implements ILightingSystem {
     return ids;
   }
 
-  setShadowsEnabled(enabled: boolean): void {
-    if (this.shadowsEnabled === enabled) return;
-    this.shadowsEnabled = enabled;
-    this.budget.setEnabled(enabled);
-    this.daylightRig.setShadowsEnabled(enabled);
-    for (const rig of this.rigs.values()) rig.setShadowsEnabled(enabled);
-    this.budget.markDirty();
-    this.ctx?.invalidate();
-  }
-
   /* ------------------------------------------------- optional wiring (extra) */
 
-  /** Re-apply a changed render block (exposure/ambient/shadows/daylight flag). */
+  /** Re-apply a changed render block (exposure/ambient/daylight flag). */
   setRenderConfig(render: RenderConfig): void {
     const wasRoomFill = this.roomFillActive;
     this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...render };
     this.daylightRig.setAmbientIntensity(this.renderCfg.ambientIntensity);
-    this.setShadowsEnabled(this.renderCfg.shadows);
 
     this.roomFill.setEnabled(this.roomFillActive);
     this.roomFill.setStrength(this.renderCfg.roomFillStrength);
@@ -297,7 +280,7 @@ export class LightingSystem implements ILightingSystem {
     this.ctx?.invalidate();
   }
 
-  /** Fit the sun's shadow frustum to the house. */
+  /** Fit the sun rig to the house. */
   setModelBounds(bounds: THREE.Box3): void {
     this.daylightRig.setBounds(bounds);
     this.ctx?.invalidate();
@@ -352,7 +335,7 @@ export class LightingSystem implements ILightingSystem {
 
   /**
    * The Viewer does not hand model bounds to the lighting system, so the sun's
-   * shadow frustum is fitted from the model root the first time it has content
+   * bounds are taken from the model root the first time it has content
    * and again whenever the model is swapped.
    */
   private refreshModelBounds(ctx: RenderContext): void {
@@ -380,7 +363,6 @@ export class LightingSystem implements ILightingSystem {
     for (const [entityId, rig] of this.rigs) {
       if (!rig.countsAgainstBudget) continue;
       rig.setCulledByBudget(!grants.active.has(entityId));
-      rig.setShadowGranted(grants.shadows.has(entityId));
     }
     list.length = 0;
   }

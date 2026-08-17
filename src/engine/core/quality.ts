@@ -4,7 +4,7 @@
  * the user pinned them in YAML.
  *
  * Per ARCHITECTURE.md the tiers only downgrade *rendering* cost (pixel ratio,
- * shadow map size, postfx) — never geometry — so the picture stays the same
+ * pixel ratio, antialiasing) — never geometry — so the picture stays the same
  * shape on every device.
  */
 
@@ -13,12 +13,8 @@ import type { QualityTier } from '@/engine/contracts';
 
 export interface QualitySettings {
   pixelRatio: number;
-  shadows: boolean;
-  shadowMapSize: number;
-  bloom: boolean;
   anisotropy: number;
   antialias: boolean;
-  softShadows: boolean;
 }
 
 /**
@@ -28,30 +24,18 @@ export interface QualitySettings {
 export const QUALITY_PRESETS: Readonly<Record<QualityTier, QualitySettings>> = Object.freeze({
   low: {
     pixelRatio: 1,
-    shadows: false,
-    shadowMapSize: 512,
-    bloom: false,
     anisotropy: 1,
     antialias: false,
-    softShadows: false,
   },
   medium: {
     pixelRatio: 1.5,
-    shadows: true,
-    shadowMapSize: 1024,
-    bloom: true,
     anisotropy: 4,
     antialias: true,
-    softShadows: false,
   },
   high: {
     pixelRatio: 2,
-    shadows: true,
-    shadowMapSize: 2048,
-    bloom: true,
     anisotropy: 8,
     antialias: true,
-    softShadows: true,
   },
 });
 
@@ -151,8 +135,6 @@ export function resolveQuality(
       : settings.pixelRatio;
   settings.pixelRatio = Math.max(0.5, Math.min(dpr > 0 ? dpr : 1, cap));
 
-  if (typeof render.shadows === 'boolean') settings.shadows = render.shadows;
-  if (typeof render.bloom === 'boolean') settings.bloom = render.bloom;
 
   return { tier: resolved, settings };
 }

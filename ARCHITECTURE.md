@@ -27,7 +27,7 @@ src/
                           sh3d/ Sweet Home 3D import, level detection
     section/              clipping planes, level isolation, cut caps, handles
     camera/               orbit controls, preset capture + flight
-    lighting/             HA light state -> three.js lights, daylight rig, postfx
+    lighting/             HA light state -> room fill, daylight rig, light budget
     entities/             markers/hotspots, sprites, hover + pick
     interaction/          pointer routing, drag & drop placement, gizmos
   ha/                     Home Assistant glue (state mapping, actions, registry)
@@ -86,9 +86,7 @@ user drag ──► interaction/placement ──► EditIntent ──► card �
   `localClippingEnabled = true`.
 - Physically-ish lighting: `useLegacyLights` off, intensities in candela-like
   units, `decay = 2`.
-- Bloom is **selective** via a layer (`IPostFx.bloomLayer`): only lit fixtures
-  and emissive markers are on it, so a bright wall does not glow.
-- Quality tiers downgrade shadow map size, pixel ratio and postfx, not geometry.
+- Quality tiers downgrade pixel ratio and antialiasing, never geometry.
 
 ## Home Assistant integration points
 

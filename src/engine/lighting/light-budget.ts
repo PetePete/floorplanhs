@@ -1,53 +1,36 @@
 /**
- * Shadow + active-light budgeting.
+ * Active-light budgeting.
  *
- * A real-time shadow-casting PointLight is a cubemap render: six passes over
- * every shadow caster, every time the light or the geometry moves. Two of them
- * already halve the frame rate of a mid-range tablet, so the number of lights
- * that are *allowed* to cast is capped hard and the slots go to the lights that
- * actually matter to the picture — on, bright, near the camera, not clipped or
- * hidden by the section.
+ * WebGL builds one shader per light count, and every additional live light
+ * costs a uniform slot and a per-fragment loop iteration. A house with twenty
+ * lamps switched on would recompile its way to a standstill, so only the ones
+ * that matter are kept live: brightest first, weighted by distance from the
+ * camera, with a bonus for whoever already had the slot so a lamp does not
+ * flicker in and out as the view drifts.
  *
- * The budget is deliberately dumb about three.js: it scores plain
- * {@link ShadowCandidate} records and hands back id sets. `LightingSystem` owns
- * the rigs and applies the verdict.
+ * Pure bookkeeping — it takes candidate records and hands back an id set.
+ * `LightingSystem` owns the rigs and applies the verdict.
  */
 
 import type * as THREE from 'three';
 import type { QualityTier } from '@/engine/contracts';
 
 /** What the budget needs to know about one light to rank it. */
-export interface ShadowCandidate {
+export interface LightCandidate {
   readonly id: string;
   /** Target state, not the tweened one — a light fading in already counts. */
   readonly on: boolean;
   /** Hidden level, outside the section clip, or explicitly disabled. */
   readonly culled: boolean;
-  /** Config asked for shadows at all (and the light kind supports them). */
-  readonly wantsShadow: boolean;
   /** Target candela; used as the "visual importance" weight. */
   readonly intensity: number;
   readonly worldPosition: THREE.Vector3;
 }
 
 export interface BudgetGrants {
-  /** Ids allowed to cast a real-time shadow this round. */
-  readonly shadows: ReadonlySet<string>;
   /** Ids allowed to contribute light at all (maxLights cap applied). */
   readonly active: ReadonlySet<string>;
 }
-
-/**
- * Simultaneous shadow casters per tier. `high: 4` is the practical ceiling for
- * a 60 fps desktop frame with 1024² cube maps; `medium: 2` keeps tablets alive;
- * `low: 0` drops real-time shadows entirely (the daylight rig keeps its own
- * single directional shadow, which is budgeted separately and is far cheaper).
- */
-const SHADOW_SLOTS: Readonly<Record<QualityTier, number>> = {
-  low: 0,
-  medium: 2,
-  high: 4,
-};
 
 /**
  * Cap on lights contributing to the shading at all. three.js recompiles every
@@ -63,8 +46,8 @@ const LIGHT_CAPS: Readonly<Record<QualityTier, number>> = {
 
 /**
  * Distance at which a light's importance has halved. 12 m ≈ "the next room
- * over": beyond that a lamp is usually behind a wall and its shadow is not
- * legible, so it should lose its slot to something closer.
+ * over": beyond that a lamp is usually behind a wall and contributes nothing
+ * you can see, so it should lose its slot to something closer.
  */
 const IMPORTANCE_FALLOFF_M = 12;
 const IMPORTANCE_FALLOFF_SQ = IMPORTANCE_FALLOFF_M * IMPORTANCE_FALLOFF_M;
@@ -72,7 +55,7 @@ const IMPORTANCE_FALLOFF_SQ = IMPORTANCE_FALLOFF_M * IMPORTANCE_FALLOFF_M;
 /**
  * Incumbents get a 30 % score bonus. Without hysteresis two lights of similar
  * score swap slots every time the camera drifts, and each swap is a visible
- * shadow pop plus a shader recompile.
+ * pop plus a shader recompile.
  */
 const INCUMBENT_BONUS = 1.3;
 
@@ -84,16 +67,13 @@ const CAMERA_MOVE_EPS_SQ = 0.5 * 0.5;
 interface ScoredCandidate {
   id: string;
   score: number;
-  wantsShadow: boolean;
 }
 
-export class ShadowBudget {
+export class LightBudget {
   private tier: QualityTier = 'high';
   private enabled = true;
-  private slotOverride: number | null = null;
   private maxLightsOverride: number | null = null;
 
-  private grantedShadows: Set<string> = new Set();
   private grantedActive: Set<string> = new Set();
 
   private dirty = true;
@@ -118,20 +98,10 @@ export class ShadowBudget {
   }
 
   /** Explicit slot count; pass null to go back to the per-tier default. */
-  setShadowSlots(slots: number | null): void {
-    this.slotOverride = slots === null ? null : Math.max(0, Math.floor(slots));
-    this.dirty = true;
-  }
-
   /** Explicit active-light cap; pass null for the per-tier default. */
   setMaxLights(max: number | null): void {
     this.maxLightsOverride = max === null ? null : Math.max(1, Math.floor(max));
     this.dirty = true;
-  }
-
-  get shadowSlots(): number {
-    if (!this.enabled) return 0;
-    return this.slotOverride ?? SHADOW_SLOTS[this.tier];
   }
 
   get maxLights(): number {
@@ -163,7 +133,7 @@ export class ShadowBudget {
    * budget and are replaced (not mutated) on the next call, so callers may hold
    * them for the duration of a frame but must not store them.
    */
-  evaluate(candidates: readonly ShadowCandidate[], cameraPosition: THREE.Vector3): BudgetGrants {
+  evaluate(candidates: readonly LightCandidate[], cameraPosition: THREE.Vector3): BudgetGrants {
     this.dirty = false;
     this.lastEvalMs = nowMillis();
     this.lastCameraX = cameraPosition.x;
@@ -180,8 +150,8 @@ export class ShadowBudget {
       const dz = c.worldPosition.z - cameraPosition.z;
       const distSq = dx * dx + dy * dy + dz * dz;
       let score = c.intensity / (1 + distSq / IMPORTANCE_FALLOFF_SQ);
-      if (this.grantedShadows.has(c.id)) score *= INCUMBENT_BONUS;
-      scored.push({ id: c.id, score, wantsShadow: c.wantsShadow });
+      if (this.grantedActive.has(c.id)) score *= INCUMBENT_BONUS;
+      scored.push({ id: c.id, score });
     }
 
     scored.sort(byScoreDesc);
@@ -192,32 +162,22 @@ export class ShadowBudget {
       active.add(scored[i].id);
     }
 
-    const shadows = new Set<string>();
-    const slots = this.shadowSlots;
-    for (let i = 0; i < scored.length && shadows.size < slots; i += 1) {
-      const s = scored[i];
-      if (!s.wantsShadow || !active.has(s.id)) continue;
-      shadows.add(s.id);
-    }
-
-    this.grantedShadows = shadows;
     this.grantedActive = active;
     scored.length = 0;
-    return { shadows, active };
+    return { active };
   }
 
   /** Last verdict, for callers that need it outside an evaluation. */
   get grants(): BudgetGrants {
-    return { shadows: this.grantedShadows, active: this.grantedActive };
+    return { active: this.grantedActive };
   }
 
   /** Drop an id from the incumbent sets when its rig goes away. */
   forget(id: string): void {
-    if (this.grantedShadows.delete(id) || this.grantedActive.delete(id)) this.dirty = true;
+    if (this.grantedActive.delete(id)) this.dirty = true;
   }
 
   reset(): void {
-    this.grantedShadows = new Set();
     this.grantedActive = new Set();
     this.dirty = true;
     this.lastEvalMs = 0;

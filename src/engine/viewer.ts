@@ -31,7 +31,6 @@ import type {
   ILightingSystem,
   IModelManager,
   IPlacementController,
-  IPostFx,
   ISectionController,
   IViewer,
   RenderContext,
@@ -50,7 +49,6 @@ import { ModelManager } from '@/engine/model/model-manager';
 import { SectionController } from '@/engine/section/section-controller';
 import { CameraController } from '@/engine/camera/camera-controller';
 import { LightingSystem } from '@/engine/lighting/lighting-system';
-import { PostFx } from '@/engine/lighting/post-fx';
 import { EntityLayer } from '@/engine/entities/entity-layer';
 import { PlacementController } from '@/engine/interaction/placement-controller';
 import { PointerRouter } from '@/engine/interaction/pointer-router';
@@ -63,7 +61,6 @@ type SubsystemName =
   | 'section'
   | 'camera'
   | 'lighting'
-  | 'postfx'
   | 'entities'
   | 'placement'
   | 'pointer';
@@ -104,7 +101,6 @@ export class Viewer implements IViewer {
   private _section: ISectionController | null = null;
   private _cameraCtl: ICameraController | null = null;
   private _lighting: ILightingSystem | null = null;
-  private _postFx: IPostFx | null = null;
   private _entities: IEntityLayer | null = null;
   private _placement: IPlacementController | null = null;
   private _pointer: Subsystem | null = null;
@@ -244,7 +240,6 @@ export class Viewer implements IViewer {
     this._section = new SectionController();
     this._cameraCtl = new CameraController(this.config.camera ?? {});
     this._lighting = new LightingSystem(this.renderCfg);
-    this._postFx = new PostFx(this.renderCfg);
     this._entities = new EntityLayer();
     this._placement = new PlacementController(this._model, this._entities, this._cameraCtl);
     this._pointer = new PointerRouter(
@@ -293,7 +288,6 @@ export class Viewer implements IViewer {
       ['section', this._section],
       ['camera', this._cameraCtl],
       ['lighting', this._lighting],
-      ['postfx', this._postFx],
       ['entities', this._entities],
       ['placement', this._placement],
       ['pointer', this._pointer],
@@ -369,7 +363,6 @@ export class Viewer implements IViewer {
       if (!this.edges.object.parent) core.modelRoot.add(this.edges.object);
       this.applyRenderStyle();
 
-      core.markShadowsDirty();
       this.wireSubsystems();
       this.emit('model-loaded', loaded);
     } catch (err) {
@@ -396,8 +389,6 @@ export class Viewer implements IViewer {
       section.onHandleDragStart(() => camera.setEnabled(false)),
       section.onHandleDragEnd(() => camera.setEnabled(true)),
       section.onChange((state) => {
-        // Cut planes move geometry out of the shadow casters.
-        this.core?.markShadowsDirty();
         this.flashSectionHandles();
         this.config = { ...this.config, section: state };
         this.emit('section-changed', state);
@@ -413,7 +404,6 @@ export class Viewer implements IViewer {
     if (placement) {
       this.unwire.push(
         placement.on('placement-commit', ({ entityId, mode, result }) => {
-          this.core?.markShadowsDirty();
           if (mode !== 'move') return;
           this.emit('edit-intent', {
             kind: 'move-entity',
@@ -450,7 +440,6 @@ export class Viewer implements IViewer {
     const core = this.core;
     if (!core || !core.canRender) return;
 
-    core.applyShadowUpdate();
 
     // Camera first: everything else positions itself relative to the view.
     this.tick('camera', this._cameraCtl, dt, ctx);
@@ -463,31 +452,19 @@ export class Viewer implements IViewer {
     this.tick('placement', this._placement, dt, ctx);
     this.tick('pointer', this._pointer, dt, ctx);
 
-    // Always through the post-processing chain, at every quality tier. It is
-    // what applies tone mapping and the sRGB encode to the whole frame; render
-    // straight to the canvas instead and every material that opts out of tone
-    // mapping comes out brighter, so the card visibly changed appearance with
-    // the quality setting. PostFx itself decides whether bloom is affordable.
-    const postFx = this._postFx;
-    try {
-      if (postFx && !this.failed.has('postfx')) {
-        try {
-          postFx.render(dt);
-          return;
-        } catch (err) {
-          this.disable('postfx', 'Post-processing failed; falling back to direct rendering', err);
-        }
-      }
-      core.renderer.render(core.scene, core.activeCamera);
-    } finally {
-      // The ViewCube lives in its own scene and is scissored into a corner
-      // after everything else, so bloom, tone mapping and the section clipping
-      // planes cannot touch it. It must run on the postfx path too, hence the
-      // `finally` around the early return above.
-      this.guard('camera', this._cameraCtl, (c) =>
-        (c as ICameraController & { renderOverlay?(): void }).renderOverlay?.(),
-      );
-    }
+    // Straight to the canvas. With no bloom there is nothing a composer would
+    // add — and plenty it takes away: it bypasses the canvas' own multisampling,
+    // it forces every material through one global tone-mapping pass whether or
+    // not the material asked for it, and its render targets are where the
+    // transparent background kept getting lost.
+    core.renderer.render(core.scene, core.activeCamera);
+
+    // The ViewCube lives in its own scene and is scissored into a corner after
+    // everything else, so tone mapping and the section clipping planes cannot
+    // touch it.
+    this.guard('camera', this._cameraCtl, (c) =>
+      (c as ICameraController & { renderOverlay?(): void }).renderOverlay?.(),
+    );
   };
 
   private syncCameraRig(core: RenderCore): void {
@@ -573,19 +550,7 @@ export class Viewer implements IViewer {
 
   /** Push render settings that live inside subsystems rather than the core. */
   private pushRenderSettings(): void {
-    const settings = this.core?.qualitySettings;
-    const bloom = this.renderCfg.bloom && settings?.bloom !== false;
-    this.guard('postfx', this._postFx, (fx) => {
-      fx.setExposure(this.renderCfg.exposure);
-      fx.setBloom(
-        bloom,
-        this.renderCfg.bloomStrength,
-        this.renderCfg.bloomRadius,
-        this.renderCfg.bloomThreshold,
-      );
-    });
     this.guard('lighting', this._lighting, (l) => {
-      l.setShadowsEnabled(settings?.shadows ?? this.renderCfg.shadows);
       if (!this.renderCfg.daylight) {
         l.setDaylight(0, 0, false);
         this.daylightApplied = false;
@@ -642,8 +607,7 @@ export class Viewer implements IViewer {
     }
 
     if (this.syncDaylight(hass)) changed = true;
-    // Only a real state change can alter a shadow map; camera movement cannot.
-    if (changed) this.core.markShadowsDirty();
+    if (changed) this.core?.invalidate();
   }
 
   private syncEntity(placed: PlacedEntity, state: HassEntity | undefined, hass: HomeAssistant): void {
@@ -749,7 +713,6 @@ export class Viewer implements IViewer {
     const section = preset.section ?? (resetState ? { ...DEFAULT_SECTION_STATE } : null);
     if (section) {
       this.guard('section', this._section, (s) => s.setState(section, animate));
-      this.core?.markShadowsDirty();
     }
     // Likewise, no explicit level list means "show the whole building".
     if (preset.visibleLevels !== undefined || resetState) {
@@ -797,8 +760,6 @@ export class Viewer implements IViewer {
           : groundInk;
     this.edges.setColor(color || paletteInk);
     this.edges.setStyle(render.style ?? DEFAULT_RENDER_CONFIG.style);
-    // `wireframe` hides every surface, so the shadows they cast must go too.
-    this.core?.markShadowsDirty();
 
     this.guard('camera', this._cameraCtl, (c) =>
       (c as ICameraController & { setViewCubeVisible?(v: boolean): void }).setViewCubeVisible?.(
@@ -898,7 +859,6 @@ export class Viewer implements IViewer {
         levelIds,
       ),
     );
-    this.core?.markShadowsDirty();
     this.guard('entities', this._entities, (e) => e.setVisibleLevels(levelIds));
     this.emit('levels-changed', { visible: levelIds });
     this.core?.invalidate();
@@ -942,7 +902,6 @@ export class Viewer implements IViewer {
     this._pointer = null;
     this._placement = null;
     this._entities = null;
-    this._postFx = null;
     this._lighting = null;
     this._cameraCtl = null;
     this._section = null;
