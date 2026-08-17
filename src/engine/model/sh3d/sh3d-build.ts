@@ -229,6 +229,13 @@ interface WallSegment {
   height1: number;
   thickness: number;
   openings: PlacedOpening[];
+  /**
+   * Mitre shear at each end, as `du/dz` in the wall's own frame: how far the
+   * end face slides along the wall per unit of cross-offset. 0 is a square cut.
+   * See `mitreShear`.
+   */
+  mitre0: number;
+  mitre1: number;
 }
 
 interface PlacedOpening {
@@ -253,38 +260,103 @@ interface PlacedOpening {
  * tolerance of the thicker wall: a join in the plan is drawn to a shared point,
  * so anything further apart than that is two walls that happen to pass nearby.
  */
-function detectWallJoins(walls: readonly Sh3dWall[]): Map<Sh3dWall, [boolean, boolean]> {
-  const joins = new Map<Sh3dWall, [boolean, boolean]>();
-  for (const wall of walls) {
-    joins.set(wall, [wall.wallAtStart !== undefined, wall.wallAtEnd !== undefined]);
-  }
+type WallJoins = Map<Sh3dWall, [Vec2 | null, Vec2 | null]>;
+
+type Vec2 = readonly [number, number];
+
+function unit(from: Vec2, to: Vec2): Vec2 | null {
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const length = Math.hypot(dx, dz);
+  return length < EPS ? null : [dx / length, dz / length];
+}
+
+/** 2D cross product; zero when the two directions are parallel. */
+function cross2(a: Vec2, b: Vec2): number {
+  return a[0] * b[1] - a[1] * b[0];
+}
+
+function detectWallJoins(walls: readonly Sh3dWall[]): WallJoins {
+  const joins: WallJoins = new Map();
+  for (const wall of walls) joins.set(wall, [null, null]);
+
+  const endsOf = (w: Sh3dWall): [Vec2, Vec2] => [
+    [w.xStart, w.zStart],
+    [w.xEnd, w.zEnd],
+  ];
 
   for (let i = 0; i < walls.length; i += 1) {
     const a = walls[i];
-    const aEnds: Array<[number, number]> = [
-      [a.xStart, a.zStart],
-      [a.xEnd, a.zEnd],
-    ];
+    const aEnds = endsOf(a);
     for (let j = i + 1; j < walls.length; j += 1) {
       const b = walls[j];
       if (a.levelId !== b.levelId) continue;
       const tolerance = Math.max(a.thickness, b.thickness);
-      const bEnds: Array<[number, number]> = [
-        [b.xStart, b.zStart],
-        [b.xEnd, b.zEnd],
-      ];
+      const bEnds = endsOf(b);
+
       for (let ai = 0; ai < 2; ai += 1) {
         for (let bi = 0; bi < 2; bi += 1) {
-          const dx = aEnds[ai][0] - bEnds[bi][0];
-          const dz = aEnds[ai][1] - bEnds[bi][1];
-          if (Math.hypot(dx, dz) > tolerance) continue;
-          joins.get(a)![ai] = true;
-          joins.get(b)![bi] = true;
+          const corner = aEnds[ai];
+          if (Math.hypot(corner[0] - bEnds[bi][0], corner[1] - bEnds[bi][1]) > tolerance) continue;
+          // Each wall records the direction the *other* one leaves the shared
+          // corner in; that pair is what the mitre bisects.
+          joins.get(a)![ai] ??= unit(corner, bEnds[1 - bi]);
+          joins.get(b)![bi] ??= unit(bEnds[bi], aEnds[1 - ai]);
         }
       }
     }
   }
   return joins;
+}
+
+/**
+ * Mitre shear for one wall end, as `du/dz` in the wall's own frame.
+ *
+ * Walls used to be squared off and pushed half a thickness into the neighbour.
+ * That closes the corner, but it leaves the two boxes overlapping, and an
+ * overlap is visible as *lines*: the buried box's end edges lie exactly on the
+ * neighbour's outer face, so a hidden-line drawing shows two spurious verticals
+ * a wall thickness either side of the corner — while the inside corner, which
+ * is the intersection of two solids and an edge of neither, has no line at all.
+ *
+ * A real mitre fixes both at once. The end face is cut along the bisector of
+ * the two wall axes, so the outer side reaches the outside corner, the inner
+ * side stops at the inside corner, and each corner is an edge of both walls
+ * exactly once.
+ *
+ * `axis` points from the corner along this wall, `neighbour` from the same
+ * corner along the other one. Returns 0 for a straight run (nothing to mitre)
+ * and for the degenerate case of a wall doubling back on itself.
+ */
+function mitreShear(axis: Vec2, neighbour: Vec2): number {
+  const bisector: Vec2 = [axis[0] + neighbour[0], axis[1] + neighbour[1]];
+  const length = Math.hypot(bisector[0], bisector[1]);
+  // Collinear and opposite: a straight continuation, which needs no mitre.
+  if (length < 1e-6) return 0;
+  const m: Vec2 = [bisector[0] / length, bisector[1] / length];
+
+  // The wall's own cross direction, matching local +z in `segmentMatrix`.
+  const normal: Vec2 = [-axis[1], axis[0]];
+  const denominator = cross2(axis, m);
+  if (Math.abs(denominator) < 1e-6) return 0;
+  return -cross2(normal, m) / denominator;
+}
+
+/**
+ * Slide the vertices of one end face along the wall, turning a square cut into
+ * the mitre `shear` describes. Operates in wall-local space, where +x runs
+ * along the wall and z spans its thickness.
+ */
+function applyMitre(geometry: THREE.BufferGeometry, atU: number, shear: number): void {
+  if (shear === 0) return;
+  const position = geometry.getAttribute('position');
+  if (!position) return;
+  for (let i = 0; i < position.count; i += 1) {
+    if (Math.abs(position.getX(i) - atU) > EPS) continue;
+    position.setX(i, position.getX(i) + shear * position.getZ(i));
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
 }
 
 /**
@@ -294,18 +366,12 @@ function detectWallJoins(walls: readonly Sh3dWall[]): Map<Sh3dWall, [boolean, bo
  * modelled, which keeps every downstream step — openings, mitres, extrusion —
  * working on plain straight pieces.
  *
- * Joined ends are extended half a thickness into the neighbour rather than
- * mitred properly. That closes the corner at any join angle, and it is what
- * puts a line *on* the corner: the extended end face comes out flush with the
- * neighbour's outer face, so its vertical edge lands exactly on the outside
- * corner. Without the extension the two outer faces merely cross, the corner
- * belongs to neither box, and the edge overlay has nothing to draw there.
- *
- * `joinsAtStart` / `joinsAtEnd` come from the caller, which trusts geometry
- * over the file: Sweet Home 3D only sets `wallAtStart` / `wallAtEnd` for walls
- * drawn as one connected run, and walls that merely meet are left unmarked.
+ * Joined ends are mitred; see `mitreShear`. The neighbour directions come from
+ * the caller, which trusts geometry over the file: Sweet Home 3D only sets
+ * `wallAtStart` / `wallAtEnd` for walls drawn as one connected run, and walls
+ * that merely meet are left unmarked.
  */
-function wallSegments(wall: Sh3dWall, joinsAtStart: boolean, joinsAtEnd: boolean): WallSegment[] {
+function wallSegments(wall: Sh3dWall, joinAtStart: Vec2 | null, joinAtEnd: Vec2 | null): WallSegment[] {
   const start: [number, number] = [wall.xStart, wall.zStart];
   const end: [number, number] = [wall.xEnd, wall.zEnd];
   const heightEnd = wall.heightAtEnd ?? wall.height;
@@ -337,24 +403,6 @@ function wallSegments(wall: Sh3dWall, joinsAtStart: boolean, joinsAtEnd: boolean
     }
   }
 
-  // Extend the two free ends of the whole run into whatever they join.
-  const extendStart = joinsAtStart ? wall.thickness / 2 : 0;
-  const extendEnd = joinsAtEnd ? wall.thickness / 2 : 0;
-  if (extendStart > 0 && points.length >= 2) {
-    const [a, b] = [points[0], points[1]];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
-    points[0] = [a[0] - ((b[0] - a[0]) / len) * extendStart, a[1] - ((b[1] - a[1]) / len) * extendStart];
-  }
-  if (extendEnd > 0 && points.length >= 2) {
-    const a = points[points.length - 1];
-    const b = points[points.length - 2];
-    const len = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
-    points[points.length - 1] = [
-      a[0] + ((a[0] - b[0]) / len) * extendEnd,
-      a[1] + ((a[1] - b[1]) / len) * extendEnd,
-    ];
-  }
-
   const total = points.slice(1).reduce(
     (sum, point, i) => sum + Math.hypot(point[0] - points[i][0], point[1] - points[i][1]),
     0,
@@ -377,8 +425,27 @@ function wallSegments(wall: Sh3dWall, joinsAtStart: boolean, joinsAtEnd: boolean
       height1: wall.height + (heightEnd - wall.height) * t1,
       thickness: wall.thickness,
       openings: [],
+      mitre0: 0,
+      mitre1: 0,
     });
     travelled += length;
+  }
+
+  // Only the outermost segments touch the wall's two ends; an arc's inner
+  // joints are continuous and must stay square.
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  if (first && joinAtStart) {
+    const axis = unit(first.from, first.to);
+    if (axis) first.mitre0 = mitreShear(axis, joinAtStart);
+  }
+  if (last && joinAtEnd) {
+    // The wall leaves its far corner in the opposite direction to its own run.
+    // Passing the reversed axis flips both the bisector and the cross-direction
+    // `mitreShear` derives from it, and the two flips cancel — so the result is
+    // already in the wall's own frame and must not be negated again.
+    const axis = unit(last.to, last.from);
+    if (axis) last.mitre1 = mitreShear(axis, joinAtEnd);
   }
   return segments;
 }
@@ -717,7 +784,7 @@ export function buildSh3dHome(home: Sh3dHome, options: Sh3dHouseOptions = {}): S
     const segments: WallSegment[] = [];
     const joins = detectWallJoins(walls);
     for (const wall of walls) {
-      const [atStart, atEnd] = joins.get(wall) ?? [false, false];
+      const [atStart, atEnd] = joins.get(wall) ?? [null, null];
       segments.push(...wallSegments(wall, atStart, atEnd));
     }
     unmatchedOpenings += attachOpenings(openings, segments);
@@ -729,6 +796,12 @@ export function buildSh3dHome(home: Sh3dHome, options: Sh3dHouseOptions = {}): S
     for (const segment of segments) {
       const piece: WallBuild = { solid: [], glass: [], leaves: [] };
       buildSegment(segment, piece);
+      // Still in wall-local space here, which is the only frame where the mitre
+      // is a shear along one axis rather than a general skew.
+      for (const geometry of [...piece.solid, ...piece.glass, ...piece.leaves]) {
+        applyMitre(geometry, 0, segment.mitre0);
+        applyMitre(geometry, segment.length, segment.mitre1);
+      }
       const matrix = segmentMatrix(segment.from, segment.to, baseY);
       for (const geometry of piece.solid) geometry.applyMatrix4(matrix);
       for (const geometry of piece.glass) geometry.applyMatrix4(matrix);

@@ -189,25 +189,32 @@ describe('sh3d build', () => {
     });
   });
 
-  it('closes a corner between walls the file never marked as joined', () => {
+  it('mitres a corner, leaving one edge outside and one inside', () => {
     // Sweet Home 3D only records wallAtStart/wallAtEnd for walls drawn as one
-    // connected run. Trace a room as four separate walls and every corner comes
-    // back unmarked — the walls stop at the drawn point, their outer faces
-    // merely cross, and the corner belongs to no box, so the edge overlay has
-    // no line to draw there. The fixture's walls carry no join attributes.
+    // connected run, and the fixture's walls carry neither — so the join has to
+    // be found from the geometry or the corner is not built at all.
+    //
+    // What the mitre has to produce is exactly two vertical edges: one at the
+    // outside corner and one at the inside corner. Square-cut walls pushed into
+    // each other instead give four — the two real corners plus the buried box's
+    // end edges, which sit on the neighbour's face a wall thickness away and
+    // show up as spurious lines in a hidden-line drawing.
     const home = buildSh3dHome(parseHomeXml(HOME_XML), { textures: false });
     const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
     mesh.updateWorldMatrix(true, false);
     const position = mesh.geometry.getAttribute('position');
     const v = new THREE.Vector3();
 
-    let maxX = -Infinity;
+    // The north-west corner of the 6.00 x 4.00 m shell, after recentring. Walls
+    // are 20 cm thick, so the outside corner is at (-3.10, -2.10) and the
+    // inside one at (-2.90, -1.90).
+    const footprints = new Set<string>();
     for (let i = 0; i < position.count; i += 1) {
       v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-      maxX = Math.max(maxX, v.x);
+      if (v.x > -2.7 || v.z > -1.7) continue;
+      footprints.add(`${v.x.toFixed(2)},${v.z.toFixed(2)}`);
     }
-    // Half of the 20 cm thickness past the 6.00 m shell's outer face at x = 3.0.
-    expect(maxX).toBeCloseTo(3.1, 2);
+    expect([...footprints].sort()).toEqual(['-2.90,-1.90', '-3.10,-2.10']);
   });
 
   it('slopes a wall top when heightAtEnd differs', () => {
