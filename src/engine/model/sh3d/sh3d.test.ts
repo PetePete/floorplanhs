@@ -1,44 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { zipSync, strToU8 } from 'fflate';
 import { Sh3dError, looksLikeZip, readSh3dArchive } from '@/engine/model/sh3d/sh3d-archive';
 import { parseHomeXml } from '@/engine/model/sh3d/sh3d-parse';
 import { buildFromSh3d, buildSh3dHome } from '@/engine/model/sh3d/sh3d-build';
-
-/**
- * A synthetic home rather than a real `.sh3d`: the format is centimetres and
- * the whole point of these tests is the conversion, so the numbers have to be
- * visible next to the assertions. No binary fixture goes in the repository.
- *
- * Two storeys, a 600 x 400 cm box of four walls on the ground floor, one room
- * covering it, and one window 100 cm wide starting 90 cm up the south wall.
- */
-const HOME_XML = `<?xml version='1.0'?>
-<home version='7400' name='Test home' wallHeight='250.0'>
-  <level id='level0' name='Ground' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
-  <level id='level1' name='First' elevation='262.0' floorThickness='12.0' height='240.0' elevationIndex='0'/>
-  <wall id='w0' level='level0' xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0' height='250.0' thickness='20.0'/>
-  <wall id='w1' level='level0' xStart='600.0' yStart='0.0' xEnd='600.0' yEnd='400.0' height='250.0' thickness='20.0'/>
-  <wall id='w2' level='level0' xStart='600.0' yStart='400.0' xEnd='0.0' yEnd='400.0' height='250.0' thickness='20.0'/>
-  <wall id='w3' level='level0' xStart='0.0' yStart='400.0' xEnd='0.0' yEnd='0.0' height='250.0' thickness='20.0'/>
-  <room id='r0' level='level0' name='Living room'>
-    <point x='10.0' y='10.0'/>
-    <point x='590.0' y='10.0'/>
-    <point x='590.0' y='390.0'/>
-    <point x='10.0' y='390.0'/>
-  </room>
-  <doorOrWindow id='d0' level='level0' name='Window' x='300.0' y='400.0' elevation='90.0'
-                width='100.0' depth='20.0' height='120.0' angle='0.0'/>
-  <pieceOfFurniture id='f0' level='level0' name='Table' x='300.0' y='200.0' elevation='0.0'
-                    width='120.0' depth='80.0' height='75.0' angle='0.0' color='FF8A5F3C'/>
-</home>`;
-
-function archive(files: Record<string, string>): ArrayBuffer {
-  const zipped = zipSync(
-    Object.fromEntries(Object.entries(files).map(([name, text]) => [name, strToU8(text)])),
-  );
-  return zipped.buffer.slice(zipped.byteOffset, zipped.byteOffset + zipped.byteLength) as ArrayBuffer;
-}
+import {
+  TEST_HOME_XML as HOME_XML,
+  sh3dArchive as archive,
+} from '@/engine/model/sh3d/test-home';
 
 describe('sh3d archive', () => {
   it('reads Home.xml out of a .sh3d', () => {

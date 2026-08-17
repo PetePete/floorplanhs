@@ -403,11 +403,12 @@ describe('migrateConfig', () => {
 /* ------------------------------------------------------------------- stub */
 
 describe('stubConfig', () => {
-  it('places real lights from the install in the demo house', () => {
+  it('places real lights from the install into a starter config', () => {
     const hass = createMockHass();
     const config = stubConfig(hass);
 
-    expect(config.model?.demo).toBe(true);
+    // No model: the card ships no house, so a new card starts empty and says so.
+    expect(config.model).toBeUndefined();
     expect(config.presets).toHaveLength(2);
     expect(config.presets?.some((preset) => preset.default)).toBe(true);
     expect(config.presets?.[1].orthographic).toBe(true);

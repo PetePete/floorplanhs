@@ -258,7 +258,7 @@ export class LightingSystem implements ILightingSystem {
    * calls it simply gets no fill.
    */
   setModel(root: THREE.Object3D | null, levels: readonly LevelDefinition[]): void {
-    this.roomFill.setModel(root, levels);
+    this.roomFill.setModel(root, levels, this.ctx?.clippingPlanes ?? null);
     for (const rig of this.rigs.values()) rig.setEmissiveOnly(this.roomFillActive);
     this.refreshRoomFill();
     this.ctx?.invalidate();
@@ -275,6 +275,7 @@ export class LightingSystem implements ILightingSystem {
    */
   setVisibleLevels(levelIds: string[] | null): void {
     this.visibleLevels = levelIds && levelIds.length > 0 ? new Set(levelIds) : null;
+    this.roomFill.setVisibleLevels(levelIds);
     for (const rig of this.rigs.values()) rig.setCulledByLevel(this.isLevelHidden(rig.level));
     this.budget.markDirty();
     this.ctx?.invalidate();
@@ -318,16 +319,16 @@ export class LightingSystem implements ILightingSystem {
       this.evaluateBudget(cameraPosition);
     }
 
-    let fillChanged = this.roomFill.needsApply;
     for (const rig of this.rigs.values()) {
-      if (rig.update(dt)) {
-        animating = true;
-        fillChanged = true;
-      }
+      if (rig.update(dt)) animating = true;
     }
-    // The fill tracks the same tweens the rigs run, so a room brightens with
-    // its lamp instead of snapping when the tween ends.
-    if (fillChanged) this.refreshRoomFill();
+
+    // Unconditional, and deliberately so. Gating this on "a rig animated this
+    // frame" loses the final value of any tween that completes inside a single
+    // update, and loses the whole thing when a lamp's state changes without a
+    // tween at all. It walks a handful of rigs and writes 72 floats; next to
+    // everything else a frame does, that is free.
+    if (this.roomFillActive) this.refreshRoomFill();
 
     if (animating) this.takeLease();
     else this.dropLease();

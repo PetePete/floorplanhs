@@ -8,6 +8,10 @@
 
 import '@/main';
 import { createMockHass, type MockHass } from '@/dev/mock-hass';
+import {
+  TEST_HOME_TWO_ROOMS_SH3D,
+  TWO_ROOM_CENTRES,
+} from '@/engine/model/sh3d/test-home';
 import type {
   Floorplan3dCardConfig,
   LightVisualConfig,
@@ -28,7 +32,7 @@ interface CardElement extends HTMLElement {
 /**
  * Which storey an entity belongs on, independent of what the loaded house calls
  * its levels. The harness resolves this against whichever house it ended up
- * with, so the same placements work for the demo house and for an imported one.
+ * with, so the same placements survive swapping the model source.
  */
 type Storey = 'lower' | 'main' | 'top';
 
@@ -40,61 +44,24 @@ interface DevEntity {
 }
 
 /**
- * Placements worked out against the demo house. Against an imported home a few
- * of these land in the wrong room or just outside the shell. That is fine and is
- * exactly what the drag-and-drop placement UI is for; nothing here assumes a
- * particular geometry.
+ * Two lamps, one per room of the built-in two-room home, at the room centres the
+ * fixture documents. Placed rather than scattered on purpose: `lightMode: room`
+ * only lights a lamp's room, so a harness whose lamps land in no room at all
+ * looks exactly like a broken feature.
  */
 const DEV_ENTITIES: DevEntity[] = [
-  /* Top floor — the open living level. Ceiling lights hang under the roof
-     soffit, which falls from the north face toward the south. */
   {
     entity: 'light.living_room_ceiling',
-    position: [0.5, 4.95, 1.2],
-    storey: 'top',
+    position: [TWO_ROOM_CENTRES.west[0], 2.3, TWO_ROOM_CENTRES.west[2]],
+    storey: 'main',
     light: { kind: 'point', distance: 8, fixture: { show: true } },
   },
   {
-    entity: 'light.living_room_floor_lamp',
-    position: [2.9, 4.25, 2.9],
-    storey: 'top',
-    light: { kind: 'point', distance: 6, intensity: 0.7, fixture: { show: true } },
-  },
-  {
     entity: 'light.kitchen_counter',
-    // Over the worktop that runs along the north wall.
-    position: [-1.7, 4.9, -3.6],
-    storey: 'top',
-    light: { kind: 'spot', angle: 55, penumbra: 0.5, distance: 7, fixture: { show: true } },
-  },
-  // On that worktop: top-floor level plus 0.92 of counter.
-  { entity: 'switch.coffee_machine', position: [-0.6, 3.68, -3.6], storey: 'top' },
-  { entity: 'media_player.living_room_tv', position: [-4.45, 3.95, 2.0], storey: 'top' },
-  { entity: 'sensor.living_room_temperature', position: [4.5, 4.2, 1.5], storey: 'top' },
-
-  /* Main floor — bedrooms, study and the wet rooms off the corridor. */
-  {
-    entity: 'light.hallway',
-    position: [-1.0, 2.3, -0.85],
+    position: [TWO_ROOM_CENTRES.east[0], 2.3, TWO_ROOM_CENTRES.east[2]],
     storey: 'main',
-    light: { kind: 'point', distance: 6, fixture: { show: true } },
+    light: { kind: 'point', distance: 8, fixture: { show: true } },
   },
-  {
-    entity: 'light.bedroom_bedside',
-    position: [3.4, 1.05, 1.1],
-    storey: 'main',
-    light: { kind: 'point', distance: 5, fixture: { show: true } },
-  },
-  {
-    entity: 'light.office_desk',
-    position: [-3.4, 1.35, 3.0],
-    storey: 'main',
-    light: { kind: 'point', distance: 5, fixture: { show: true } },
-  },
-  { entity: 'sensor.bedroom_humidity', position: [3.2, 1.6, -2.6], storey: 'main' },
-  { entity: 'binary_sensor.hallway_motion', position: [3.0, 2.25, -0.45], storey: 'main' },
-  // Just inside the entrance, on the north facade under the carport.
-  { entity: 'binary_sensor.front_door', position: [-2.62, 1.1, -4.35], storey: 'main' },
 ];
 
 const NO_PLANES: SectionState['planes'] = [
@@ -116,12 +83,21 @@ interface Layout {
   topElevation: number;
 }
 
-/** The zero-config fallback, and what every other user of the card sees first. */
+/**
+ * The card ships no house of its own, so the harness makes one: the same
+ * synthetic two-room `.sh3d` the tests use, zipped in the browser and handed
+ * over as a blob URL. That keeps the harness working with no private file
+ * present, and keeps what you see here identical to what the tests assert.
+ */
+const TEST_HOME_URL = URL.createObjectURL(
+  new Blob([TEST_HOME_TWO_ROOMS_SH3D()], { type: 'application/octet-stream' }),
+);
+
 const DEMO_LAYOUT: Layout = {
-  model: { demo: true },
-  title: 'Demo house',
-  levelIds: ['basement', 'ground', 'upper'],
-  topElevation: 2.9,
+  model: { url: TEST_HOME_URL },
+  title: 'Two-room test home',
+  levelIds: ['level0'],
+  topElevation: 0,
 };
 
 function buildConfig(layout: Layout): Floorplan3dCardConfig {
@@ -297,7 +273,7 @@ async function boot(): Promise<void> {
    */
   panel.append(el('h3', {}, ['Model source']));
   const sources: Array<{ label: string; model: Floorplan3dCardConfig['model'] }> = [
-    { label: 'Demo house', model: { demo: true } },
+    { label: 'Two-room test home', model: { url: TEST_HOME_URL } },
     { label: 'Sweet Home 3D (private)', model: { url: '/private/sample.sh3d' } },
   ];
   const sourceSelect = el('select');
@@ -307,7 +283,7 @@ async function boot(): Promise<void> {
     option.textContent = s.label;
     sourceSelect.append(option);
   }
-  sourceSelect.value = 'Demo house';
+  sourceSelect.value = 'Two-room test home';
   sourceSelect.addEventListener('change', async () => {
     const chosen = sources.find((s) => s.label === sourceSelect.value);
     if (!chosen) return;

@@ -65,7 +65,6 @@ export const BLOOM_LAYER = 1;
  *
  *   @/engine/core/render-core.ts            class RenderCore
  *   @/engine/model/model-manager.ts         class ModelManager      (IModelManager)
- *   @/engine/model/demo-house.ts            function buildDemoHouse
  *   @/engine/section/section-controller.ts  class SectionController (ISectionController)
  *   @/engine/camera/camera-controller.ts    class CameraController  (ICameraController)
  *   @/engine/lighting/lighting-system.ts    class LightingSystem    (ILightingSystem)

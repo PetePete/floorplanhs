@@ -500,6 +500,11 @@ export class Viewer implements IViewer {
     const modelChanged = !deepEqual(previous.model, next.model);
     const entitiesChanged = !deepEqual(previous.entities, next.entities);
     const sectionChanged = !deepEqual(previous.section, next.section);
+    // `ui` is mostly the card's own DOM, but three of its flags are engine-side
+    // — ghosted storeys, the orientation cube and marker depth testing — and
+    // without this diff they were only ever picked up when something in the
+    // `render` block happened to change alongside them.
+    const uiChanged = !deepEqual(previous.ui, next.ui);
 
     if (renderChanged) {
       this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...(next.render ?? {}) };
@@ -507,8 +512,9 @@ export class Viewer implements IViewer {
       this.loop?.setFpsLimit(this.renderCfg.fpsLimit);
       this.loop?.setOnDemand(this.renderCfg.onDemand);
       this.pushRenderSettings();
-      this.applyRenderStyle();
     }
+
+    if (renderChanged || uiChanged) this.applyRenderStyle();
 
     if (cameraChanged) this.pushCameraSettings();
 
@@ -762,9 +768,18 @@ export class Viewer implements IViewer {
       ),
     );
 
+    // Hidden-line drawings have no visible surface for a marker to hide behind,
+    // so depth-testing one there just makes it vanish with nothing to explain
+    // why. Markers always draw through in `wireframe`.
+    const style = render.style ?? DEFAULT_RENDER_CONFIG.style;
+    const depthTested = style !== 'wireframe' && this.config.ui?.markersThroughWalls !== true;
     this.guard('entities', this._entities, (e) =>
-      (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(
-        this.config.ui?.markersThroughWalls !== true,
+      (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(depthTested),
+    );
+
+    this.guard('placement', this._placement, (p) =>
+      (p as Subsystem & { setSnapPlacement?(v: boolean): void }).setSnapPlacement?.(
+        this.config.ui?.snapPlacement === true,
       ),
     );
 

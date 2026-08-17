@@ -13,6 +13,7 @@
  */
 
 import { css } from 'lit';
+import { chakraPetchFace } from '@/ui/fonts/chakra-petch';
 
 /* --------------------------------------------------------------- tokens */
 
@@ -34,6 +35,18 @@ export const themeTokens = css`
     --fp3d-warning: var(--warning-color, #ffa600);
     --fp3d-success: var(--success-color, #43a047);
     --fp3d-active: var(--state-icon-active-color, #fdd835);
+
+    /*
+     * The chrome uses its own typeface rather than the dashboard's. A control
+     * surface floating over a 3D model reads as an instrument panel, and the
+     * squared-off technical letterforms are what say so — the same reason CAD
+     * and avionics UIs do not use the system UI font. --fp3d-font is the
+     * escape hatch: set it in a theme and the card follows.
+     */
+    --fp3d-font: 'Chakra Petch', var(--paper-font-body1_-_font-family, system-ui),
+      -apple-system, 'Segoe UI', Roboto, sans-serif;
+    /* Slightly open, because squared letterforms tighten up at small sizes. */
+    --fp3d-tracking: 0.015em;
 
     --fp3d-radius: var(--ha-card-border-radius, 12px);
     --fp3d-radius-sm: 8px;
@@ -466,6 +479,21 @@ export const controlStyles = css`
 export const a11yStyles = css`
   :host {
     -webkit-font-smoothing: antialiased;
+    font-family: var(--fp3d-font);
+    letter-spacing: var(--fp3d-tracking);
+  }
+
+  /*
+   * Lit puts every control in its own shadow root, so the face has to be
+   * declared where it is used. Identical @font-face rules resolve to one
+   * cached download — here, one already-decoded data URI.
+   */
+  button,
+  select,
+  input,
+  textarea {
+    font-family: var(--fp3d-font);
+    letter-spacing: var(--fp3d-tracking);
   }
 
   *:focus {
@@ -503,12 +531,28 @@ export const a11yStyles = css`
 `;
 
 /** Everything a chrome component needs. Applied by `FpBaseElement`. */
-export const uiBaseStyles = [themeTokens, surfaceStyles, buttonStyles, controlStyles, a11yStyles];
+export const uiBaseStyles = [
+  chakraPetchFace,
+  themeTokens,
+  surfaceStyles,
+  buttonStyles,
+  controlStyles,
+  a11yStyles,
+];
 
 /* ------------------------------------------------------------- the card */
 
 export const cardStyles = css`
   :host {
+    /* The card host has its own shadow root and does not get themeTokens;
+       these two are repeated rather than the whole set, so the font reaches the
+       title chip and the error panel without changing any colour. */
+    --fp3d-font: 'Chakra Petch', var(--paper-font-body1_-_font-family, system-ui),
+      -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --fp3d-tracking: 0.015em;
+    font-family: var(--fp3d-font);
+    letter-spacing: var(--fp3d-tracking);
+
     display: block;
     position: relative;
     container-type: inline-size;

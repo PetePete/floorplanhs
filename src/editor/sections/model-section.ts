@@ -13,7 +13,6 @@ import {
   numberField,
   parseList,
   sectionTitle,
-  selectField,
   textButton,
   textField,
   vec3Field,
@@ -156,7 +155,6 @@ function renderLevelRow(
 export function renderModelSection(ctx: EditorContext): TemplateResult {
   const model = modelOf(ctx);
   const levels = model.levels ?? [];
-  const usingDemo = model.demo === true || !model.url;
 
   return html`
     <div class="section">
@@ -173,41 +171,34 @@ export function renderModelSection(ctx: EditorContext): TemplateResult {
         placeholder: ctx.t('editor.title_placeholder', 'Optional heading above the view'),
         onChange: (v) => ctx.update({ title: v || undefined }),
       })}
-      ${selectField({
-        label: ctx.t('editor.model_source', 'Source'),
-        value: model.demo === true ? 'demo' : 'url',
-        options: [
-          { value: 'demo', label: ctx.t('editor.model_demo', 'Built-in demo house') },
-          { value: 'url', label: ctx.t('editor.model_url_opt', 'Own model file (.glb / .gltf)') },
-        ],
-        onChange: (v) => patchModel(ctx, { demo: v === 'demo' ? true : undefined }, true),
-      })}
       ${textField({
-        label: ctx.t('editor.model_url', 'Model URL'),
+        label: ctx.t('editor.model_url', 'Model file'),
         value: model.url ?? '',
-        placeholder: '/local/house.glb',
+        placeholder: '/local/house.sh3d',
         helper: ctx.t(
           'editor.model_url_help',
-          'Files in config/www/ are served from /local/. config/www/house.glb → /local/house.glb. ' +
-            'Append ?v=2 after replacing the file to bust the browser cache.',
+          'A Sweet Home 3D save (.sh3d) or a glTF/glb. Files in config/www/ are served from ' +
+            '/local/: config/www/house.sh3d → /local/house.sh3d. Append ?v=2 after replacing ' +
+            'the file to bust the browser cache.',
         ),
         onChange: (v) => patchModel(ctx, { url: v || undefined }),
       })}
-      ${usingDemo && model.url
+      ${!model.url
         ? alertBox(
             'info',
             ctx.t(
-              'editor.model_demo_override',
-              'Source is set to the demo house, so the URL above is ignored for now.',
+              'editor.model_missing',
+              'No model yet. Save your house from Sweet Home 3D into config/www/ and point this ' +
+                'at /local/<name>.sh3d.',
             ),
           )
         : ''}
-      ${!usingDemo && model.url && !/^(https?:)?\/\/|^\//.test(model.url)
+      ${model.url && !/^(https?:)?\/\/|^\//.test(model.url)
         ? alertBox(
             'warning',
             ctx.t(
               'editor.model_url_relative',
-              'The URL looks relative. Use an absolute path such as /local/house.glb.',
+              'The URL looks relative. Use an absolute path such as /local/house.sh3d.',
             ),
           )
         : ''}

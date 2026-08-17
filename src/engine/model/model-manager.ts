@@ -24,7 +24,7 @@ import type {
   RenderContext,
 } from '@/engine/contracts';
 import { disposeObject3D } from '@/engine/core/dispose';
-import { buildDemoHouse, type DemoHouse } from '@/engine/model/demo-house';
+import type { BuiltHouse } from '@/engine/model/built-house';
 import { looksLikeZip } from '@/engine/model/sh3d/sh3d-archive';
 import { buildFromSh3d } from '@/engine/model/sh3d/sh3d-build';
 import {
@@ -87,14 +87,12 @@ export class ModelManager implements IModelManager {
     this.disposeModel();
 
     let content: THREE.Object3D | null = null;
-    /** Demo or .sh3d — both are authored around their own y = 0. */
-    let procedural: DemoHouse | null = null;
-    let isDemo = false;
+    /** A .sh3d home, which is authored around its own y = 0. */
+    let procedural: BuiltHouse | null = null;
 
-    const forceDemo = config?.demo === true;
-    const url = forceDemo ? undefined : config?.url;
+    const url = config?.url;
 
-    if (!content && url) {
+    if (url) {
       try {
         report({ phase: 'download', loaded: 0, total: 0, message: 'Downloading model' });
         const buffer = await fetchWithProgress(url, (loaded, total) => {
@@ -120,8 +118,9 @@ export class ModelManager implements IModelManager {
           content = await parseGltf(buffer, url, config?.dracoPath);
         }
       } catch (err) {
-        // Rule 7: never let a bad model take the card down with it. Surface the
-        // failure, then show the demo house so the UI still works.
+        // Rule 7: never let a bad model take the card down with it. The card
+        // still runs — toolbar, presets, the lot — it just has nothing to draw,
+        // and the message says why.
         procedural = null;
         content = null;
         this.proceduralMaterials?.dispose();
@@ -131,10 +130,14 @@ export class ModelManager implements IModelManager {
     }
 
     if (!content) {
-      procedural = buildDemoHouse({ anisotropy: this.maxAnisotropy() });
-      content = procedural.root;
-      this.proceduralMaterials = procedural.materials;
-      isDemo = true;
+      content = new THREE.Group();
+      content.name = 'no-model';
+      report({
+        phase: 'error',
+        message: url
+          ? `Nothing could be loaded from ${url}.`
+          : 'No model configured — set `model.url` to a Sweet Home 3D .sh3d file or a glTF/glb.',
+      });
     }
 
     report({ phase: 'prepare', message: 'Preparing scene' });
@@ -202,13 +205,13 @@ export class ModelManager implements IModelManager {
     const receivers = this.applyShadowsAndGlass(root, config?.glassNodes);
 
     this.root = root;
-    this.loaded = { root, bounds, levels, nodes, receivers, isDemo };
+    this.loaded = { root, bounds, levels, nodes, receivers, isDemo: false };
     this.visibleLevels = null;
     this.pickDirty = true;
 
     if (this.ctx) this.ctx.modelRoot.add(root);
 
-    report({ phase: 'done', message: isDemo ? 'Demo house ready' : 'Model ready' });
+    report({ phase: 'done', message: 'Model ready' });
     this.ctx?.invalidate();
     return this.loaded;
   }

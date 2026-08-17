@@ -1,7 +1,7 @@
 /**
  * A parsed Sweet Home 3D home → three.js geometry.
  *
- * Same output contract as `buildDemoHouse` and `buildFromPlan` — the same
+ * Produces a `BuiltHouse`: the same
  * `<level>/<room>/<part>` names, the same `userData.level/room/part/glass`
  * stamps, the same material library ownership — so `ModelManager` cannot tell
  * the three apart.
@@ -35,7 +35,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { LevelDefinition } from '@/types/config';
 import { computeModelBounds } from '@/engine/model/level-detect';
 import { createMaterialLibrary, type MaterialLibrary } from '@/engine/model/materials';
-import type { DemoHouse, DemoHouseOptions } from '@/engine/model/demo-house';
+import type { BuiltHouse, BuiltHouseOptions } from '@/engine/model/built-house';
 import { readSh3dArchive } from '@/engine/model/sh3d/sh3d-archive';
 import {
   parseHomeXml,
@@ -49,8 +49,8 @@ import {
 import { slugify } from '@/util/math';
 
 /** Same contract as the demo house, so the model manager treats them alike. */
-export type Sh3dHouse = DemoHouse;
-export type Sh3dHouseOptions = DemoHouseOptions;
+export type Sh3dHouse = BuiltHouse;
+export type Sh3dHouseOptions = BuiltHouseOptions;
 
 const EPS = 1e-4;
 /** Floor/tile texture repeat in metres, for UV scaling. */

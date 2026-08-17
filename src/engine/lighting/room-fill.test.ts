@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildDemoHouse } from '@/engine/model/demo-house';
+import { buildFromSh3d } from '@/engine/model/sh3d/sh3d-build';
+import {
+  TEST_HOME_TWO_ROOMS_SH3D,
+  TWO_ROOMS,
+  TWO_ROOM_CENTRES,
+} from '@/engine/model/sh3d/test-home';
 import { MAX_ROOMS, RoomFill, type RoomFillLight } from '@/engine/lighting/room-fill';
 
 /**
@@ -10,7 +15,7 @@ import { MAX_ROOMS, RoomFill, type RoomFillLight } from '@/engine/lighting/room-
  * replace.
  */
 
-const house = buildDemoHouse({ textures: false });
+const house = buildFromSh3d(TEST_HOME_TWO_ROOMS_SH3D(), { textures: false });
 
 function fresh(): RoomFill {
   const fill = new RoomFill();
@@ -54,6 +59,15 @@ describe('room index', () => {
     for (const room of new Set(rooms)) {
       expect(fill.roomAt(lampIn(room)), `lamp in ${room}`).toBe(room);
     }
+    fill.dispose();
+  });
+
+  it('keeps the two rooms apart across the partition', () => {
+    const fill = fresh();
+    expect(fill.roomAt(new THREE.Vector3(...TWO_ROOM_CENTRES.west))).toBe(TWO_ROOMS.west);
+    expect(fill.roomAt(new THREE.Vector3(...TWO_ROOM_CENTRES.east))).toBe(TWO_ROOMS.east);
+    // Inside the partition itself, which belongs to neither.
+    expect(fill.roomAt(new THREE.Vector3(0, 2.2, 0))).toBeNull();
     fill.dispose();
   });
 
@@ -109,12 +123,18 @@ describe('fill levels', () => {
   it('lights the room a lamp stands in, and only that one', () => {
     const fill = fresh();
     fill.setEnabled(true);
-    const rooms = roomNames();
-    fill.apply([light(lampIn(rooms[0]))]);
+    fill.apply([light(new THREE.Vector3(...TWO_ROOM_CENTRES.west))]);
 
     const values = uniformArray(fill);
-    const lit = values.filter((v) => v > 0);
-    expect(lit.length).toBe(3); // exactly one room's r, g, b
+    // Exactly one room's r, g, b — the neighbour across the partition stays 0.
+    expect(values.filter((v) => v > 0).length).toBe(3);
+
+    const west = [...values];
+    fill.apply([light(new THREE.Vector3(...TWO_ROOM_CENTRES.east))]);
+    const east = uniformArray(fill);
+    expect(east.filter((v) => v > 0).length).toBe(3);
+    // Different slots, or the two rooms are not actually distinguished.
+    expect(east.findIndex((v) => v > 0)).not.toBe(west.findIndex((v) => v > 0));
     fill.dispose();
   });
 

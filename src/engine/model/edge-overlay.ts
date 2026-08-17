@@ -97,6 +97,7 @@ export class EdgeOverlay {
       if (!(node as THREE.Mesh).isMesh) return;
       const mesh = node as THREE.Mesh;
       if (mesh.userData.helper || mesh.userData.noEdges) return;
+      if (mesh.userData.fp3dInternal === true) return;
       if (!mesh.geometry?.attributes?.position) return;
 
       this.surfaces.push(mesh);
@@ -258,6 +259,15 @@ export class EdgeOverlay {
 
       for (const material of materials) {
         if (!material) continue;
+
+        // Nudge surfaces away from the camera in depth while edges are drawn.
+        // A wall's bottom edge is exactly coplanar with the floor it stands on,
+        // so without this the line and the slab fight for the same depth and
+        // the wall/floor junction loses its outline from some angles.
+        material.polygonOffset = showEdges;
+        material.polygonOffsetFactor = showEdges ? 1 : 0;
+        material.polygonOffsetUnits = showEdges ? 1 : 0;
+
         if (wire && !isGlass) {
           if (!this.depthOnly.has(material)) {
             this.depthOnly.add(material);

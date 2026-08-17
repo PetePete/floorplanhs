@@ -22,6 +22,7 @@ import { property, query, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 
 import { cardStyles } from '@/card/card-styles';
+import { chakraPetchFace } from '@/ui/fonts/chakra-petch';
 import type { EditIntent, LoadedModel, ModelLoadProgress } from '@/engine/contracts';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
@@ -138,7 +139,7 @@ const MEDIUM_PX = 660;
 const DISPOSE_GRACE_MS = 300;
 
 export class Floorplan3dCard extends LitElement implements LovelaceCard {
-  static override styles = cardStyles;
+  static override styles = [chakraPetchFace, cardStyles];
 
   /* ---------------------------------------------------------- HA-set props */
 
@@ -904,7 +905,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const config = this.config;
     if (!config) return null;
     const model = config.model ?? {};
-    const base = hash32(`${model.url ?? (model.demo ? 'demo' : '')}|${config.title ?? ''}`);
+    const base = hash32(`${model.url ?? ''}|${config.title ?? ''}`);
     const entities = hash32(
       (config.entities ?? [])
         .map((entry) => entry.entity)

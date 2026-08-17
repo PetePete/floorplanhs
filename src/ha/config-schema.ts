@@ -392,8 +392,6 @@ function readModel(raw: unknown, path: string): ModelConfig {
 
   const url = readString(obj, 'url', path);
   if (url) model.url = url;
-  const demo = readBoolean(obj, 'demo', path);
-  if (demo !== undefined) model.demo = demo;
   const scale = readNumber(obj, 'scale', path, { min: 0.0001 });
   if (scale !== undefined) model.scale = scale;
   const rotation = readVec3(obj, 'rotation', path);
@@ -429,6 +427,7 @@ const SECTION_ALIASES: Record<string, string> = {
   level_id: 'levelId',
   cap_color: 'capColor',
   ghost_above: 'ghostAbove',
+  snap_placement: 'snapPlacement',
   ceiling_cut: 'ceilingCut',
 };
 
@@ -869,6 +868,7 @@ function readUi(raw: unknown, path: string): UiConfig {
   };
 
   assign('ghostAbove', readBoolean(obj, 'ghostAbove', path));
+  assign('snapPlacement', readBoolean(obj, 'snapPlacement', path));
   assign('showToolbar', readBoolean(obj, 'showToolbar', path));
   assign('showPresetBar', readBoolean(obj, 'showPresetBar', path));
   assign('showLevelSelector', readBoolean(obj, 'showLevelSelector', path));
@@ -1190,7 +1190,6 @@ export function stubConfig(hass: HomeAssistant): Floorplan3dCardConfig {
   return {
     type: `custom:${CARD_TYPE}`,
     config_version: CURRENT_CONFIG_VERSION,
-    model: { demo: true },
     presets: [
       // The card opens on the plan, not on a 3/4 exterior render: this is a
       // floorplan first and a 3D model second. The outside of the house tells

@@ -70,11 +70,18 @@ interface EntityLayerExtras {
 /* ----------------------------------------------------------------- tuning */
 
 /**
- * Role-aware drop offsets. Dropping a ceiling light exactly *on* the ceiling
- * plane leaves it half-buried in the slab, and a wall switch snapped onto the
- * floor is nonsense — so the raw hit is nudged into the position the fixture
- * would really occupy. Keep this table short; anything more specific belongs in
- * the per-entity `marker.offset`.
+ * Drop offsets.
+ *
+ * The default is what you dropped, where you dropped it: the hit point, nudged
+ * clear of the surface along its normal so the marker is not half-buried in a
+ * slab. Nothing moves vertically. A drop that silently relocates a lamp two and
+ * a half metres up to the ceiling is not a helpful guess — the user aimed at a
+ * spot, watched the indicator sit there, released, and the marker appeared
+ * somewhere else.
+ *
+ * `ui.snapPlacement: true` opts into the fixture-aware version, which is
+ * genuinely useful once you are placing a whole house full of pendants and
+ * switches and know it is coming:
  *
  *   surface   role      result
  *   ceiling   any       0.05 m below the ceiling (recessed downlight)
@@ -126,6 +133,8 @@ export class PlacementController implements IPlacementController {
   private entityId: string | null = null;
   private mode: PlacementMode | null = null;
   private role: EntityRole = 'marker';
+  /** `ui.snapPlacement`; see the offset table above. */
+  private snapPlacement = false;
   private originalPosition: Vec3 | null = null;
   private lastResult: PlacementResult | null = null;
   private domDrag = false;
@@ -485,6 +494,12 @@ export class PlacementController implements IPlacementController {
     this.anchor.copy(this.point);
     const facing = this.normal.y;
 
+    if (!this.snapPlacement) {
+      // Clear of the surface, and otherwise exactly where it was dropped.
+      this.anchor.addScaledVector(this.normal, facing > SURFACE_THRESHOLD ? FLOOR_LIFT : WALL_OFFSET);
+      return;
+    }
+
     if (facing < -SURFACE_THRESHOLD) {
       this.anchor.addScaledVector(this.normal, CEILING_DROP);
       return;
@@ -523,6 +538,11 @@ export class PlacementController implements IPlacementController {
     this.feedback.levelElevation = level?.elevation ?? null;
     this.feedback.reason = reason;
     return null;
+  }
+
+  /** Opt into fixture-aware drop heights instead of what-you-see placement. */
+  setSnapPlacement(value: boolean): void {
+    this.snapPlacement = value;
   }
 
   /* ------------------------------------------------------------- internals */

@@ -38,8 +38,6 @@ and your model file never leaves your Home Assistant instance.
   option below is reachable without touching YAML.
 - **Sweet Home 3D files load directly.** Point the card at a `.sh3d` and it
   reads it — no export, no conversion. See below for why that matters.
-- **Works with no model at all.** The demo house (three storeys, 12.9 × 10 m)
-  ships inside the bundle so you can evaluate the card in 30 seconds.
 
 ## Getting your house in
 
@@ -518,7 +516,7 @@ tour:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `style` | `solid` \| `shaded` \| `wireframe` | `shaded` | `shaded` adds crisp architectural edge lines to solid surfaces. `wireframe` is a hidden-line drawing: surfaces still occlude, but only the lines are drawn — and nothing is lit, because there is no visible surface for a lamp to fall on. |
+| `style` | `solid` \| `shaded` \| `wireframe` | `wireframe` | `shaded` adds crisp architectural edge lines to solid surfaces. `wireframe` is a hidden-line drawing: surfaces still occlude, but only the lines are drawn — and nothing is lit, because there is no visible surface for a lamp to fall on. |
 | `palette` | `model` \| `mono-light` \| `mono-dark` | `model` | `mono-*` flattens every surface to one neutral tone and drops textures, so the only colour left is the light your lamps cast. Pair with the opposite `background` — `mono-dark` on a dark theme is invisible. |
 | `lightMode` | `room` \| `realistic` | `room` | `room` lights the whole room a lamp stands in, evenly and up to its walls. `realistic` puts a physically based light at the lamp instead: inverse-square falloff, a hotspot underneath and dark corners. |
 | `roomFillStrength` | number | `1` | How strongly a lit room is tinted, 0–2. Only used by `lightMode: room`. |
@@ -543,6 +541,7 @@ tour:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `authorTools` | `auto` \| `never` \| `always` | `auto` | Master switch for every authoring affordance — level selector, section panel, entity palette, inspector, save-view, edit toggle. `auto` shows them only in edit mode; `never` hides them even in a dashboard being edited (the wall-tablet case); `always` keeps them visible. It outranks the individual `show*` flags below. |
+| `snapPlacement` | boolean | `false` | Drop an entity where you dropped it (default), or move it to the height the fixture would really sit at — a light to the ceiling, a switch to 1.10 m. |
 | `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
 | `showToolbarInPanel` | boolean | `false` | Panel views are the wall-tablet case, where the saved views and the cube are the whole interface. Set `true` to keep the toolbar there. |

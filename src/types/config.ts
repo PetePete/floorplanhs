@@ -32,11 +32,10 @@ export interface ModelConfig {
    * (`/local/house.glb`). The bytes decide which, so a `.sh3d` served under the
    * wrong extension still loads.
    *
-   * Precedence is `demo: true` > `url` > the demo house as a fallback.
+   * Required: the card ships no house of its own. Without this it renders an
+   * empty scene and says so.
    */
   url?: string;
-  /** Force the built-in demo house even if a url is present. */
-  demo?: boolean;
   scale?: number;
   /** Degrees, applied XYZ. */
   rotation?: Vec3;
@@ -366,8 +365,16 @@ export interface UiConfig {
   /** Vertical zoom control under the orientation cube. */
   showZoomSlider?: boolean;
   /**
+   * Drop an entity where it was dropped (default), or move it to the height the
+   * fixture would really sit at — a light to the ceiling, a switch to 1.10 m.
+   * The smart version saves work once you know it is coming and is baffling
+   * before that, so it is opt-in.
+   */
+  snapPlacement?: boolean;
+  /**
    * Draw entity markers on top of everything instead of letting walls and
-   * ceilings hide them. Useful when you never cut the building open; with a
+   * ceilings hide them. Ignored in `style: wireframe`, where nothing is drawn
+   * for them to hide behind. Useful when you never cut the building open; with a
    * storey isolated it makes markers from other floors float over the plan.
    */
   markersThroughWalls?: boolean;
@@ -462,7 +469,10 @@ export const DEFAULT_CAMERA_CONFIG: Required<
 };
 
 export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
-  style: 'shaded',
+  // A floorplan is a drawing. Hidden-line is what a drawing looks like, and the
+  // room fill still reads because it is washed onto the floor rather than
+  // shaded onto the walls.
+  style: 'wireframe',
   palette: 'model',
   // A dashboard card answers "which rooms are lit", not "where exactly does the
   // photon land". Physically correct falloff makes a lamp a bright dot in a
@@ -497,6 +507,7 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   // Not a boolean default: absent means "no opinion", which is what leaves the
   // per-preset setting in charge.
   ghostAbove: null,
+  snapPlacement: false,
   showToolbar: true,
   showToolbarInPanel: false,
   showPresetBar: true,
