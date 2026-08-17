@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { RenderPalette, RenderStyle } from '@/types/config';
+import type { RoomFillSource } from '@/engine/lighting/room-fill';
 
 /** Below this the edge is a smooth continuation and drawing it adds noise. */
 const THRESHOLD_DEG = 24;
@@ -27,9 +28,23 @@ export interface EdgeOverlayOptions {
   thresholdDeg?: number;
 }
 
+/** Room index carried by each edge vertex; 0 means "belongs to no room". */
+const ROOM_ATTRIBUTE = 'fpRoom';
+
+/**
+ * How far a lit room's lines move from the ink towards the light colour at full
+ * brightness. Not all the way: a line that abandons the ink entirely stops
+ * reading as part of the same drawing.
+ */
+const LIT_MIX = 0.85;
+
 export class EdgeOverlay {
   private readonly group = new THREE.Group();
   private readonly material: THREE.LineBasicMaterial;
+  /** Base ink, as written into the vertex colours of every unlit line. */
+  private readonly ink = new THREE.Color('#d6dbe2');
+  private rooms: RoomFillSource | null = null;
+  private readonly scratchColor = new THREE.Color();
   /** One merged LineSegments per level id; `''` collects unassigned meshes. */
   private readonly byLevel = new Map<string, THREE.LineSegments>();
   private style: RenderStyle = 'solid';
@@ -61,8 +76,12 @@ export class EdgeOverlay {
     // every edge would be drawn twice at full strength.
     this.group.userData.fp3dInternal = true;
 
+    this.ink.set(options.color ?? '#1b1f24');
     this.material = new THREE.LineBasicMaterial({
-      color: new THREE.Color(options.color ?? '#1b1f24'),
+      // White, and the real colour comes from the per-vertex attribute — that
+      // is what lets a lit room's lines differ inside one merged draw call.
+      color: 0xffffff,
+      vertexColors: true,
       transparent: true,
       opacity: options.opacity ?? 0.55,
       depthTest: true,
@@ -123,6 +142,24 @@ export class EdgeOverlay {
       // model root rather than to the mesh.
       edges.applyMatrix4(mesh.matrixWorld);
 
+      // A room-owned mesh answers for all of its lines at once. Walls do not —
+      // their two faces belong to two rooms — so those are resolved per vertex
+      // against the room polygons, which a wall face lies exactly on.
+      const count = edges.attributes.position.count;
+      const slots = new Float32Array(count);
+      const declared = this.rooms?.slotForMesh(mesh) ?? -1;
+      if (declared >= 0) {
+        slots.fill(declared + 1);
+      } else if (this.rooms) {
+        const position = edges.attributes.position;
+        for (let i = 0; i < count; i += 1) {
+          const found = this.rooms.slotAt(position.getX(i), position.getY(i), position.getZ(i));
+          if (found >= 0) slots[i] = found + 1;
+        }
+      }
+      edges.setAttribute(ROOM_ATTRIBUTE, new THREE.BufferAttribute(slots, 1));
+      edges.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+
       const level = typeof mesh.userData.level === 'string' ? mesh.userData.level : '';
       const bucket = perLevel.get(level);
       if (bucket) bucket.push(edges);
@@ -149,6 +186,7 @@ export class EdgeOverlay {
     }
 
     this.built = true;
+    this.refreshRoomColors();
     // A reload brings new material objects, so the old backup is meaningless.
     this.paletteBackup.clear();
     if (this.palette !== 'model') this.applyPalette();
@@ -231,9 +269,53 @@ export class EdgeOverlay {
   }
 
   setColor(color: string, opacity?: number): void {
-    this.material.color.set(color);
+    this.ink.set(color);
+    // The material stays white: the ink lives in the vertex colours, which is
+    // what lets a lit room's lines differ from the rest of the same draw call.
+    this.material.color.setRGB(1, 1, 1, THREE.LinearSRGBColorSpace);
     if (opacity !== undefined) this.material.opacity = opacity;
     this.material.needsUpdate = true;
+    this.refreshRoomColors();
+  }
+
+  /** Where lit-room colours come from. Null restores plain ink everywhere. */
+  setRoomSource(source: RoomFillSource | null): void {
+    this.rooms = source;
+    this.refreshRoomColors();
+  }
+
+  /**
+   * Repaint the vertex colours from the current room fill: a lit room's lines
+   * take its light colour, everything else the ink.
+   *
+   * Called on a real change in the fill rather than per frame — it walks every
+   * line vertex in the building.
+   */
+  refreshRoomColors(): void {
+    if (!this.built) return;
+    const lit = this.scratchColor;
+
+    for (const lines of this.byLevel.values()) {
+      const color = lines.geometry.getAttribute('color') as THREE.BufferAttribute | undefined;
+      const room = lines.geometry.getAttribute(ROOM_ATTRIBUTE) as THREE.BufferAttribute | undefined;
+      if (!color || !room) continue;
+
+      for (let i = 0; i < color.count; i += 1) {
+        const slot = room.getX(i) - 1;
+        const level = slot >= 0 && this.rooms ? this.rooms.levelInto(slot, lit) : 0;
+        if (level > 0) {
+          color.setXYZ(
+            i,
+            this.ink.r + (lit.r - this.ink.r) * LIT_MIX * level,
+            this.ink.g + (lit.g - this.ink.g) * LIT_MIX * level,
+            this.ink.b + (lit.b - this.ink.b) * LIT_MIX * level,
+          );
+        } else {
+          color.setXYZ(i, this.ink.r, this.ink.g, this.ink.b);
+        }
+      }
+      color.needsUpdate = true;
+    }
   }
 
   private applyStyle(): void {

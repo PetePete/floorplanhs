@@ -189,33 +189,62 @@ describe('sh3d build', () => {
     });
   });
 
+  it('closes a corner between walls the file never marked as joined', () => {
+    // Sweet Home 3D only records wallAtStart/wallAtEnd for walls drawn as one
+    // connected run. Trace a room as four separate walls and every corner comes
+    // back unmarked — the walls stop at the drawn point, their outer faces
+    // merely cross, and the corner belongs to no box, so the edge overlay has
+    // no line to draw there. The fixture's walls carry no join attributes.
+    const home = buildSh3dHome(parseHomeXml(HOME_XML), { textures: false });
+    const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
+    mesh.updateWorldMatrix(true, false);
+    const position = mesh.geometry.getAttribute('position');
+    const v = new THREE.Vector3();
+
+    let maxX = -Infinity;
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      maxX = Math.max(maxX, v.x);
+    }
+    // Half of the 20 cm thickness past the 6.00 m shell's outer face at x = 3.0.
+    expect(maxX).toBeCloseTo(3.1, 2);
+  });
+
   it('slopes a wall top when heightAtEnd differs', () => {
+    // One wall on its own. With the other three present their corner geometry
+    // reaches the same x as this wall's ends — they are joined, so every wall
+    // now runs half a thickness past the drawn corner — and the tallest vertex
+    // at each end belongs to a side wall of uniform height, hiding the slope.
     const sloped = buildSh3dHome(
-      parseHomeXml(
-        HOME_XML.replace(
-          "xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0' height='250.0'",
-          "xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0' height='250.0' heightAtEnd='150.0'",
-        ),
-      ),
+      parseHomeXml(`<?xml version='1.0'?>
+<home version='7400' name='Sloped' wallHeight='250.0'>
+  <level id='level0' name='Ground' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <wall id='w0' level='level0' xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0'
+        height='250.0' heightAtEnd='150.0' thickness='20.0'/>
+</home>`),
       { textures: false },
     );
     const mesh = sloped.nodes.get('level0/structure/walls') as THREE.Mesh;
     mesh.updateWorldMatrix(true, false);
     const position = mesh.geometry.getAttribute('position');
     const v = new THREE.Vector3();
-    let westTop = -Infinity;
-    let eastTop = -Infinity;
     // A bounding box would only show that *something* is 2.50 m tall, so sample
-    // the vertices at each end of the north wall, which now falls west to east
-    // from 2.50 m to 1.50 m. After recentring that wall runs along z ≈ -2.0
-    // between x = ±3.0, and an un-pierced panel has vertices only at its two
-    // ends — so the bands sit exactly on them. The side walls in the corners
-    // reach x = ±2.9 and ±3.1 and are excluded by the same windows.
+    // the vertices at each end of the wall, which falls west to east from
+    // 2.50 m to 1.50 m.
+    let minX = Infinity;
+    let maxX = -Infinity;
     for (let i = 0; i < position.count; i += 1) {
       v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-      if (v.z > -1.5) continue;
-      if (Math.abs(v.x + 3) < 0.05) westTop = Math.max(westTop, v.y);
-      if (Math.abs(v.x - 3) < 0.05) eastTop = Math.max(eastTop, v.y);
+      minX = Math.min(minX, v.x);
+      maxX = Math.max(maxX, v.x);
+    }
+
+    let westTop = -Infinity;
+    let eastTop = -Infinity;
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      if (Math.abs(v.x - minX) < 0.05) westTop = Math.max(westTop, v.y);
+      if (Math.abs(v.x - maxX) < 0.05) eastTop = Math.max(eastTop, v.y);
     }
     expect(westTop).toBeCloseTo(2.5, 2);
     expect(eastTop).toBeCloseTo(1.5, 2);

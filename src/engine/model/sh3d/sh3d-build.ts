@@ -242,16 +242,70 @@ interface PlacedOpening {
 }
 
 /**
+ * Which wall ends actually meet another wall, whatever the file says.
+ *
+ * Sweet Home 3D records `wallAtStart` / `wallAtEnd` only for walls drawn as one
+ * connected run. Trace a room as four separate walls — which the plan tool
+ * makes just as easy — and every corner comes back unmarked, so the walls stop
+ * short of each other and the outside corner has no line on it.
+ *
+ * Endpoints are matched against each other on the same storey, within a
+ * tolerance of the thicker wall: a join in the plan is drawn to a shared point,
+ * so anything further apart than that is two walls that happen to pass nearby.
+ */
+function detectWallJoins(walls: readonly Sh3dWall[]): Map<Sh3dWall, [boolean, boolean]> {
+  const joins = new Map<Sh3dWall, [boolean, boolean]>();
+  for (const wall of walls) {
+    joins.set(wall, [wall.wallAtStart !== undefined, wall.wallAtEnd !== undefined]);
+  }
+
+  for (let i = 0; i < walls.length; i += 1) {
+    const a = walls[i];
+    const aEnds: Array<[number, number]> = [
+      [a.xStart, a.zStart],
+      [a.xEnd, a.zEnd],
+    ];
+    for (let j = i + 1; j < walls.length; j += 1) {
+      const b = walls[j];
+      if (a.levelId !== b.levelId) continue;
+      const tolerance = Math.max(a.thickness, b.thickness);
+      const bEnds: Array<[number, number]> = [
+        [b.xStart, b.zStart],
+        [b.xEnd, b.zEnd],
+      ];
+      for (let ai = 0; ai < 2; ai += 1) {
+        for (let bi = 0; bi < 2; bi += 1) {
+          const dx = aEnds[ai][0] - bEnds[bi][0];
+          const dz = aEnds[ai][1] - bEnds[bi][1];
+          if (Math.hypot(dx, dz) > tolerance) continue;
+          joins.get(a)![ai] = true;
+          joins.get(b)![bi] = true;
+        }
+      }
+    }
+  }
+  return joins;
+}
+
+/**
  * Straightens a wall into one or more segments.
  *
  * `arcExtent` bows the wall between its ends; it is tessellated rather than
  * modelled, which keeps every downstream step — openings, mitres, extrusion —
- * working on plain straight pieces. `wallAtStart` / `wallAtEnd` name the walls
- * joined at each end; rather than mitring properly we extend the wall half a
- * thickness into its neighbour, which closes the corner for any join angle and
- * is invisible from outside because the overshoot is buried in the other wall.
+ * working on plain straight pieces.
+ *
+ * Joined ends are extended half a thickness into the neighbour rather than
+ * mitred properly. That closes the corner at any join angle, and it is what
+ * puts a line *on* the corner: the extended end face comes out flush with the
+ * neighbour's outer face, so its vertical edge lands exactly on the outside
+ * corner. Without the extension the two outer faces merely cross, the corner
+ * belongs to neither box, and the edge overlay has nothing to draw there.
+ *
+ * `joinsAtStart` / `joinsAtEnd` come from the caller, which trusts geometry
+ * over the file: Sweet Home 3D only sets `wallAtStart` / `wallAtEnd` for walls
+ * drawn as one connected run, and walls that merely meet are left unmarked.
  */
-function wallSegments(wall: Sh3dWall): WallSegment[] {
+function wallSegments(wall: Sh3dWall, joinsAtStart: boolean, joinsAtEnd: boolean): WallSegment[] {
   const start: [number, number] = [wall.xStart, wall.zStart];
   const end: [number, number] = [wall.xEnd, wall.zEnd];
   const heightEnd = wall.heightAtEnd ?? wall.height;
@@ -284,8 +338,8 @@ function wallSegments(wall: Sh3dWall): WallSegment[] {
   }
 
   // Extend the two free ends of the whole run into whatever they join.
-  const extendStart = wall.wallAtStart ? wall.thickness / 2 : 0;
-  const extendEnd = wall.wallAtEnd ? wall.thickness / 2 : 0;
+  const extendStart = joinsAtStart ? wall.thickness / 2 : 0;
+  const extendEnd = joinsAtEnd ? wall.thickness / 2 : 0;
   if (extendStart > 0 && points.length >= 2) {
     const [a, b] = [points[0], points[1]];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
@@ -661,7 +715,11 @@ export function buildSh3dHome(home: Sh3dHome, options: Sh3dHouseOptions = {}): S
     const openings = home.openings.filter((opening) => levelOf(opening.levelId) === level);
 
     const segments: WallSegment[] = [];
-    for (const wall of walls) segments.push(...wallSegments(wall));
+    const joins = detectWallJoins(walls);
+    for (const wall of walls) {
+      const [atStart, atEnd] = joins.get(wall) ?? [false, false];
+      segments.push(...wallSegments(wall, atStart, atEnd));
+    }
     unmatchedOpenings += attachOpenings(openings, segments);
 
     const solid: THREE.BufferGeometry[] = [];

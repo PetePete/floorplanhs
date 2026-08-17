@@ -234,19 +234,35 @@ describe('fill overlay', () => {
     fill.dispose();
   });
 
-  it('covers walls, not only floors', () => {
+  it('stays flat on the floor, so the tint cannot stack', () => {
     const fill = fresh();
     const mesh = overlay(fill)!;
     const position = mesh.geometry.getAttribute('position');
-    const rooms = mesh.geometry.getAttribute('fpRoom');
 
-    // Wall geometry is the only thing reaching well above the floor slab, and
-    // it is the part that has to be classified per vertex rather than by mesh.
-    let highLit = 0;
+    // Everything sits near floor level. Walls and ceilings in here would mean
+    // three or four translucent layers over the same pixel, which is exactly
+    // the muddy result this shape avoids.
+    let above = 0;
     for (let i = 0; i < position.count; i += 1) {
-      if (position.getY(i) > 1 && rooms.getX(i) > 0) highLit += 1;
+      if (position.getY(i) > 0.5) above += 1;
     }
-    expect(highLit, 'vertices above 1 m carrying a room').toBeGreaterThan(0);
+    expect(above, 'overlay vertices above 0.5 m').toBe(0);
+    fill.dispose();
+  });
+
+  it('resolves a wall face to the room it looks at', () => {
+    const fill = fresh();
+    // The two rooms are split by a 10 cm partition at x = 0, so its two faces
+    // sit at x = -0.05 and x = +0.05. Each has to answer with its own side, or
+    // a shared wall lights on the wrong one.
+    const west = fill.slotAt(-0.05, 1.2, 0);
+    const east = fill.slotAt(0.05, 1.2, 0);
+    expect(west).toBeGreaterThanOrEqual(0);
+    expect(east).toBeGreaterThanOrEqual(0);
+    expect(west).not.toBe(east);
+
+    // The building's outer face belongs to no room at all.
+    expect(fill.slotAt(-3, 1.2, 0)).toBe(-1);
     fill.dispose();
   });
 

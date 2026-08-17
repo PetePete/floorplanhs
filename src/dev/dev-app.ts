@@ -55,13 +55,13 @@ const DEV_ENTITIES: DevEntity[] = [
     entity: 'light.living_room_ceiling',
     position: [TWO_ROOM_CENTRES.west[0], 2.3, TWO_ROOM_CENTRES.west[2]],
     storey: 'main',
-    light: { kind: 'point', distance: 8, fixture: { show: true } },
+    light: { kind: 'point', distance: 8 },
   },
   {
     entity: 'light.kitchen_counter',
     position: [TWO_ROOM_CENTRES.east[0], 2.3, TWO_ROOM_CENTRES.east[2]],
     storey: 'main',
-    light: { kind: 'point', distance: 8, fixture: { show: true } },
+    light: { kind: 'point', distance: 8 },
   },
 ];
 

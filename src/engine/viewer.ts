@@ -41,6 +41,7 @@ import type {
 import { Emitter } from '@/util/events';
 import { vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
+import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
 import { resolveBackground } from '@/engine/core/background';
@@ -336,6 +337,17 @@ export class Viewer implements IViewer {
 
       // Edge lines are parented under the model root on purpose: they must be
       // cut by the section planes exactly like the walls they trace.
+      // Before `build`, so every edge geometry is stamped with its room as it
+      // is created rather than needing a second pass.
+      this.guard('lighting', this._lighting, (l) => {
+        const lighting = l as ILightingSystem & {
+          fillSource?: RoomFillSource;
+          setFillListener?(cb: (() => void) | null): void;
+        };
+        if (lighting.fillSource) this.edges.setRoomSource(lighting.fillSource);
+        lighting.setFillListener?.(() => this.edges.refreshRoomColors());
+      });
+
       this.edges.build(loaded.root, core.clippingPlanes);
       if (!this.edges.object.parent) core.modelRoot.add(this.edges.object);
       this.applyRenderStyle();

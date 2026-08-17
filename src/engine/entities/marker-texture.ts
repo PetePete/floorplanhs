@@ -68,8 +68,15 @@ export interface MarkerAtlasOptions {
 
 /* -------------------------------------------------------------- constants */
 
-const FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+/**
+ * The card's own face, not the system UI font. A marker sits *in* the drawing,
+ * so it has to be lettered like the drawing — a rounded system-UI pill reads as
+ * a notification that landed on the plan by accident.
+ */
+const FONT_STACK = '"Chakra Petch", ui-monospace, "Segoe UI", Roboto, sans-serif';
+
+/** Tracking, in ems, applied by hand: see `drawTracked`. */
+const TRACKING = 0.06;
 
 /** Transparent margin around every cell: room for the drop shadow and the
  *  selection ring, and a guard band against linear-filter bleed. */
@@ -96,14 +103,19 @@ const CHIP_PAD = 9;
 
 const DOT_SIZE = 16;
 const ANCHOR_SIZE = 12;
-const GLOW_SIZE = 80;
 
 const DEFAULT_ACCENT = '#03a9f4';
 
-const BG = 'rgba(21,24,30,0.88)';
-const BG_HOVER = 'rgba(34,39,48,0.95)';
-const BG_MUTED = 'rgba(21,24,30,0.62)';
-const BORDER = 'rgba(255,255,255,0.16)';
+/**
+ * Backdrops are dark and *flat*: enough to keep a label legible where it crosses
+ * a dense patch of lines, and no more. No blur, no drop shadow, no gloss — a
+ * technical drawing has one ink and one paper, and every soft edge added here is
+ * a second visual language competing with the one the model is drawn in.
+ */
+const BG = 'rgba(14,17,21,0.72)';
+const BG_HOVER = 'rgba(20,24,30,0.86)';
+const BG_MUTED = 'rgba(14,17,21,0.5)';
+const BORDER = 'rgba(214,219,226,0.45)';
 const TEXT = '#eef1f6';
 const TEXT_MUTED = '#858c98';
 const TEXT_VALUE = '#aab2be';
@@ -398,11 +410,11 @@ export class MarkerAtlas {
         return { width: DOT_SIZE, height: DOT_SIZE };
       case 'anchor':
         return { width: ANCHOR_SIZE, height: ANCHOR_SIZE };
-      case 'glow':
-        return { width: GLOW_SIZE, height: GLOW_SIZE };
       case 'chip': {
-        c2d.font = `600 12px ${FONT_STACK}`;
-        const w = c2d.measureText(spec.title ?? '').width;
+        // Must mirror drawChip exactly — same size, same case, same tracking —
+        // or the box is cut short of the label it was measured for.
+        c2d.font = `600 11px ${FONT_STACK}`;
+        const w = trackedWidth(c2d, (spec.title ?? '').toUpperCase());
         return { width: Math.ceil(w) + CHIP_PAD * 2, height: CHIP_H };
       }
       case 'pill':
@@ -441,9 +453,6 @@ export class MarkerAtlas {
       case 'anchor':
         drawAnchor(c2d, spec, x, y, w, h);
         return;
-      case 'glow':
-        drawGlow(c2d, x, y, w, h);
-        return;
       case 'chip':
         drawChip(c2d, spec, x, y, w, h);
         return;
@@ -456,41 +465,46 @@ export class MarkerAtlas {
 
 /* ------------------------------------------------------------- drawing ops */
 
+/**
+ * A callout box, the way a dimension or a part label is drawn: hairline
+ * rectangle, square corners, flat backdrop. An active entity gets corner ticks
+ * rather than a heavier fill — brackets are how an instrument panel says
+ * "this one", and they add no weight to an already busy drawing.
+ */
 function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
   const accent = spec.color || DEFAULT_ACCENT;
   const muted = spec.muted === true;
   const selected = spec.state === 'selected';
   const hovered = spec.state === 'hover';
-  const radius = h / 2;
+  const radius = 2;
 
   c2d.save();
-  c2d.shadowColor = 'rgba(0,0,0,0.45)';
-  c2d.shadowBlur = 5;
-  c2d.shadowOffsetY = 2;
   roundRect(c2d, x, y, w, h, radius);
   c2d.fillStyle = muted ? BG_MUTED : hovered ? BG_HOVER : BG;
   c2d.fill();
   c2d.restore();
 
   c2d.save();
-  roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, radius - 0.5);
+  roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, radius);
   c2d.lineWidth = 1;
   if (muted) {
     // A dashed outline is legible even at a glance and does not rely on colour.
     c2d.setLineDash([4, 3]);
-    c2d.strokeStyle = 'rgba(255,255,255,0.3)';
+    c2d.strokeStyle = 'rgba(214,219,226,0.3)';
   } else if (spec.active) {
-    c2d.strokeStyle = withAlpha(accent, 0.85);
+    c2d.strokeStyle = withAlpha(accent, 0.9);
   } else {
     c2d.strokeStyle = BORDER;
   }
   c2d.stroke();
   c2d.restore();
 
+  if (spec.active && !muted) drawCornerTicks(c2d, x, y, w, h, accent);
+
   if (selected) {
     c2d.save();
-    roundRect(c2d, x - 3, y - 3, w + 6, h + 6, radius + 3);
-    c2d.lineWidth = 2;
+    roundRect(c2d, x - 3, y - 3, w + 6, h + 6, radius);
+    c2d.lineWidth = 1.5;
     c2d.strokeStyle = accent;
     c2d.stroke();
     c2d.restore();
@@ -546,25 +560,80 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
 
 function drawChip(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
   c2d.save();
-  c2d.shadowColor = 'rgba(0,0,0,0.5)';
-  c2d.shadowBlur = 4;
-  c2d.shadowOffsetY = 1;
-  roundRect(c2d, x, y, w, h, 5);
-  c2d.fillStyle = 'rgba(16,18,23,0.92)';
+  roundRect(c2d, x, y, w, h, 2);
+  c2d.fillStyle = BG;
   c2d.fill();
   c2d.restore();
 
   c2d.save();
-  roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, 4.5);
+  roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, 2);
   c2d.lineWidth = 1;
-  c2d.strokeStyle = withAlpha(spec.color || DEFAULT_ACCENT, 0.6);
+  c2d.strokeStyle = withAlpha(spec.color || DEFAULT_ACCENT, 0.7);
   c2d.stroke();
   c2d.restore();
 
-  c2d.font = `600 12px ${FONT_STACK}`;
+  c2d.font = `600 11px ${FONT_STACK}`;
   c2d.textBaseline = 'middle';
   c2d.fillStyle = spec.muted ? TEXT_MUTED : TEXT;
-  c2d.fillText(ellipsise(c2d, spec.title ?? '', w - CHIP_PAD * 2), x + CHIP_PAD, y + h / 2 + 0.5);
+  drawTracked(
+    c2d,
+    ellipsise(c2d, (spec.title ?? '').toUpperCase(), w - CHIP_PAD * 2),
+    x + CHIP_PAD,
+    y + h / 2 + 0.5,
+  );
+}
+
+/** Brackets at the four corners: the instrument-panel idiom for "this one". */
+function drawCornerTicks(
+  c2d: Ctx2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: string,
+): void {
+  const len = Math.min(6, w / 3, h / 2);
+  c2d.save();
+  c2d.lineWidth = 1.5;
+  c2d.strokeStyle = color;
+  c2d.beginPath();
+  for (const [cx, sx] of [
+    [x + 0.5, 1],
+    [x + w - 0.5, -1],
+  ] as const) {
+    for (const [cy, sy] of [
+      [y + 0.5, 1],
+      [y + h - 0.5, -1],
+    ] as const) {
+      c2d.moveTo(cx + sx * len, cy);
+      c2d.lineTo(cx, cy);
+      c2d.lineTo(cx, cy + sy * len);
+    }
+  }
+  c2d.stroke();
+  c2d.restore();
+}
+
+/**
+ * Letter-spacing by hand. `canvas.letterSpacing` is Chrome 99+ / Safari 17+ and
+ * missing from the Android WebView the Home Assistant companion app still
+ * ships, so the string is drawn a glyph at a time. A label is a dozen
+ * characters and the result is cached into the atlas afterwards.
+ */
+function drawTracked(c2d: Ctx2D, text: string, x: number, y: number): void {
+  const size = Number.parseFloat(c2d.font) || 12;
+  const extra = size * TRACKING;
+  let cursor = x;
+  for (const glyph of text) {
+    c2d.fillText(glyph, cursor, y);
+    cursor += c2d.measureText(glyph).width + extra;
+  }
+}
+
+/** Width of `text` once `drawTracked` has spaced it out. */
+function trackedWidth(c2d: Ctx2D, text: string): number {
+  const size = Number.parseFloat(c2d.font) || 12;
+  return c2d.measureText(text).width + size * TRACKING * Math.max(0, text.length - 1);
 }
 
 function drawDot(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
@@ -591,37 +660,27 @@ function drawDot(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, 
   c2d.setLineDash([]);
 }
 
+/** Where the marker belongs on the model: a survey crosshair, not a blob. */
 function drawAnchor(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
   const cx = x + w / 2;
   const cy = y + h / 2;
   const accent = spec.color || DEFAULT_ACCENT;
+  const r = w / 2 - 2;
 
+  c2d.save();
+  c2d.lineWidth = 1.2;
+  c2d.strokeStyle = withAlpha(accent, 0.9);
   c2d.beginPath();
-  c2d.arc(cx, cy, w / 2 - 2, 0, Math.PI * 2);
-  c2d.lineWidth = 1.4;
-  c2d.strokeStyle = withAlpha(accent, 0.85);
+  c2d.moveTo(cx - r, cy);
+  c2d.lineTo(cx + r, cy);
+  c2d.moveTo(cx, cy - r);
+  c2d.lineTo(cx, cy + r);
   c2d.stroke();
 
   c2d.beginPath();
-  c2d.arc(cx, cy, 1.6, 0, Math.PI * 2);
-  c2d.fillStyle = accent;
-  c2d.fill();
-}
-
-function drawGlow(c2d: Ctx2D, x: number, y: number, w: number, h: number): void {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const r = Math.min(w, h) / 2;
-  const gradient = c2d.createRadialGradient(cx, cy, 0, cx, cy, r);
-  // Tinted at draw time via SpriteMaterial.color, so the art stays white.
-  gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
-  gradient.addColorStop(0.35, 'rgba(255,255,255,0.34)');
-  gradient.addColorStop(0.7, 'rgba(255,255,255,0.08)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
-  c2d.fillStyle = gradient;
-  c2d.beginPath();
-  c2d.arc(cx, cy, r, 0, Math.PI * 2);
-  c2d.fill();
+  c2d.rect(cx - 2.5, cy - 2.5, 5, 5);
+  c2d.stroke();
+  c2d.restore();
 }
 
 /** Cached `Path2D` per glyph — reparsing SVG path data per draw is not free. */

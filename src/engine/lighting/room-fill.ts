@@ -25,17 +25,21 @@
  * owns end to end — no splicing into three.js's own chunks, which fails
  * silently whenever they are renamed.
  *
- * ## How a vertex learns its room
+ * ## Walls
  *
- * Floors, ceilings and furniture already carry `userData.room` from the model
- * builders, so they are stamped wholesale. Walls do not: they are merged into
- * one mesh per storey (and Sweet Home 3D records no wall-to-room association at
- * all), so a wall's two faces belong to two different rooms and the mesh cannot
- * answer the question. Those vertices are classified individually, by stepping
- * a few centimetres along the vertex normal — into the room the face looks at —
- * and testing that point against the room floor polygons.
+ * Floors, ceilings and furniture carry `userData.room` from the model builders.
+ * Walls do not: they are merged into one mesh per storey, and Sweet Home 3D
+ * records no wall-to-room association at all — a wall's two faces belong to two
+ * different rooms, so there is no answer at mesh level.
  *
- * That is what makes a shared wall tint on the correct side.
+ * They are handled by `slotAt`, which the edge overlay calls per line vertex.
+ * The test is boundary-inclusive on purpose: a wall's inner face lies exactly
+ * on the room polygon it faces, while its outer face is a wall thickness
+ * beyond, so each side of a shared wall resolves to the room it looks at
+ * without any offsetting or guesswork. That is also why this does not try to
+ * step along vertex normals — a wall's *corner* vertices sit at the building
+ * corner, outside the room in the perpendicular axis, and no offset along the
+ * face normal brings them back in.
  */
 
 import * as THREE from 'three';
@@ -50,13 +54,6 @@ export const MAX_ROOMS = 24;
 
 /** Vertex attribute holding the 1-based room index; 0 means "no room". */
 const ROOM_ATTRIBUTE = 'fpRoom';
-
-/**
- * How far along the normal a wall vertex is probed. Large enough to clear the
- * room polygon's own edge, small enough not to reach through a partition —
- * interior walls are 8 cm at the thinnest.
- */
-const WALL_PROBE_M = 0.03;
 
 /** Rooms are open at the top of their storey; slabs sit slightly outside it. */
 const LEVEL_SLACK_M = 0.12;
@@ -87,6 +84,24 @@ interface RoomShape {
   maxY: number;
 }
 
+/**
+ * What the edge overlay needs to draw a lit room's lines in its light colour.
+ * Deliberately narrow: the overlay must not be able to reach into the room
+ * index and mutate it.
+ */
+export interface RoomFillSource {
+  /** Room slot for a mesh that declares one, or -1. */
+  slotForMesh(mesh: THREE.Object3D): number;
+  /**
+   * Room slot for a world point, or -1. Boundary-inclusive, which is what makes
+   * it usable on wall geometry: a wall's inner face lies exactly on the room
+   * polygon it faces, and its outer face a wall thickness beyond it.
+   */
+  slotAt(x: number, y: number, z: number): number;
+  /** Current fill of a slot into `out`; returns its 0..1 level, 0 when dark. */
+  levelInto(slot: number, out: THREE.Color): number;
+}
+
 /** One lamp's contribution, in linear RGB already scaled by its weight. */
 export interface RoomFillLight {
   room: string | null;
@@ -97,10 +112,11 @@ export interface RoomFillLight {
 }
 
 /**
- * How opaque a fully lit room's tint is. High enough to read at a glance in a
- * hidden-line drawing, low enough that the edges stay the dominant structure.
+ * How opaque a fully lit room's floor tint is. Deliberately faint: it says
+ * *where* the light is, the coloured edges say *that* it is on. A stronger
+ * value turns the plan into a colour-block diagram and buries the drawing.
  */
-const WASH_OPACITY = 0.34;
+const WASH_OPACITY = 0.16;
 
 /**
  * Faces pointing away from the camera are drawn at a fraction of that. A room
@@ -152,7 +168,6 @@ export class RoomFill {
   private washMaterial: THREE.ShaderMaterial | null = null;
   private readonly shapes: RoomShape[] = [];
   private readonly slotOf = new Map<string, number>();
-  private readonly stamped = new Set<THREE.BufferGeometry>();
   private enabled = false;
   private strength = 1;
   private visibleLevels: Set<string> | null = null;
@@ -187,24 +202,22 @@ export class RoomFill {
 
     if (this.shapes.length === 0) return;
 
-    root.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || !mesh.geometry) return;
-      this.stamp(mesh);
-    });
-
     this.buildWash(root, clippingPlanes);
   }
 
   /**
-   * One merged overlay covering every surface that belongs to a room: walls,
-   * floors, ceilings and furniture, in a single draw call.
+   * One merged overlay of the lit rooms' **floor areas**, in a single draw call.
    *
-   * Positions and normals are copied into world space rather than the source
-   * meshes being re-rendered with a second material. Re-rendering would be one
-   * extra draw call per mesh — a Sweet Home 3D home with furniture is a couple
-   * of hundred of them, which is the kind of thing that makes a wall tablet
-   * stutter. The copy costs 24 bytes a vertex, once.
+   * Floors only, and that is the whole point. A room is a box: tint its walls
+   * and ceiling too and every pixel is covered three or four times over — near
+   * wall's back face, far wall's front face, floor, ceiling — so the tint
+   * stacks into a muddy fog that is darkest exactly in the corners. One flat
+   * layer cannot do that. The walls carry the room's light as *line colour*
+   * instead (see `EdgeOverlay`), which is what a line drawing has to offer.
+   *
+   * Positions are copied into world space rather than the floor meshes being
+   * re-rendered with a second material, so this stays one draw call however
+   * many rooms there are.
    */
   private buildWash(root: THREE.Object3D, clippingPlanes: THREE.Plane[] | null): void {
     const positions: number[] = [];
@@ -218,24 +231,21 @@ export class RoomFill {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh || !mesh.geometry) return;
       if (mesh.userData.fp3dInternal === true) return;
-      // Glass is see-through; tinting a window pane paints the room's light
-      // onto the one surface that is supposed to show what is behind it.
-      if (mesh.userData.glass === true) return;
+      if (mesh.userData.part !== 'floor') return;
+
+      const slot = this.slotForMesh(mesh);
+      if (slot < 0) return;
 
       const geometry = mesh.geometry;
       const position = geometry.getAttribute('position');
-      const room = geometry.getAttribute(ROOM_ATTRIBUTE);
-      if (!position || !room) return;
+      if (!position) return;
       const source = geometry.getAttribute('normal');
       const index = geometry.getIndex();
       const count = index ? index.count : position.count;
 
       for (let i = 0; i < count; i += 1) {
         const at = index ? index.getX(i) : i;
-        const slot = room.getX(at);
-        // Whole triangles only: a vertex in no room still has to be emitted, or
-        // the buffer stops being a triangle list. The shader discards it.
-        rooms.push(slot);
+        rooms.push(slot + 1);
         vertex.fromBufferAttribute(position, at).applyMatrix4(mesh.matrixWorld);
         positions.push(vertex.x, vertex.y, vertex.z);
         if (source) {
@@ -322,9 +332,11 @@ export class RoomFill {
     }
 
     const out = this.uniform.value;
+    let changed = false;
     for (let i = 0; i < this.shapes.length; i += 1) {
       const shape = this.shapes[i];
       if (this.visibleLevels && shape.level && !this.visibleLevels.has(shape.level)) {
+        if (out[i * 3] !== 0 || out[i * 3 + 1] !== 0 || out[i * 3 + 2] !== 0) changed = true;
         out[i * 3] = 0;
         out[i * 3 + 1] = 0;
         out[i * 3 + 2] = 0;
@@ -336,11 +348,18 @@ export class RoomFill {
       // would make a room with four lamps four times as bright as the same room
       // with one, which is not what "the room is on" looks like.
       const scale = total > 0 ? (acc[at + 4] * this.strength) / total : 0;
-      out[i * 3] = acc[at] * scale;
-      out[i * 3 + 1] = acc[at + 1] * scale;
-      out[i * 3 + 2] = acc[at + 2] * scale;
+      const r = acc[at] * scale;
+      const g = acc[at + 1] * scale;
+      const b = acc[at + 2] * scale;
+      if (out[i * 3] !== r || out[i * 3 + 1] !== g || out[i * 3 + 2] !== b) changed = true;
+      out[i * 3] = r;
+      out[i * 3 + 1] = g;
+      out[i * 3 + 2] = b;
     }
     this.dirty = false;
+    // Rewriting the edge colours walks every line vertex, so it happens on a
+    // real change rather than on every frame the fill is recomputed.
+    if (changed) this.onChange?.();
   }
 
   /** Hide the wash of a storey that is not on screen. */
@@ -348,6 +367,37 @@ export class RoomFill {
     this.visibleLevels = levelIds && levelIds.length > 0 ? new Set(levelIds) : null;
     this.dirty = true;
   }
+
+  /**
+   * Room slot for a mesh, from the room its builder stamped on it. Structure
+   * meshes return -1: a wall belongs to the rooms on *both* sides, so there is
+   * no honest answer and its lines stay neutral.
+   */
+  slotForMesh(mesh: THREE.Object3D): number {
+    const room = typeof mesh.userData.room === 'string' ? mesh.userData.room : '';
+    if (!room || room === STRUCTURE_ROOM) return -1;
+    const level = typeof mesh.userData.level === 'string' ? mesh.userData.level : '';
+    return this.slotOf.get(roomKey(level, room)) ?? -1;
+  }
+
+  slotAt(x: number, y: number, z: number): number {
+    return this.locate(x, y, z);
+  }
+
+  /** Reads back what `apply` wrote. Returns the 0..1 level, 0 when unlit. */
+  levelInto(slot: number, out: THREE.Color): number {
+    if (slot < 0 || slot >= this.shapes.length) return 0;
+    const at = slot * 3;
+    const v = this.uniform.value;
+    const level = Math.max(v[at], v[at + 1], v[at + 2]);
+    if (level <= 0.001) return 0;
+    // Hue without the level, so the caller decides how to spend the brightness.
+    out.setRGB(v[at] / level, v[at + 1] / level, v[at + 2] / level, THREE.LinearSRGBColorSpace);
+    return Math.min(level, 1);
+  }
+
+  /** Called after every `apply` that changed something. */
+  onChange: (() => void) | null = null;
 
   /** True while the uniform is known to be stale (mode or strength changed). */
   get needsApply(): boolean {
@@ -385,56 +435,17 @@ export class RoomFill {
   private locate(x: number, y: number, z: number): number {
     for (let i = 0; i < this.shapes.length; i += 1) {
       const s = this.shapes[i];
-      if (x < s.minX || x > s.maxX || z < s.minZ || z > s.maxZ) continue;
+      // Same tolerance as the triangle test, or the cheap reject throws away
+      // exactly the boundary hits that test exists to accept.
+      if (x < s.minX - EDGE_TOLERANCE_M || x > s.maxX + EDGE_TOLERANCE_M) continue;
+      if (z < s.minZ - EDGE_TOLERANCE_M || z > s.maxZ + EDGE_TOLERANCE_M) continue;
       if (y < s.minY || y > s.maxY) continue;
       if (pointInTriangles(s.triangles, x, z)) return i;
     }
     return -1;
   }
 
-  /** Write the room index of every vertex into the geometry. */
-  private stamp(mesh: THREE.Mesh): void {
-    const geometry = mesh.geometry;
-    const position = geometry.getAttribute('position');
-    if (!position) return;
-    if (this.stamped.has(geometry)) return;
-    this.stamped.add(geometry);
-
-    const count = position.count;
-    const rooms = new Float32Array(count);
-    const room = typeof mesh.userData.room === 'string' ? mesh.userData.room : '';
-    const level = typeof mesh.userData.level === 'string' ? mesh.userData.level : '';
-
-    if (room && room !== STRUCTURE_ROOM) {
-      // The builder already answered the question for this whole mesh.
-      const slot = this.slotOf.get(roomKey(level, room));
-      if (slot !== undefined) rooms.fill(slot + 1);
-    } else {
-      const normal = geometry.getAttribute('normal');
-      const probe = new THREE.Vector3();
-      const offset = new THREE.Vector3();
-      for (let i = 0; i < count; i += 1) {
-        probe.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-        if (normal) {
-          // The normal is a direction, so it takes the rotation but not the
-          // translation of the world matrix.
-          offset
-            .fromBufferAttribute(normal, i)
-            .transformDirection(mesh.matrixWorld)
-            .multiplyScalar(WALL_PROBE_M);
-          probe.add(offset);
-        }
-        const slot = this.locate(probe.x, probe.y, probe.z);
-        if (slot >= 0) rooms[i] = slot + 1;
-      }
-    }
-
-    geometry.setAttribute(ROOM_ATTRIBUTE, new THREE.BufferAttribute(rooms, 1));
-  }
-
   private clearModel(): void {
-    for (const geometry of this.stamped) geometry.deleteAttribute(ROOM_ATTRIBUTE);
-    this.stamped.clear();
     if (this.wash) {
       this.wash.removeFromParent();
       this.wash.geometry.dispose();
@@ -541,7 +552,29 @@ function triangleArea2D(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): n
   return (b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z);
 }
 
-/** Barycentric sign test against a flat [ax,az,bx,bz,cx,cz, …] triangle list. */
+/**
+ * How far outside a room polygon still counts as inside, in metres.
+ *
+ * A wall's inner face is meant to land exactly on the polygon it faces, but the
+ * two numbers come from different places in the file — a wall thickness and a
+ * traced outline — and float arithmetic finishes the job: 2.95 - 3.00 is not
+ * -0.05. Without a tolerance a wall face resolves to no room roughly half the
+ * time, at random.
+ *
+ * Comfortably under the thinnest interior wall, so the far face of a partition
+ * is never pulled into the near room.
+ */
+const EDGE_TOLERANCE_M = 0.03;
+
+/**
+ * Point-in-polygon against a flat [ax,az,bx,bz,cx,cz, …] triangle list, with a
+ * real distance tolerance.
+ *
+ * The cross products below are twice the triangle area, so dividing by the edge
+ * length turns each into a signed distance from that edge — which is what lets
+ * the tolerance be expressed in metres rather than in area units that would
+ * mean something different for every triangle.
+ */
 function pointInTriangles(tri: Float32Array, x: number, z: number): boolean {
   for (let i = 0; i < tri.length; i += 6) {
     const ax = tri[i];
@@ -550,12 +583,29 @@ function pointInTriangles(tri: Float32Array, x: number, z: number): boolean {
     const bz = tri[i + 3];
     const cx = tri[i + 4];
     const cz = tri[i + 5];
-    const d1 = (x - bx) * (az - bz) - (ax - bx) * (z - bz);
-    const d2 = (x - cx) * (bz - cz) - (bx - cx) * (z - cz);
-    const d3 = (x - ax) * (cz - az) - (cx - ax) * (z - az);
-    const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
-    const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+
+    const d1 = edgeDistance(x, z, bx, bz, ax, az);
+    const d2 = edgeDistance(x, z, cx, cz, bx, bz);
+    const d3 = edgeDistance(x, z, ax, az, cx, cz);
+    const hasNeg = d1 < -EDGE_TOLERANCE_M || d2 < -EDGE_TOLERANCE_M || d3 < -EDGE_TOLERANCE_M;
+    const hasPos = d1 > EDGE_TOLERANCE_M || d2 > EDGE_TOLERANCE_M || d3 > EDGE_TOLERANCE_M;
     if (!(hasNeg && hasPos)) return true;
   }
   return false;
+}
+
+/** Signed distance from (x, z) to the line through (px, pz) and (qx, qz). */
+function edgeDistance(
+  x: number,
+  z: number,
+  px: number,
+  pz: number,
+  qx: number,
+  qz: number,
+): number {
+  const ex = qx - px;
+  const ez = qz - pz;
+  const length = Math.hypot(ex, ez);
+  if (length < 1e-9) return 0;
+  return ((x - px) * ez - ex * (z - pz)) / length;
 }

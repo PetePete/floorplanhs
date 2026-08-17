@@ -5,7 +5,7 @@
  *
  *     ( o )   <- anchor ring, sits exactly on the surface the user dropped on
  *       |     <- leader line, always vertical in world space
- *   [ o Name ]<- pill: icon + name + state, billboarded, optional glow behind
+ *   [ o Name ]<- pill: icon + name + state, billboarded
  *
  * The leader line is what makes a floating billboard read as "attached to that
  * spot" rather than "somewhere in this general direction", which matters a lot
@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three';
-import { BLOOM_LAYER, type EntityVisualState, type RenderContext } from '@/engine/contracts';
+import type { EntityVisualState, RenderContext } from '@/engine/contracts';
 import type { EntityRole, MarkerConfig, PlacedEntity, Vec3 } from '@/types/config';
 import { clamp, damp, easeOutBack } from '@/util/math';
 import { resolveIcon, roleForEntityId } from '@/engine/entities/icons';
@@ -42,7 +42,6 @@ const MUTED_ALPHA = 0.75;
 
 const RENDER_ORDER_LEADER = 3000;
 const RENDER_ORDER_ANCHOR = 3001;
-const RENDER_ORDER_GLOW = 3002;
 const RENDER_ORDER_PILL = 3003;
 
 /** Reused across every marker; nothing here survives a call. */
@@ -83,10 +82,6 @@ export class EntityMarker {
   private readonly pillMaterial: THREE.SpriteMaterial;
   private readonly pillTexture: THREE.Texture;
 
-  private readonly glow: THREE.Sprite;
-  private readonly glowMaterial: THREE.SpriteMaterial;
-  private readonly glowTexture: THREE.Texture;
-
   private readonly anchor: THREE.Sprite;
   private readonly anchorMaterial: THREE.SpriteMaterial;
   private readonly anchorTexture: THREE.Texture;
@@ -102,7 +97,6 @@ export class EntityMarker {
   private accent: string;
 
   private pillCell: AtlasCell;
-  private glowCell: AtlasCell;
   private anchorCell: AtlasCell;
 
   /* animated state, all 0..1 */
@@ -149,16 +143,6 @@ export class EntityMarker {
     this.pill.renderOrder = RENDER_ORDER_PILL;
     this.pill.userData.entityId = this.entityId;
 
-    this.glowTexture = this.atlas.acquire();
-    this.glowMaterial = makeSpriteMaterial(this.glowTexture);
-    this.glowMaterial.blending = THREE.AdditiveBlending;
-    this.glow = new THREE.Sprite(this.glowMaterial);
-    this.glow.renderOrder = RENDER_ORDER_GLOW;
-    this.glow.visible = false;
-    // `enable` rather than `set`: the glow has to be drawn in the normal pass
-    // too, otherwise it only exists inside the bloom buffer.
-    this.glow.layers.enable(BLOOM_LAYER);
-
     this.anchorTexture = this.atlas.acquire();
     this.anchorMaterial = makeSpriteMaterial(this.anchorTexture);
     this.anchor = new THREE.Sprite(this.anchorMaterial);
@@ -178,11 +162,10 @@ export class EntityMarker {
     this.leader.renderOrder = RENDER_ORDER_LEADER;
     this.leader.frustumCulled = false;
 
-    this.body.add(this.glow, this.pill);
+    this.body.add(this.pill);
     this.object.add(this.leader, this.anchor, this.body);
 
     this.pillCell = this.atlas.cell(this.buildSpec('idle'));
-    this.glowCell = this.atlas.cell({ variant: 'glow' });
     this.anchorCell = this.atlas.cell({ variant: 'anchor', color: this.currentColor() });
     this.applyCells();
 
@@ -279,7 +262,6 @@ export class EntityMarker {
   setDepthTested(enabled: boolean): void {
     for (const material of [
       this.pillMaterial,
-      this.glowMaterial,
       this.anchorMaterial,
       this.leaderMaterial,
     ]) {
@@ -358,21 +340,10 @@ export class EntityMarker {
     this.pill.scale.set(this.pillCell.width * unit * scale, this.pillCell.height * unit * scale, 1);
     this.anchor.scale.set(this.anchorCell.width * unit, this.anchorCell.height * unit, 1);
 
-    const glowScale = (0.85 + 0.25 * this.activeAmt) * configScale;
-    this.glow.scale.set(
-      this.glowCell.width * unit * glowScale,
-      this.glowCell.height * unit * glowScale,
-      1,
-    );
-
     const alpha = this.computeAlpha(ctx, _worldBody, pop);
     this.pillMaterial.opacity = alpha;
     this.anchorMaterial.opacity = alpha * 0.85;
     this.leaderMaterial.opacity = alpha * 0.5;
-
-    const glowAlpha = alpha * this.activeAmt * 0.8;
-    this.glow.visible = glowAlpha > 0.01;
-    this.glowMaterial.opacity = glowAlpha;
 
     const after = this.hoverAmt + this.selectAmt + this.activeAmt + this.occludedAmt;
     return this.popT < 1 || Math.abs(after - before) > 1e-4;
@@ -417,11 +388,9 @@ export class EntityMarker {
     this.body.clear();
 
     this.atlas.release(this.pillTexture);
-    this.atlas.release(this.glowTexture);
     this.atlas.release(this.anchorTexture);
 
     this.pillMaterial.dispose();
-    this.glowMaterial.dispose();
     this.anchorMaterial.dispose();
     this.leaderMaterial.dispose();
     this.leaderGeometry.dispose();
@@ -452,17 +421,14 @@ export class EntityMarker {
     this.appliedState = this.artState();
     const color = this.currentColor();
     this.pillCell = this.atlas.cell(this.buildSpec(this.appliedState));
-    this.glowCell = this.atlas.cell({ variant: 'glow' });
     this.anchorCell = this.atlas.cell({ variant: 'anchor', color });
     this.applyCells();
 
-    this.glowMaterial.color.set(color);
     this.leaderMaterial.color.set(color);
   }
 
   private applyCells(): void {
     this.atlas.applyTo(this.pillTexture, this.pillCell);
-    this.atlas.applyTo(this.glowTexture, this.glowCell);
     this.atlas.applyTo(this.anchorTexture, this.anchorCell);
   }
 

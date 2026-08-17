@@ -21,7 +21,7 @@ import type {
 import { LightRig } from '@/engine/lighting/light-rig';
 import { DaylightRig } from '@/engine/lighting/daylight';
 import { ShadowBudget, type ShadowCandidate } from '@/engine/lighting/shadow-budget';
-import { RoomFill, type RoomFillLight } from '@/engine/lighting/room-fill';
+import { RoomFill, type RoomFillLight, type RoomFillSource } from '@/engine/lighting/room-fill';
 
 /** A sample staged before `init(ctx)` — three.js objects may not exist yet. */
 interface PendingLight {
@@ -267,6 +267,16 @@ export class LightingSystem implements ILightingSystem {
   /** Rooms the model actually has, for the editor's room picker. */
   get roomCount(): number {
     return this.roomFill.roomCount;
+  }
+
+  /** Read-only view of the per-room fill, for whatever else wants to show it. */
+  get fillSource(): RoomFillSource {
+    return this.roomFill;
+  }
+
+  /** Fires when a room's fill colour actually changed, not every frame. */
+  setFillListener(cb: (() => void) | null): void {
+    this.roomFill.onChange = cb;
   }
 
   /**
