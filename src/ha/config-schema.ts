@@ -784,6 +784,7 @@ function readTour(raw: unknown, path: string): TourConfig {
 const RENDER_ALIASES: Record<string, string> = {
   edge_color: 'edgeColor',
   light_mode: 'lightMode',
+  tone_mapping: 'toneMapping',
   room_fill_strength: 'roomFillStrength',
   bloom_strength: 'bloomStrength',
   bloom_radius: 'bloomRadius',
@@ -810,6 +811,7 @@ function readRender(raw: unknown, path: string): RenderConfig {
     readEnum(obj, 'palette', path, ['model', 'mono-light', 'mono-dark'] as const),
   );
   assign('lightMode', readEnum(obj, 'lightMode', path, ['room', 'realistic'] as const));
+  assign('toneMapping', readEnum(obj, 'toneMapping', path, ['linear', 'aces', 'none'] as const));
   assign('roomFillStrength', readNumber(obj, 'roomFillStrength', path, { min: 0, max: 2 }));
   assign('edgeColor', readString(obj, 'edgeColor', path));
   assign('quality', readEnum(obj, 'quality', path, ['low', 'medium', 'high', 'auto'] as const));

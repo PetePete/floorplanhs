@@ -430,9 +430,12 @@ render:
   darker in the evening on its own.
 - `ambientIntensity` is the base fill that keeps an all-lights-off house
   readable. Raise it if your interiors are too dark; lower it for drama.
-- `exposure` is the ACES filmic tone-mapping exposure — the correct knob for
-  "everything is slightly too bright/dark", in preference to touching every
-  light.
+- `exposure` is the brightness multiplier — the correct knob for "everything is
+  slightly too bright/dark", in preference to touching every light. It is
+  applied by `toneMapping`, which defaults to `linear`: the colour you give a
+  surface is the colour that comes out. Switch to `aces` for the filmic curve,
+  which is worth its lost contrast only when `lightMode: realistic` puts real
+  lights in the scene and their candela values need bringing back under 1.0.
 - `background` takes four keywords besides a plain CSS colour:
 
   | Value | Behaviour |

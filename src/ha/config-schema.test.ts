@@ -437,3 +437,28 @@ describe('stubConfig', () => {
   });
 });
 
+
+describe('render.toneMapping', () => {
+  it('defaults to linear, so the palette comes out as authored', () => {
+    // A drawing, not a photograph: nothing in room-fill lighting exceeds 1.0,
+    // so a filmic curve has no range to compress and only darkens colours that
+    // were chosen deliberately.
+    expect(DEFAULT_RENDER_CONFIG.toneMapping).toBe('linear');
+  });
+
+  it('accepts the filmic curve for realistic lighting', () => {
+    const config = validateConfig(minimal({ render: { toneMapping: 'aces' } }));
+    expect(config.render?.toneMapping).toBe('aces');
+  });
+
+  it('accepts the snake_case spelling', () => {
+    const config = validateConfig(minimal({ render: { tone_mapping: 'none' } }));
+    expect(config.render?.toneMapping).toBe('none');
+  });
+
+  it('rejects anything else by name', () => {
+    expect(() => validateConfig(minimal({ render: { toneMapping: 'filmic' } }))).toThrow(
+      ConfigError,
+    );
+  });
+});

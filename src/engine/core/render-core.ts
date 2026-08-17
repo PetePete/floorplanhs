@@ -144,8 +144,7 @@ export class RenderCore implements RenderContext {
     }
 
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = this.renderConfig.exposure;
+    this.applyToneMapping();
     this.renderer.localClippingEnabled = true;
     this.renderer.shadowMap.enabled = this.settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -385,7 +384,7 @@ export class RenderCore implements RenderContext {
     this.settings = resolved.settings;
     this.renderConfig = { ...DEFAULT_RENDER_CONFIG, ...raw };
 
-    this.renderer.toneMappingExposure = this.renderConfig.exposure;
+    this.applyToneMapping();
     this.renderer.shadowMap.enabled = this.settings.shadows;
     // Turning shadows on only flips the switch; with autoUpdate off nothing
     // would ever render a map, so shadows would simply be absent.
@@ -395,8 +394,25 @@ export class RenderCore implements RenderContext {
   }
 
   setExposure(value: number): void {
+    this.renderConfig.exposure = value;
     this.renderer.toneMappingExposure = value;
     this.invalidate();
+  }
+
+  /**
+   * `render.toneMapping`. Applies to both render paths: the composer's
+   * `OutputPass` reads these same two renderer fields, which is what keeps the
+   * card looking identical whether or not the bloom chain is running.
+   */
+  private applyToneMapping(): void {
+    const mode = this.renderConfig.toneMapping;
+    this.renderer.toneMapping =
+      mode === 'aces'
+        ? THREE.ACESFilmicToneMapping
+        : mode === 'none'
+          ? THREE.NoToneMapping
+          : THREE.LinearToneMapping;
+    this.renderer.toneMappingExposure = this.renderConfig.exposure;
   }
 
   setBackground(css: string): void {
@@ -443,8 +459,7 @@ export class RenderCore implements RenderContext {
     // three.js rebuilds its GL state, but our renderer-level settings live
     // outside that and have to be re-stated.
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = this.renderConfig.exposure;
+    this.applyToneMapping();
     this.renderer.localClippingEnabled = true;
     this.renderer.shadowMap.enabled = this.settings.shadows;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
