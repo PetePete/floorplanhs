@@ -126,7 +126,18 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
     title: layout.title,
     model: layout.model,
     camera: { fov: 45, transitionDuration: 1.1 },
-    render: { quality: 'high', bloom: true, shadows: false, daylight: false },
+    // Opaque, and deliberately so. The drawing reads best on a ground darker
+    // than any dashboard card, and until now it only got one by accident — the
+    // bloom pass cleared its target with alpha 1 and the old mix shader added
+    // that to the base, so the whole canvas came out opaque whatever was behind
+    // it. A real card would set this the same way.
+    render: {
+      quality: 'high',
+      bloom: true,
+      shadows: false,
+      daylight: false,
+      background: 'dark',
+    },
     ui: {
       height: '100%',
       showToolbar: true,

@@ -432,10 +432,9 @@ render:
   readable. Raise it if your interiors are too dark; lower it for drama.
 - `exposure` is the brightness multiplier — the correct knob for "everything is
   slightly too bright/dark", in preference to touching every light. It is
-  applied by `toneMapping`, which defaults to `linear`: the colour you give a
-  surface is the colour that comes out. Switch to `aces` for the filmic curve,
-  which is worth its lost contrast only when `lightMode: realistic` puts real
-  lights in the scene and their candela values need bringing back under 1.0.
+  applied by `toneMapping`, which defaults to `aces`, the filmic curve the card
+  is tuned against. `linear` applies the exposure and nothing else, so colours
+  come out exactly as authored; `none` ignores exposure too.
 - `background` takes four keywords besides a plain CSS colour:
 
   | Value | Behaviour |

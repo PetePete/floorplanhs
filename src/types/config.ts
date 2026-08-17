@@ -319,16 +319,14 @@ export type LightMode = 'room' | 'realistic';
 /**
  * How the renderer maps its internal colours to the screen.
  *
- * `linear` is the default and simply applies `exposure`: the colour you give a
- * surface is the colour that comes out. A floorplan is a drawing, and its
- * palette is chosen, not photographed.
+ * `aces` is the filmic curve and the default. It costs some contrast and
+ * saturation, which is a real price for a drawing whose palette was chosen
+ * rather than photographed — but it is the look the card was tuned against,
+ * and `lightMode: realistic` needs it, because candela values run well above
+ * 1.0 and something has to bring them back.
  *
- * `aces` is the filmic curve — the right answer when `lightMode: realistic`
- * puts real lights in the scene, because their candela values go well above
- * 1.0 and something has to bring them back. It costs contrast and saturation
- * everywhere else, which is why it is not the default.
- *
- * `none` ignores `exposure` too.
+ * `linear` applies `exposure` and nothing else, so a surface comes out the
+ * colour you gave it. `none` ignores `exposure` as well.
  */
 export type ToneMapping = 'linear' | 'aces' | 'none';
 
@@ -507,10 +505,7 @@ export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
   // dark room, which is the wrong reading at floorplan scale.
   lightMode: 'room',
   roomFillStrength: 1,
-  // A drawing, not a photograph: nothing in room-fill lighting exceeds 1.0, so
-  // a filmic curve has no range to compress and only darkens and desaturates
-  // colours that were picked deliberately.
-  toneMapping: 'linear',
+  toneMapping: 'aces',
   edgeColor: '',
   quality: 'auto',
   // Off by default. Real-time shadows are the most expensive thing this card

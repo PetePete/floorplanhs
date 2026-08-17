@@ -524,7 +524,7 @@ tour:
 | `bloomStrength` | number | `0.55` | Glow intensity. |
 | `bloomRadius` | number | `0.5` | Glow spread. |
 | `bloomThreshold` | number | `0.72` | Luminance above which pixels bloom. Lower = more glow. |
-| `toneMapping` | `linear` \| `aces` \| `none` | `linear` | `linear` just applies `exposure`, so a surface comes out the colour you gave it — a floorplan's palette is chosen, not photographed. `aces` is the filmic curve, worth it with `lightMode: realistic` where candela values run well above 1.0. |
+| `toneMapping` | `aces` \| `linear` \| `none` | `aces` | The filmic curve, and what the card is tuned against. `linear` applies `exposure` and nothing else, so a surface comes out exactly the colour you gave it — flatter, and a fair choice for a pure line drawing. |
 | `exposure` | number | `1.0` | Brightness multiplier. Ignored by `toneMapping: none`. |
 | `ambientIntensity` | number | `0.34` | Base fill so an all-lights-off house is not pitch black. |
 | `daylight` | boolean | `false` | Sun and sky rig. Off by default so the card looks the same at 3am as at noon and the lamps stay the only thing that changes. |
