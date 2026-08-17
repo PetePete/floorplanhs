@@ -18,6 +18,7 @@ import {
   DEFAULT_SECTION_STATE,
   type CameraPreset,
   type Floorplan3dCardConfig,
+  type LevelDefinition,
   type PlacedEntity,
   type RenderConfig,
   type SectionState,
@@ -322,6 +323,16 @@ export class Viewer implements IViewer {
         s.setLevels(loaded.levels);
       });
       this.guard('camera', this._cameraCtl, (c) => c.setBounds(loaded.bounds));
+
+      // Room-fill lighting indexes the rooms and stamps the geometry, so it has
+      // to see the model before the first frame is drawn with it.
+      this.guard('lighting', this._lighting, (l) =>
+        (
+          l as ILightingSystem & {
+            setModel?(root: THREE.Object3D, levels: readonly LevelDefinition[]): void;
+          }
+        ).setModel?.(loaded.root, loaded.levels),
+      );
 
       // Edge lines are parented under the model root on purpose: they must be
       // cut by the section planes exactly like the walls they trace.
@@ -754,6 +765,14 @@ export class Viewer implements IViewer {
     this.guard('entities', this._entities, (e) =>
       (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(
         this.config.ui?.markersThroughWalls !== true,
+      ),
+    );
+
+    // Whether ghosted storeys appear at all is a decision about the card, not
+    // about one viewpoint, so it overrides every preset's own section state.
+    this.guard('section', this._section, (s) =>
+      (s as ISectionController & { setGhostOverride?(v: boolean | null): void }).setGhostOverride?.(
+        this.config.ui?.ghostAbove ?? null,
       ),
     );
 

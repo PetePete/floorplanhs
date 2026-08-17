@@ -81,6 +81,8 @@ export class SectionController implements ISectionController {
   private readonly ghostPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly ghostPlanes: THREE.Plane[] = [this.ghostPlane];
   private ghostTween: Tween<number> | null = null;
+  /** `ui.ghostAbove`; null means "whatever the state says". See setGhostOverride. */
+  private ghostOverride: boolean | null = null;
 
   private readonly changeCallbacks = new Set<(state: SectionState) => void>();
 
@@ -151,6 +153,21 @@ export class SectionController implements ISectionController {
   }
 
   /* ----------------------------------------------------------- public API */
+
+  /**
+   * Master switch for the translucent storeys above a cut, outranking whatever
+   * each preset asks for. `null` leaves the decision to the state.
+   *
+   * This exists because ghosting is a taste question about the whole card, not
+   * a property of one viewpoint: having to set it on every preset separately is
+   * the wrong shape for "I do or do not want to see this".
+   */
+  setGhostOverride(value: boolean | null): void {
+    if (this.ghostOverride === value) return;
+    this.ghostOverride = value;
+    this.updateGhost(true);
+    this.ctx?.invalidate();
+  }
 
   setState(state: SectionState, animate = true): void {
     this.state = sanitize(state);
@@ -483,7 +500,7 @@ export class SectionController implements ISectionController {
   private updateGhost(animate: boolean): void {
     const wanted =
       this.state.mode === 'level' &&
-      this.state.ghostAbove === true &&
+      (this.ghostOverride ?? this.state.ghostAbove === true) &&
       this.clips.has('level:max');
 
     if (!wanted) {

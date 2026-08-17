@@ -78,6 +78,12 @@ const FIXTURE_EMISSIVE_EXPONENT = 0.85;
  *  house; 8 m keeps a light inside its room and the neighbouring hallway. */
 const DEFAULT_DISTANCE_M = 8;
 const DEFAULT_DECAY = 2;
+
+/**
+ * Room fill at brightness 0. A lamp dimmed to 1 % still reads as on in the
+ * plan, which is the whole job of this mode.
+ */
+const FILL_MIN = 0.18;
 const DEFAULT_SPOT_ANGLE_DEG = 45;
 const DEFAULT_SPOT_PENUMBRA = 0.4;
 const DEFAULT_FIXTURE_RADIUS_M = 0.06;
@@ -183,6 +189,12 @@ export class LightRig {
   private targetEmissive = 0;
   private currentEmissive = 0;
   private fromEmissive = 0;
+  /** 0..1 room-fill weight, tweened alongside the rest. */
+  private targetFill = 0;
+  private currentFill = 0;
+  private fromFill = 0;
+  /** Set by the lighting system in room-fill mode. See `build`. */
+  private emissiveOnly = false;
 
   private readonly targetColor = new THREE.Color(1, 1, 1);
   private readonly currentColor = new THREE.Color(1, 1, 1);
@@ -236,7 +248,10 @@ export class LightRig {
   /* ------------------------------------------------------------ geometry */
 
   private build(): void {
-    this.kind = this.config.kind ?? 'point';
+    // Room fill lights the whole room from the shader, so a real light here
+    // would only add back the hotspot the mode exists to remove. The luminaire
+    // still glows: that is what shows *which* lamp is on.
+    this.kind = this.emissiveOnly ? 'emissive' : (this.config.kind ?? 'point');
     const distance = this.resolveDistance();
     const decay = this.config.decay ?? DEFAULT_DECAY;
 
@@ -390,7 +405,7 @@ export class LightRig {
   /** Swap in a new visual config; rebuilds only when the light kind changed. */
   applyConfig(config: LightVisualConfig | undefined): void {
     const next = config ?? {};
-    const kindChanged = (next.kind ?? 'point') !== this.kind;
+    const kindChanged = (next.kind ?? 'point') !== (this.config.kind ?? 'point');
     const sizeChanged =
       this.kind === 'rect' &&
       (next.size?.[0] !== this.config.size?.[0] || next.size?.[1] !== this.config.size?.[1]);
@@ -401,10 +416,7 @@ export class LightRig {
     this.config = next;
 
     if (kindChanged || sizeChanged || fixtureChanged) {
-      this.teardownObjects();
-      this.build();
-      // Rebuilt objects start dark; re-run the state mapping without a tween.
-      this.recomputeTargets(true);
+      this.rebuild();
       return;
     }
 
@@ -423,6 +435,13 @@ export class LightRig {
     }
     this.configureShadow();
     this.recomputeTargets(false);
+  }
+
+  /** Rebuilt objects start dark, so the state mapping is re-run without a tween. */
+  private rebuild(): void {
+    this.teardownObjects();
+    this.build();
+    this.recomputeTargets(true);
   }
 
   setLevel(levelId: string | null): void {
@@ -493,6 +512,11 @@ export class LightRig {
     } else base = POINT_BASE_CANDELA;
 
     this.targetIntensityValue = this.light ? base * output * multiplier : 0;
+    // Deliberately not `output`: that curve is tuned for candela falloff, where
+    // a dimmed lamp still has to reach the far wall. A filled room is a flat
+    // tint, so it tracks the dimmer directly, off a floor that keeps a lamp at
+    // 1 % readable as on.
+    this.targetFill = this.on ? FILL_MIN + (1 - FILL_MIN) * clamp01(this.brightness) : 0;
 
     const bloomWeight = this.config.bloom ?? 1;
     const fixtureScale = this.config.fixture?.emissive ?? 1;
@@ -509,6 +533,7 @@ export class LightRig {
     if (immediate) {
       this.currentIntensity = this.targetIntensityValue;
       this.currentEmissive = this.targetEmissive;
+      this.currentFill = this.targetFill;
       this.currentColor.copy(this.targetColor);
       this.tweenElapsed = 0;
       this.tweenDuration = 0;
@@ -516,6 +541,7 @@ export class LightRig {
     } else {
       this.fromIntensity = this.currentIntensity;
       this.fromEmissive = this.currentEmissive;
+      this.fromFill = this.currentFill;
       this.fromColor.copy(this.currentColor);
       this.tweenElapsed = 0;
       // Coming up eases out (fast attack, soft landing); going down is quicker
@@ -612,11 +638,13 @@ export class LightRig {
       const t = this.tweenEaseOut ? easeOutCubic(raw) : easeInOutCubic(raw);
       this.currentIntensity = this.fromIntensity + (this.targetIntensityValue - this.fromIntensity) * t;
       this.currentEmissive = this.fromEmissive + (this.targetEmissive - this.fromEmissive) * t;
+      this.currentFill = this.fromFill + (this.targetFill - this.fromFill) * t;
       this.currentColor.copy(this.fromColor).lerp(this.targetColor, t);
       if (raw >= 1) {
         this.tweenDuration = 0;
         this.currentIntensity = this.targetIntensityValue;
         this.currentEmissive = this.targetEmissive;
+        this.currentFill = this.targetFill;
         this.currentColor.copy(this.targetColor);
       } else {
         animating = true;
@@ -732,6 +760,28 @@ export class LightRig {
 
   get intensity(): number {
     return this.currentIntensity;
+  }
+
+  /**
+   * How strongly this lamp fills its room, 0..1. Culling is included: a lamp on
+   * a hidden storey, or one cut away by a section plane, must not keep lighting
+   * a room that is still on screen.
+   */
+  get fillWeight(): number {
+    if (this.culledByLevel || this.culledByClip) return 0;
+    return this.currentFill * this.effectMultiplier();
+  }
+
+  /** Tweened light colour, linear RGB. Shared reference — do not mutate. */
+  get fillColor(): THREE.Color {
+    return this.currentColor;
+  }
+
+  /** Suppress the real light source and keep only the glowing luminaire. */
+  setEmissiveOnly(value: boolean): void {
+    if (this.emissiveOnly === value) return;
+    this.emissiveOnly = value;
+    this.rebuild();
   }
 
   /* ------------------------------------------------------------- dispose */

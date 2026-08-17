@@ -690,6 +690,8 @@ function readEntities(raw: unknown[], path: string): PlacedEntity[] {
     if (name) placed.name = name;
     const role = readEnum(obj, 'role', here, ROLES);
     if (role) placed.role = role;
+    const room = readString(obj, 'room', here);
+    if (room) placed.room = room;
     if (obj.light !== undefined && obj.light !== null) {
       placed.light = readLightVisual(obj.light, child(here, 'light'));
     }
@@ -786,6 +788,8 @@ function readTour(raw: unknown, path: string): TourConfig {
 
 const RENDER_ALIASES: Record<string, string> = {
   edge_color: 'edgeColor',
+  light_mode: 'lightMode',
+  room_fill_strength: 'roomFillStrength',
   bloom_strength: 'bloomStrength',
   bloom_radius: 'bloomRadius',
   bloom_threshold: 'bloomThreshold',
@@ -810,6 +814,8 @@ function readRender(raw: unknown, path: string): RenderConfig {
     'palette',
     readEnum(obj, 'palette', path, ['model', 'mono-light', 'mono-dark'] as const),
   );
+  assign('lightMode', readEnum(obj, 'lightMode', path, ['room', 'realistic'] as const));
+  assign('roomFillStrength', readNumber(obj, 'roomFillStrength', path, { min: 0, max: 2 }));
   assign('edgeColor', readString(obj, 'edgeColor', path));
   assign('quality', readEnum(obj, 'quality', path, ['low', 'medium', 'high', 'auto'] as const));
   assign('shadows', readBoolean(obj, 'shadows', path));
@@ -847,6 +853,7 @@ const UI_ALIASES: Record<string, string> = {
   show_view_cube: 'showViewCube',
   show_zoom_slider: 'showZoomSlider',
   level_presets: 'levelPresets',
+  ghost_above: 'ghostAbove',
   markers_through_walls: 'markersThroughWalls',
   author_tools: 'authorTools',
   aspect_ratio: 'aspectRatio',
@@ -861,6 +868,7 @@ function readUi(raw: unknown, path: string): UiConfig {
     if (value !== undefined) ui[key] = value;
   };
 
+  assign('ghostAbove', readBoolean(obj, 'ghostAbove', path));
   assign('showToolbar', readBoolean(obj, 'showToolbar', path));
   assign('showPresetBar', readBoolean(obj, 'showPresetBar', path));
   assign('showLevelSelector', readBoolean(obj, 'showLevelSelector', path));

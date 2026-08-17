@@ -254,6 +254,12 @@ export interface PlacedEntity {
   /** Overrides the auto-derived visual role (light/sensor/cover/...). */
   role?: EntityRole;
   light?: LightVisualConfig;
+  /**
+   * Room this entity lights, for `lightMode: room`. Normally derived from the
+   * position; set it when a lamp sits in a doorway or a wall recess and lands
+   * in the wrong room.
+   */
+  room?: string;
   marker?: MarkerConfig;
   tap_action?: ActionConfig;
   hold_action?: ActionConfig;
@@ -291,9 +297,21 @@ export type RenderStyle = 'solid' | 'shaded' | 'wireframe';
  */
 export type RenderPalette = 'model' | 'mono-light' | 'mono-dark';
 
+/**
+ * `room` (the default) lights the whole room a lamp stands in, evenly and up to
+ * its walls — the floorplan reading, where "the kitchen is on" is the fact you
+ * want at a glance. `realistic` puts a physically based light at the lamp
+ * instead: correct inverse-square falloff, a bright hotspot underneath, and
+ * dark corners.
+ */
+export type LightMode = 'room' | 'realistic';
+
 export interface RenderConfig {
   style?: RenderStyle;
   palette?: RenderPalette;
+  lightMode?: LightMode;
+  /** How strongly a lit room is tinted, 0..2. Only used by `lightMode: room`. */
+  roomFillStrength?: number;
   /** Colour of the edge lines; defaults to a theme-derived ink. */
   edgeColor?: string;
   /** 'high' = shadows + bloom + SSAO-ish, 'auto' picks by device. */
@@ -327,6 +345,12 @@ export interface RenderConfig {
 /* --------------------------------------------------------------------- ui */
 
 export interface UiConfig {
+  /**
+   * Master switch for the translucent storeys above an isolated level. Set it
+   * once — `true` always, `false` never — and it wins over every preset's own
+   * `section.ghostAbove`. Omit it (or `null`) and each preset decides.
+   */
+  ghostAbove?: boolean | null;
   showToolbar?: boolean;
   /**
    * A panel view is the wall-tablet case, where the saved views and the
@@ -440,6 +464,11 @@ export const DEFAULT_CAMERA_CONFIG: Required<
 export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
   style: 'shaded',
   palette: 'model',
+  // A dashboard card answers "which rooms are lit", not "where exactly does the
+  // photon land". Physically correct falloff makes a lamp a bright dot in a
+  // dark room, which is the wrong reading at floorplan scale.
+  lightMode: 'room',
+  roomFillStrength: 1,
   edgeColor: '',
   quality: 'auto',
   // Off by default. Real-time shadows are the most expensive thing this card
@@ -465,6 +494,9 @@ export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
 };
 
 export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
+  // Not a boolean default: absent means "no opinion", which is what leaves the
+  // per-preset setting in charge.
+  ghostAbove: null,
   showToolbar: true,
   showToolbarInPanel: false,
   showPresetBar: true,

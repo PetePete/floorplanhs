@@ -623,8 +623,25 @@ export const cardStyles = css`
     pointer-events: none;
   }
 
+  /*
+   * Centres the zoom control on the cube's axis rather than on the right edge.
+   * These two values mirror the engine's ViewCube layout (view-cube.ts
+   * DEFAULTS: size 96 / compactSize 72, margin.x 12); the cube is drawn on the
+   * canvas and has no DOM box to align against.
+   */
+  .cube-column {
+    width: var(--fp3d-cube-size, 96px);
+    margin-right: var(--fp3d-cube-margin-x, 12px);
+    display: flex;
+    justify-content: center;
+    flex: none;
+  }
+
   :host([data-layout='narrow']) .cube-gap {
     --fp3d-cube-gap: 80px;
+  }
+  :host([data-layout='narrow']) .cube-column {
+    --fp3d-cube-size: 72px;
   }
   .at-left {
     grid-area: left;

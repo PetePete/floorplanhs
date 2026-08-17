@@ -58,22 +58,23 @@
         overflow: hidden;
       }
 
+      /* The card gets the whole left column. A fixed preview size hides exactly
+         the layout bugs — squashed toolbars, a cube that overlaps the view bar —
+         that only show up at the aspect ratios real dashboards have. */
       #stage {
         padding: 24px;
-        overflow: auto;
-        display: block;
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
       #stage.panel {
         padding: 0;
       }
       #stage > * {
         display: block;
-        max-width: 980px;
-        margin: 0 auto;
-        height: 640px;
-      }
-      #stage.panel > * {
-        max-width: none;
+        flex: 1 1 auto;
+        min-width: 0;
         height: 100%;
       }
 

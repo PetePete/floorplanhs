@@ -18,9 +18,10 @@ and your model file never leaves your Home Assistant instance.
 
 ## Features
 
-- **Real lighting.** A `light` entity becomes a real three.js light. Brightness,
-  RGB colour and colour temperature from Home Assistant drive the actual
-  illumination, not a coloured icon.
+- **Room lighting.** A `light` entity that is on lights its whole room, evenly
+  and up to the walls — the reading a floorplan wants. Brightness, RGB colour
+  and colour temperature from Home Assistant drive it, not a coloured icon.
+  Switch to `lightMode: realistic` for physically based falloff instead.
 - **Cross-sections.** Isolate one storey, slide cut planes along X/Y/Z, or clip
   to a box — with solid cut caps so walls do not look like empty shells.
 - **Camera presets.** Save a viewpoint (plus its cross-section and level
@@ -226,25 +227,50 @@ ui:
 
 ### Lighting
 
-A placed entity in the `light` domain is not a marker — it is a real light in
-the scene:
+A placed entity in the `light` domain is not a marker — it changes what the
+model looks like. There are two ways it can do that, chosen with `lightMode`.
+
+#### `lightMode: room` (default)
+
+The lamp lights **the whole room it stands in**, evenly, stopping at the walls.
+A dashboard answers "which rooms are on" at a glance, and that reading is
+exactly what a physically correct light destroys: real falloff puts a bright
+spot under the bulb and leaves the corners dark.
+
+- **Which room.** Taken from the model: floors, ceilings and furniture carry
+  their room from the file, and walls — which are merged into one mesh per
+  storey, and in Sweet Home 3D carry no room at all — are classified per vertex
+  by looking a few centimetres along the surface normal into the room the face
+  points at. That is what makes a shared wall light on the correct side.
+- **Cost.** The rooms are resolved once, at load, and baked into the geometry;
+  a lit room is one array lookup per pixel. No shadow maps, no extra draw calls.
+- **Two lamps in one room** do not add up to twice the brightness. The colours
+  mix, the strongest lamp sets the level.
+- **Override** with `room:` on the placed entity when a lamp sits in a doorway
+  and lands on the wrong side. Tune the overall level with `roomFillStrength`.
+- The luminaire itself still glows and blooms, so you can see *which* lamp is on.
+
+Rooms come from `userData.room`, or from `<level>/<room>/<part>` node names in
+glTF. A model with no rooms at all falls back to no fill — use `realistic`.
+
+#### `lightMode: realistic`
+
+A real three.js light at the lamp position:
 
 - **Brightness → candela.** Home Assistant's `brightness` (0–255) is mapped
   through a perceptual power curve (exponent 2.2) to a candela-like intensity,
   so dimming *looks* like dimming instead of collapsing to black halfway down.
-- **Colour.** `rgb_color`, `hs_color` and `color_temp_kelvin` are converted to
-  linear RGB and applied to the light. Set `useEntityColor: false` plus a fixed
-  `color` when you want a constant tint.
 - **Falloff.** Point and spot lights default to an **8 m falloff radius** rather
   than infinite range, with `decay: 2` (physically correct). That keeps a single
   bulb from washing out the whole model. `distance: 0` restores infinite range.
-- **The luminaire.** A small emissive body is drawn at the light position and
-  put on the selective-bloom layer, so it glows when the light is on — a bright
-  white wall never blooms, only the fixture does.
 - **Shadow budget.** At most **four lights cast real shadows at once** on the
   high quality tier; the engine picks them by brightness and camera proximity
   and swaps them as you move. Mark the important ones with
   `light.castShadow: true`; the rest still illuminate, they just do not occlude.
+
+Both modes share the colour handling: `rgb_color`, `hs_color` and
+`color_temp_kelvin` are converted to linear RGB. Set `useEntityColor: false`
+plus a fixed `color` when you want a constant tint.
 
 ### Cross-sections
 
@@ -494,6 +520,8 @@ tour:
 | --- | --- | --- | --- |
 | `style` | `solid` \| `shaded` \| `wireframe` | `shaded` | `shaded` adds crisp architectural edge lines to solid surfaces. `wireframe` is a hidden-line drawing: surfaces still occlude, but only the lines are drawn — and nothing is lit, because there is no visible surface for a lamp to fall on. |
 | `palette` | `model` \| `mono-light` \| `mono-dark` | `model` | `mono-*` flattens every surface to one neutral tone and drops textures, so the only colour left is the light your lamps cast. Pair with the opposite `background` — `mono-dark` on a dark theme is invisible. |
+| `lightMode` | `room` \| `realistic` | `room` | `room` lights the whole room a lamp stands in, evenly and up to its walls. `realistic` puts a physically based light at the lamp instead: inverse-square falloff, a hotspot underneath and dark corners. |
+| `roomFillStrength` | number | `1` | How strongly a lit room is tinted, 0–2. Only used by `lightMode: room`. |
 | `edgeColor` | string | `''` (theme) | Edge-line colour. Empty follows the dashboard theme — light ink on dark, dark on light. |
 | `quality` | `low` \| `medium` \| `high` \| `auto` | `auto` | Tier picks shadow map size, pixel ratio and post-processing — never geometry. |
 | `shadows` | boolean | `false` | Shadow maps. The single most expensive setting: a shadow-casting point light costs six cube-face passes per refresh. |
@@ -515,6 +543,7 @@ tour:
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `authorTools` | `auto` \| `never` \| `always` | `auto` | Master switch for every authoring affordance — level selector, section panel, entity palette, inspector, save-view, edit toggle. `auto` shows them only in edit mode; `never` hides them even in a dashboard being edited (the wall-tablet case); `always` keeps them visible. It outranks the individual `show*` flags below. |
+| `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
 | `showToolbarInPanel` | boolean | `false` | Panel views are the wall-tablet case, where the saved views and the cube are the whole interface. Set `true` to keep the toolbar there. |
 | `showPresetBar` | boolean | `true` | The saved-views strip — the primary navigation. |

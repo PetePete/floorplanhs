@@ -1027,6 +1027,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       visibleLevels: [level.id],
       section: {
         ...JSON.parse(JSON.stringify(DEFAULT_SECTION_STATE)),
+        // Generated views are still *your* views: the cut-cap and ghost
+        // preferences from the `section` block carry over, so there is one
+        // place to decide how a storey is presented rather than two.
+        caps: this.config?.section?.caps ?? DEFAULT_SECTION_STATE.caps,
+        ghostAbove: this.config?.section?.ghostAbove ?? DEFAULT_SECTION_STATE.ghostAbove,
         mode: 'level' as const,
         levelId: level.id,
       },
@@ -1458,14 +1463,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
           ${ui.showZoomSlider !== false
             ? html`
                 ${ui.showViewCube !== false ? html`<div class="cube-gap"></div>` : nothing}
-                <fp3d-zoom-slider
-                  data-hass
-                  .dark=${this.dark}
-                  .size=${this.layout}
-                  .value=${this.zoom}
-                  @fp3d-zoom=${(event: CustomEvent<{ value: number }>) =>
-                    this.onZoomInput(event.detail.value)}
-                ></fp3d-zoom-slider>
+                <div class="cube-column">
+                  <fp3d-zoom-slider
+                    data-hass
+                    .dark=${this.dark}
+                    .size=${this.layout}
+                    .value=${this.zoom}
+                    @fp3d-zoom=${(event: CustomEvent<{ value: number }>) =>
+                      this.onZoomInput(event.detail.value)}
+                  ></fp3d-zoom-slider>
+                </div>
               `
             : nothing}
         </div>

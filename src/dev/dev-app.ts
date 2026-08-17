@@ -364,6 +364,28 @@ async function boot(): Promise<void> {
   renderSelect('Style', 'style', ['shaded', 'solid', 'wireframe'] as const);
   renderSelect('Palette', 'palette', ['model', 'mono-light', 'mono-dark'] as const);
   renderSelect('Background', 'background', ['transparent', 'system', 'light', 'dark'] as const);
+  renderSelect('Lighting', 'lightMode', ['room', 'realistic'] as const);
+
+  // Tri-state on purpose: the config option is a master switch that can also
+  // stand aside, and the harness has to be able to reach all three.
+  const ghostStates: Array<{ label: string; value: boolean | null }> = [
+    { label: 'per preset', value: null },
+    { label: 'always', value: true },
+    { label: 'never', value: false },
+  ];
+  const ghostSelect = el('select');
+  for (const state of ghostStates) {
+    const option = document.createElement('option');
+    option.value = state.label;
+    option.textContent = state.label;
+    ghostSelect.append(option);
+  }
+  ghostSelect.addEventListener('change', () => {
+    const chosen = ghostStates.find((s) => s.label === ghostSelect.value);
+    config = { ...config, ui: { ...config.ui, ghostAbove: chosen?.value ?? null } };
+    applyConfig();
+  });
+  addRow('Ghost storeys', ghostSelect);
   renderSelect('Quality', 'quality', ['high', 'medium', 'low'] as const);
 
   const bloomBtn = el('button', { className: 'chip on' }, ['Bloom']);

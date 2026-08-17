@@ -252,7 +252,19 @@ section:
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
 - `ghostAbove: true` fades the levels above the active one instead of hiding
-  them — good for understanding how storeys stack.
+  them — good for understanding how storeys stack. It also applies to the
+  per-storey views the card generates itself (`ui.levelPresets`), together with
+  `caps`: the `section` block is the one place that decides how a storey is
+  presented.
+
+  A saved preset carries its own `section`, so ghosting can differ from view to
+  view. When you would rather decide once for the whole card, set
+  **`ui.ghostAbove`** — it outranks every preset:
+
+  ```yaml
+  ui:
+    ghostAbove: false    # never; `true` = always; omit = let each preset decide
+  ```
 - `invert: true` keeps the other half of a plane cut.
 - The box is easiest to produce by dragging its handles in the card and saving a
   preset; the editor does not ask you to type an AABB.
@@ -447,6 +459,28 @@ render:
   on a dark dashboard is a dark model on a dark ground and reads as nothing at
   all. The edge ink follows the resolved backdrop, so it flips with the
   keyword — `background: light` gives dark lines even on a dark theme.
+- `lightMode` decides what a lit lamp does to the model:
+
+  ```yaml
+  render:
+    lightMode: room        # default; the whole room lights up
+    roomFillStrength: 1    # 0 = off, 2 = double
+  ```
+
+  `room` needs the model to *have* rooms. Sweet Home 3D files always do — name
+  your rooms in the app and they come across. For glTF, name your nodes
+  `<level>/<room>/<part>`. Without rooms nothing lights and you want
+  `lightMode: realistic`.
+
+  A lamp is assigned to the room its position falls in. When one sits in a
+  doorway or a wall recess and picks the wrong side, name the room explicitly:
+
+  ```yaml
+  entities:
+    - entity: light.hall_ceiling
+      position: [1.1, 2.4, 3.2]
+      room: hall
+  ```
 - `onDemand: true` idles the render loop when nothing changed. Leave it on.
 
 A tablet-friendly profile:

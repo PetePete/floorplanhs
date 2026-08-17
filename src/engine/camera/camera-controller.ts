@@ -97,6 +97,9 @@ export class CameraController implements ICameraController {
   private readonly viewCubeOptions: ViewCubeOptions;
   private viewCubeVisible = true;
 
+  /** Shift swaps the wheel button from pan to orbit. See `applyNavigationMode`. */
+  private shiftHeld = false;
+
   constructor(config: CameraConfig = {}, viewCube: ViewCubeOptions = {}) {
     this.applyConfigValues(config);
     this.viewCubeOptions = viewCube;
@@ -139,6 +142,11 @@ export class CameraController implements ICameraController {
     // canvas already has `touch-action: none` for the touch side.
     ctx.canvas.addEventListener('pointerdown', this.onCanvasPointerDown);
     ctx.canvas.addEventListener('auxclick', this.onCanvasAuxClick);
+    // On window, not the canvas: the modifier has to be tracked even while the
+    // pointer is over the dashboard chrome, so the very first drag is correct.
+    window.addEventListener('keydown', this.onModifierChange);
+    window.addEventListener('keyup', this.onModifierChange);
+    window.addEventListener('blur', this.onWindowBlur);
 
     controls.addEventListener('start', this.onControlsStart);
     controls.addEventListener('change', this.onControlsChange);
@@ -202,6 +210,9 @@ export class CameraController implements ICameraController {
       this.ctx.canvas.removeEventListener('pointerdown', this.onCanvasPointerDown);
       this.ctx.canvas.removeEventListener('auxclick', this.onCanvasAuxClick);
     }
+    window.removeEventListener('keydown', this.onModifierChange);
+    window.removeEventListener('keyup', this.onModifierChange);
+    window.removeEventListener('blur', this.onWindowBlur);
     if (this.orbit) {
       this.orbit.removeEventListener('start', this.onControlsStart);
       this.orbit.removeEventListener('change', this.onControlsChange);
@@ -597,8 +608,21 @@ export class CameraController implements ICameraController {
   /**
    * Mouse mapping. In `cad` mode the left button drives nothing at all, which
    * is the whole point: it belongs to selection and to dragging entities onto
-   * the model. Navigation moves to the wheel button, the way Fusion, Inventor
-   * and SolidWorks do it, so a mis-aimed click can never spin the view.
+   * the model, so a mis-aimed click can never spin the view.
+   *
+   * The rest follows Fusion 360, Inventor and SolidWorks exactly:
+   *
+   * | Gesture             | Action |
+   * | ------------------- | ------ |
+   * | Wheel drag          | Pan    |
+   * | Shift + wheel drag  | Orbit  |
+   * | Right drag          | Pan    |
+   * | Wheel scroll        | Zoom to cursor |
+   *
+   * Pan is the unmodified gesture because it is the one used constantly;
+   * orbiting a floorplan is comparatively rare. `shiftPan` tracks the modifier
+   * so the mapping is already correct when the button goes down — OrbitControls
+   * reads `mouseButtons` once per gesture and ignores later changes.
    *
    * Touch is deliberately untouched — a tablet has no middle button, and the
    * one-finger-orbit / two-finger-pan mapping is already the right one there.
@@ -619,13 +643,32 @@ export class CameraController implements ICameraController {
 
     controls.mouseButtons = {
       LEFT: null,
-      MIDDLE: THREE.MOUSE.ROTATE,
+      MIDDLE: this.shiftHeld ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN,
       RIGHT: THREE.MOUSE.PAN,
     };
     // CAD panning follows the cursor across the screen rather than sliding
     // along the ground plane; sliding feels wrong once the camera is low.
     controls.screenSpacePanning = true;
   }
+
+  /** Re-map the wheel button as Shift goes down and up. See `applyNavigationMode`. */
+  private readonly onModifierChange = (event: KeyboardEvent): void => {
+    if (event.key !== 'Shift') return;
+    const held = event.type === 'keydown';
+    if (this.shiftHeld === held) return;
+    this.shiftHeld = held;
+    if (this.cfg.navigation !== 'orbit') this.applyNavigationMode();
+  };
+
+  /**
+   * Releasing Shift outside the document never fires `keyup`, which would leave
+   * the wheel button stuck on orbit. Losing focus is the reliable reset.
+   */
+  private readonly onWindowBlur = (): void => {
+    if (!this.shiftHeld) return;
+    this.shiftHeld = false;
+    if (this.cfg.navigation !== 'orbit') this.applyNavigationMode();
+  };
 
   private applyProjectionParams(): void {
     const ctx = this.ctx;

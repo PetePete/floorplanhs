@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import type { PlacedEntity, RenderConfig, Vec3 } from '@/types/config';
+import type { LevelDefinition, PlacedEntity, RenderConfig, Vec3 } from '@/types/config';
 import { DEFAULT_RENDER_CONFIG } from '@/types/config';
 import type {
   ILightingSystem,
@@ -21,6 +21,7 @@ import type {
 import { LightRig } from '@/engine/lighting/light-rig';
 import { DaylightRig } from '@/engine/lighting/daylight';
 import { ShadowBudget, type ShadowCandidate } from '@/engine/lighting/shadow-budget';
+import { RoomFill, type RoomFillLight } from '@/engine/lighting/room-fill';
 
 /** A sample staged before `init(ctx)` — three.js objects may not exist yet. */
 interface PendingLight {
@@ -35,6 +36,11 @@ export class LightingSystem implements ILightingSystem {
   private readonly rigs = new Map<string, LightRig>();
   private readonly budget = new ShadowBudget();
   private readonly daylightRig: DaylightRig;
+  private readonly roomFill = new RoomFill();
+  /** Explicit `entities[].room` overrides, by entity id. */
+  private readonly roomHints = new Map<string, string | null>();
+  /** Reused per frame; `apply` only ever reads it during the call. */
+  private readonly fillSamples: RoomFillLight[] = [];
 
   /** Calls that arrived before `init`; replayed in order once the ctx exists. */
   private readonly pending = new Map<string, PendingLight>();
@@ -59,6 +65,8 @@ export class LightingSystem implements ILightingSystem {
   constructor(render?: RenderConfig) {
     this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...(render ?? {}) };
     this.shadowsEnabled = this.renderCfg.shadows;
+    this.roomFill.setEnabled(this.renderCfg.lightMode === 'room');
+    this.roomFill.setStrength(this.renderCfg.roomFillStrength);
     this.root.name = 'lighting';
     this.daylightRig = new DaylightRig({
       ambientIntensity: this.renderCfg.ambientIntensity,
@@ -101,6 +109,10 @@ export class LightingSystem implements ILightingSystem {
     this.candidates.length = 0;
     this.budget.reset();
 
+    this.roomFill.dispose();
+    this.roomHints.clear();
+    this.fillSamples.length = 0;
+
     this.daylightRig.dispose();
     this.root.parent?.remove(this.root);
     this.root.clear();
@@ -136,6 +148,8 @@ export class LightingSystem implements ILightingSystem {
     const ctx = this.ctx;
     if (!ctx) return;
 
+    this.roomHints.set(entityId, placed.room ?? null);
+
     let rig = this.rigs.get(entityId);
     if (!rig) {
       rig = new LightRig({
@@ -147,6 +161,7 @@ export class LightingSystem implements ILightingSystem {
         clippingPlanes: ctx.clippingPlanes,
       });
       rig.setShadowsEnabled(this.shadowsEnabled);
+      rig.setEmissiveOnly(this.roomFillActive);
       this.root.add(rig.group);
       this.rigs.set(entityId, rig);
       this.appliedConfigs.set(entityId, placed.light);
@@ -176,6 +191,7 @@ export class LightingSystem implements ILightingSystem {
   removeLight(entityId: string): void {
     this.pending.delete(entityId);
     this.appliedConfigs.delete(entityId);
+    this.roomHints.delete(entityId);
     const rig = this.rigs.get(entityId);
     if (!rig) return;
     this.rigs.delete(entityId);
@@ -218,10 +234,39 @@ export class LightingSystem implements ILightingSystem {
 
   /** Re-apply a changed render block (exposure/ambient/shadows/daylight flag). */
   setRenderConfig(render: RenderConfig): void {
+    const wasRoomFill = this.roomFillActive;
     this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...render };
     this.daylightRig.setAmbientIntensity(this.renderCfg.ambientIntensity);
     this.setShadowsEnabled(this.renderCfg.shadows);
+
+    this.roomFill.setEnabled(this.roomFillActive);
+    this.roomFill.setStrength(this.renderCfg.roomFillStrength);
+    if (wasRoomFill !== this.roomFillActive) {
+      for (const rig of this.rigs.values()) rig.setEmissiveOnly(this.roomFillActive);
+      this.budget.markDirty();
+    }
     this.ctx?.invalidate();
+  }
+
+  private get roomFillActive(): boolean {
+    return this.renderCfg.lightMode === 'room';
+  }
+
+  /**
+   * Hand the loaded house over so rooms can be indexed. Not part of
+   * `ILightingSystem`: only the room-fill mode needs it, and a viewer that never
+   * calls it simply gets no fill.
+   */
+  setModel(root: THREE.Object3D | null, levels: readonly LevelDefinition[]): void {
+    this.roomFill.setModel(root, levels);
+    for (const rig of this.rigs.values()) rig.setEmissiveOnly(this.roomFillActive);
+    this.refreshRoomFill();
+    this.ctx?.invalidate();
+  }
+
+  /** Rooms the model actually has, for the editor's room picker. */
+  get roomCount(): number {
+    return this.roomFill.roomCount;
   }
 
   /**
@@ -273,9 +318,16 @@ export class LightingSystem implements ILightingSystem {
       this.evaluateBudget(cameraPosition);
     }
 
+    let fillChanged = this.roomFill.needsApply;
     for (const rig of this.rigs.values()) {
-      if (rig.update(dt)) animating = true;
+      if (rig.update(dt)) {
+        animating = true;
+        fillChanged = true;
+      }
     }
+    // The fill tracks the same tweens the rigs run, so a room brightens with
+    // its lamp instead of snapping when the tween ends.
+    if (fillChanged) this.refreshRoomFill();
 
     if (animating) this.takeLease();
     else this.dropLease();
@@ -333,6 +385,24 @@ export class LightingSystem implements ILightingSystem {
       if (planes[i].distanceToPoint(position) < 0) return true;
     }
     return false;
+  }
+
+  /** Rebuild the per-room fill colours from every rig's current tween state. */
+  private refreshRoomFill(): void {
+    const samples = this.fillSamples;
+    samples.length = 0;
+    for (const [entityId, rig] of this.rigs) {
+      const weight = rig.fillWeight;
+      if (weight <= 1e-4) continue;
+      samples.push({
+        room: this.roomHints.get(entityId) ?? null,
+        level: rig.level,
+        position: rig.worldPosition,
+        color: rig.fillColor,
+        weight,
+      });
+    }
+    this.roomFill.apply(samples);
   }
 
   /* ---------------------------------------------------------------- lease */
