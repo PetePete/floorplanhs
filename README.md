@@ -1,13 +1,20 @@
 # Floorplan 3D Card
 
-An interactive 3D floorplan for your Home Assistant dashboard. Load a **Sweet
-Home 3D `.sh3d` file or a glTF/GLB model** of your own house — or start with the
-and the card turns it into a live view: lights that actually light the room they are in,
-cross-sections that slice the building open, camera presets you can fly between,
-and drag & drop placement of entities straight onto the geometry. It is one
-self-contained ES module, with no add-on, no backend and no external service:
-the card reads the `hass` object it is handed and writes its own configuration
-back into your dashboard YAML.
+An interactive 3D floorplan for your Home Assistant dashboard. Point it at a
+**Sweet Home 3D `.sh3d` file** of your own house and the card turns it into a
+live view: lights that actually light the room they are in, cross-sections that
+slice the building open, camera views you can fly between, and drag & drop
+placement of entities straight onto the geometry. It is one self-contained ES
+module, with no add-on, no backend and no external service: the card reads the
+`hass` object it is handed and writes its own configuration back into your
+dashboard YAML.
+
+> **Sweet Home 3D is the tested route.** Everything here was built and reviewed
+> against real `.sh3d` files. glTF/GLB loading is implemented and documented
+> below, but it has had no real-world use yet — treat that path as unproven.
+
+The card ships no house of its own: without a model it starts, finds nothing to
+draw and says so.
 
 This is a free, open-source alternative to the commercial 3D floorplan products
 sold as smart-home add-ons. Nothing phones home, nothing is rendered in a cloud,
@@ -40,9 +47,10 @@ and your model file never leaves your Home Assistant instance.
 
 ## Getting your house in
 
-Ranked by effort. Every step is optional — the card works with none of them.
+Two routes in, and they are not equals: the Sweet Home 3D one is what this card
+was built and tested against.
 
-### Sweet Home 3D (recommended)
+### Sweet Home 3D (recommended, and the only tested route)
 
 [Sweet Home 3D](https://www.sweethome3d.com/) is free, runs everywhere, and you
 can trace your own floor plan over a scanned drawing without any 3D skills.
@@ -76,8 +84,12 @@ current version.
 
 ### glTF / GLB
 
-Anything that exports glTF works — Blender, SketchUp, IFC/BIM via BlenderBIM or
-IfcOpenShell:
+**Untested.** The loader is written and the options below are real, but no
+actual export has been through it in anger. If you take this route, expect to
+find bugs — and please report them.
+
+Anything that exports glTF should work — Blender, SketchUp, IFC/BIM via
+BlenderBIM or IfcOpenShell:
 
 ```yaml
 model:

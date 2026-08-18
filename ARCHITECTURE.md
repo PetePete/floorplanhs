@@ -22,9 +22,8 @@ src/
     contracts.ts          interfaces between all subsystems (the contract)
     viewer.ts             owns the RenderContext, instantiates + wires subsystems
     core/                 renderer, render loop, resize, quality tiers
-    model/                glTF loading, Sweet Home 3D import, procedural demo
-                          house,
-                          sh3d/ Sweet Home 3D import, level detection
+    model/                model loading, placement, level detection
+                          sh3d/ Sweet Home 3D import — the tested path
     section/              clipping planes, level isolation, cut caps, handles
     camera/               orbit controls, preset capture + flight
     lighting/             HA light state -> room fill, ambient rig, light budget
@@ -75,7 +74,8 @@ user drag ──► interaction/placement ──► EditIntent ──► card �
 
 ## Coordinate & unit conventions
 
-- **Metres.** One world unit = 1 m. The demo house is built to real dimensions.
+- **Metres.** One world unit = 1 m. A Sweet Home 3D import keeps the dimensions
+  the file states.
 - **Y is up.** Floor of level 0 sits at y = 0.
 - **Model faces -Z** by default; `model.rotation` corrects imported models.
 - Levels are half-open ranges `[elevation, elevation + height)`.

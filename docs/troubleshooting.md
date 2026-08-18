@@ -2,9 +2,10 @@
 
 Symptom → cause → fix. Start with the two questions that resolve most reports:
 
-1. **Does `type: custom:floorplan-3d-card` with nothing else render the demo
-   house?** If yes, the card is installed correctly and the problem is your
-   model or your config. If no, it is installation or the browser.
+1. **Does `type: custom:floorplan-3d-card` with nothing else render a card
+   that says it has no model?** If yes, the card is installed correctly and the
+   problem is your model or your config. If no, it is installation or the
+   browser.
 2. **What does the browser console say?** F12 → Console. The card logs its
    failures with a `[floorplan-3d]` prefix and an actionable message.
 
