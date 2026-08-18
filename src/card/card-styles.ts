@@ -728,10 +728,20 @@ export const cardStyles = css`
   :host([data-layout='narrow']) .cube-column {
     --fp3d-cube-size: 72px;
   }
+  /*
+   * A sheet is a panel, not a tooltip: it runs the height of the viewport with
+   * the chrome's own inset as its margin, rather than floating half way down
+   * the side. A zero min-height is what lets the list inside it scroll instead of
+   * pushing the sheet past the bottom edge.
+   */
   .at-left {
     grid-area: left;
     justify-self: start;
-    align-self: center;
+    align-self: stretch;
+    display: flex;
+    align-items: stretch;
+    max-height: 100%;
+    min-height: 0;
   }
   .at-right {
     grid-area: right;

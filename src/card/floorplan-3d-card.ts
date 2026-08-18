@@ -1612,11 +1612,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .dark=${this.dark}
                 .levels=${this.levels}
                 .activeLevelId=${activeLevel}
-                .ghostAbove=${this.section.ghostAbove === true}
                 @fp3d-level-select=${(event: CustomEvent<{ levelId: string | null }>) =>
                   this.onLevelSelect(event.detail.levelId)}
-                @fp3d-ghost-above=${(event: CustomEvent<{ enabled: boolean }>) =>
-                  this.onSectionChange({ ...this.section, ghostAbove: event.detail.enabled }, false)}
               ></fp3d-level-selector>
             </div>`
           : nothing}
@@ -1693,7 +1690,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
             data-hass
             .dark=${this.dark}
             .showStats=${ui.showFps === true}
-            .levelName=${this.levelName(activeLevel)}
             .getFps=${() => this.viewer?.fps ?? 0}
           ></fp3d-hud>
         </div>

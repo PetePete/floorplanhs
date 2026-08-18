@@ -10,7 +10,6 @@
 import { css, html, nothing, type TemplateResult } from 'lit';
 import { property } from 'lit/decorators.js';
 import { defineFp, FpBaseElement } from '@/ui/base-element';
-import { icon } from '@/ui/icons';
 import type { LevelDefinition } from '@/types/config';
 
 @defineFp('fp3d-level-selector')
@@ -97,41 +96,14 @@ export class Fp3dLevelSelector extends FpBaseElement {
         display: none;
       }
 
-      .foot {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-top: 2px;
-        padding-top: 4px;
-        border-top: 1px solid var(--fp3d-divider);
-      }
 
-      .ghost-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        min-height: 36px;
-        border-radius: var(--fp3d-chrome-radius);
-        color: var(--fp3d-text-dim);
-        transition:
-          background-color var(--fp3d-fast) var(--fp3d-ease),
-          color var(--fp3d-fast) var(--fp3d-ease);
-      }
 
-      .ghost-btn:hover {
-        background: var(--fp3d-hover);
-      }
 
-      .ghost-btn[aria-pressed='true'] {
-        color: var(--fp3d-accent);
-      }
     `,
   ];
 
   @property({ attribute: false }) levels: LevelDefinition[] = [];
   @property({ type: String }) activeLevelId: string | null = null;
-  @property({ type: Boolean }) ghostAbove = false;
 
   /** Top storey first — a lift panel, not an array dump. */
   private ordered(): LevelDefinition[] {
@@ -178,17 +150,6 @@ export class Fp3dLevelSelector extends FpBaseElement {
             </button>
           `;
         })}
-        <div class="foot">
-          <button
-            class="ghost-btn"
-            aria-pressed=${this.ghostAbove ? 'true' : 'false'}
-            aria-label=${this.t('ui.section.ghost_above', 'Ghost levels above')}
-            title=${this.t('ui.section.ghost_above', 'Ghost levels above')}
-            @click=${() => this.emit('fp3d-ghost-above', { enabled: !this.ghostAbove })}
-          >
-            ${icon(this.ghostAbove ? 'eye' : 'eyeOff')}
-          </button>
-        </div>
       </div>
     `;
   }
