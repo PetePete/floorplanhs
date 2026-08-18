@@ -108,8 +108,6 @@ export class Viewer implements IViewer {
   private _pointer: Subsystem | null = null;
 
   private hass: HomeAssistant | null = null;
-  private prevSun: HassEntity | undefined = undefined;
-  private daylightApplied = false;
   private editMode = false;
   private mounted = false;
   private disposed = false;
@@ -601,17 +599,7 @@ export class Viewer implements IViewer {
 
   /** Push render settings that live inside subsystems rather than the core. */
   private pushRenderSettings(): void {
-    this.guard('lighting', this._lighting, (l) => {
-      if (!this.renderCfg.daylight) {
-        l.setDaylight(0, 0, false);
-        this.daylightApplied = false;
-        this.prevSun = undefined;
-      }
-    });
-    if (this.renderCfg.daylight && this.hass) {
-      this.daylightApplied = false;
-      this.syncDaylight(this.hass);
-    }
+    this.guard('lighting', this._lighting, (l) => l.setRenderConfig(this.renderCfg));
   }
 
   private pushCameraSettings(): void {
@@ -657,7 +645,6 @@ export class Viewer implements IViewer {
       changed = true;
     }
 
-    if (this.syncDaylight(hass)) changed = true;
     if (changed) this.core?.invalidate();
   }
 
@@ -684,18 +671,6 @@ export class Viewer implements IViewer {
     this.guard('entities', this._entities, (e) =>
       e.updateVisual(placed.entity, toEntityVisual(state, placed, hass)),
     );
-  }
-
-  private syncDaylight(hass: HomeAssistant): boolean {
-    if (!this.renderCfg.daylight) return false;
-    const sun = hass.states[this.renderCfg.daylightEntity];
-    if (this.daylightApplied && sun === this.prevSun) return false;
-    this.prevSun = sun;
-    this.daylightApplied = true;
-    const elevation = numberAttr(sun?.attributes.elevation, 35);
-    const azimuth = numberAttr(sun?.attributes.azimuth, 180);
-    this.guard('lighting', this._lighting, (l) => l.setDaylight(elevation, azimuth, true));
-    return true;
   }
 
   /* ------------------------------------------------------------ edit mode */
@@ -1136,7 +1111,6 @@ export class Viewer implements IViewer {
     this.prevStates.clear();
     this.failed.clear();
     this.hass = null;
-    this.prevSun = undefined;
     this.emitter.clear();
   }
 
@@ -1199,10 +1173,6 @@ function isLightLike(placed: PlacedEntity): boolean {
   if (placed.role) return placed.role === 'light';
   if (placed.light) return true;
   return placed.entity.startsWith('light.');
-}
-
-function numberAttr(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
 /**

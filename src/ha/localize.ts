@@ -47,6 +47,7 @@ const EN = {
   'ui.section.handles': 'Show handles',
 
   /* -------------------------------------------------------- preset dialog */
+  'ui.preset.overview': 'Overview',
   'ui.preset.title': 'Camera views',
   'ui.preset.save_current': 'Save current view',
   'ui.preset.name': 'Name',

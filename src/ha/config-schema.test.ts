@@ -402,23 +402,17 @@ describe('migrateConfig', () => {
 /* ------------------------------------------------------------------- stub */
 
 describe('stubConfig', () => {
-  it('places real lights from the install into a starter config', () => {
-    const hass = createMockHass();
-    const config = stubConfig(hass);
+  it('invents nothing about a house it has not seen', () => {
+    // It used to insert two presets, "Ground floor" and "Upper floor", pinned to
+    // level ids `ground` and `upper`, plus a few of the user's lights at
+    // coordinates from a demo house. Against a real model those ids match
+    // nothing, and the default preset hid every storey: the card opened empty.
+    const config = stubConfig(createMockHass());
 
-    // No model: the card ships no house, so a new card starts empty and says so.
-    expect(config.model).toBeUndefined();
-    expect(config.presets).toHaveLength(2);
-    expect(config.presets?.some((preset) => preset.default)).toBe(true);
-    expect(config.presets?.[1].orthographic).toBe(true);
-
-    expect(config.entities?.length).toBeGreaterThan(0);
-    expect(config.entities?.length).toBeLessThanOrEqual(4);
-    for (const placed of config.entities ?? []) {
-      expect(placed.entity.startsWith('light.')).toBe(true);
-      expect(hass.states[placed.entity].state).not.toBe('unavailable');
-      expect(placed.position).toHaveLength(3);
-    }
+    expect(config.model, 'the card ships no house').toBeUndefined();
+    expect(config.presets, 'views are derived from the storeys found').toBeUndefined();
+    expect(config.entities, 'nowhere to put an entity yet').toBeUndefined();
+    expect(config.type).toBe('custom:floorplan-3d-card');
   });
 
   it('produces a config that survives its own validator', () => {
@@ -430,9 +424,7 @@ describe('stubConfig', () => {
     const empty = { states: {}, entities: {}, areas: {}, devices: {} } as unknown as Parameters<
       typeof stubConfig
     >[0];
-    const config = stubConfig(empty);
-    expect(config.entities).toEqual([]);
-    expect(() => validateConfig(config)).not.toThrow();
+    expect(() => validateConfig(stubConfig(empty))).not.toThrow();
   });
 });
 

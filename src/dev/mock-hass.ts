@@ -224,18 +224,6 @@ const SEEDS: EntitySeed[] = [
     area: 'hallway',
     attributes: { friendly_name: 'Front door lock' },
   },
-
-  // The sun drives the daylight rig.
-  {
-    entity_id: 'sun.sun',
-    state: 'above_horizon',
-    attributes: {
-      friendly_name: 'Sun',
-      elevation: 34.2,
-      azimuth: 196.5,
-      rising: false,
-    },
-  },
 ];
 
 function nowIso(): string {
@@ -269,7 +257,6 @@ export class MockHass implements HomeAssistant {
   };
 
   private listeners = new Set<Listener>();
-  private sunTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     for (const area of AREAS) this.areas[area.area_id] = area;
@@ -409,25 +396,6 @@ export class MockHass implements HomeAssistant {
     return key.split('.').pop() ?? key;
   }
 
-  /** Advance the sun so the daylight rig can be reviewed across a whole day. */
-  startSunCycle(secondsPerDay = 60): void {
-    this.stopSunCycle();
-    let t = 0.35;
-    this.sunTimer = setInterval(() => {
-      t = (t + 1 / (secondsPerDay * 10)) % 1;
-      const elevation = Math.sin(t * Math.PI * 2 - Math.PI / 2) * 62;
-      const azimuth = (t * 360 + 180) % 360;
-      this.commit('sun.sun', {
-        state: elevation > 0 ? 'above_horizon' : 'below_horizon',
-        attributes: { elevation, azimuth },
-      });
-    }, 100);
-  }
-
-  stopSunCycle(): void {
-    if (this.sunTimer) clearInterval(this.sunTimer);
-    this.sunTimer = null;
-  }
 
   /** Randomly flip a few lights, to eyeball the on/off transitions. */
   startChaos(intervalMs = 2500): () => void {

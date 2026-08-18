@@ -148,13 +148,20 @@ Minimum Home Assistant version: **2024.4.0**.
 
 ## Quick start
 
-Zero configuration — this renders the built-in demo house:
+The card ships no house, so it needs one line to be worth looking at — point it
+at the `.sh3d` you copied into `config/www/`:
 
 ```yaml
 type: custom:floorplan-3d-card
+model:
+  url: /local/haus.sh3d?v=1
 ```
 
-A realistic setup with your own model, levels, presets and placed lights:
+Storeys, rooms and openings come out of the file. The card offers an
+**Overview** of the whole building plus one view per storey it finds, so there
+is nothing to declare before you can look around.
+
+A fuller setup with levels, presets and placed lights:
 
 ```yaml
 type: custom:floorplan-3d-card
@@ -231,8 +238,6 @@ entities:
       action: toggle
 render:
   quality: auto
-  daylight: true
-  daylightEntity: sun.sun
 ui:
   height: 560px
   showLevelSelector: true
@@ -342,7 +347,7 @@ a different one there would be worse than the inconsistency.
 | --- | --- | --- | --- |
 | `type` | string | — | Required. `custom:floorplan-3d-card`. |
 | `title` | string | — | Optional heading rendered above the view. |
-| `model` | [`ModelConfig`](#model) | demo house | Where the geometry comes from and how it is placed. |
+| `model` | [`ModelConfig`](#model) | — | Where the geometry comes from and how it is placed. Without it the card renders nothing and says so. |
 | `camera` | [`CameraConfig`](#camera) | see below | Orbit and transition behaviour. |
 | `presets` | [`CameraPreset[]`](#presets-1) | `[]` | Named viewpoints. |
 | `tour` | [`TourConfig`](#tour) | off | Cycle through the saved views automatically. |
@@ -356,8 +361,7 @@ a different one there would be worse than the inconsistency.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `url` | string | — | `/local/house.sh3d` (Sweet Home 3D) or `/local/house.glb` (glTF/GLB). Absent → the procedural demo house. |
-| `demo` | boolean | `false` | Force the demo house even when `url` is set. |
+| `url` | string | — | `/local/house.sh3d` (Sweet Home 3D) or `/local/house.glb` (glTF/GLB). The bytes decide the format, so a `.sh3d` under the wrong extension still loads. |
 | `scale` | number | `1` | Uniform scale. 1 world unit = 1 metre. |
 | `rotation` | `[x, y, z]` | `[0, 0, 0]` | Degrees, applied XYZ. Z-up exports usually need `[-90, 0, 0]`. |
 | `offset` | `[x, y, z]` | `[0, 0, 0]` | Metres. Use it to put the ground floor at y = 0. |
@@ -533,8 +537,6 @@ tour:
 | `toneMapping` | `aces` \| `linear` \| `none` | `aces` | The filmic curve, and what the card is tuned against. `linear` applies `exposure` and nothing else, so a surface comes out exactly the colour you gave it — flatter, and a fair choice for a pure line drawing. |
 | `exposure` | number | `1.0` | Brightness multiplier. Ignored by `toneMapping: none`. |
 | `ambientIntensity` | number | `0.34` | Base fill so an all-lights-off house is not pitch black. |
-| `daylight` | boolean | `false` | Sun and sky rig. Off by default so the card looks the same at 3am as at noon and the lamps stay the only thing that changes. |
-| `daylightEntity` | string | `sun.sun` | Entity whose elevation/azimuth drives the sun. |
 | `background` | string | `transparent` | `transparent` lets the card show through; `light` / `dark` pin a neutral backdrop against the theme; `system` follows the theme but stays opaque. Any CSS colour also works. |
 | `maxPixelRatio` | number | `2` | Device pixel-ratio cap. Set to `1` on tablets. |
 | `onDemand` | boolean | `true` | Idle the render loop when nothing changed. |

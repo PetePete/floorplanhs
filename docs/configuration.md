@@ -16,9 +16,9 @@ editor's **Show YAML** toggle prints exactly what it will write.
 type: custom:floorplan-3d-card
 ```
 
-No model, no entities, no camera: the card builds the procedural demo house
-(levels `basement`, `ground`, `upper`), frames it, and starts rendering. Use it
-to confirm the resource is loaded before you debug your own model.
+No model, no entities, no camera: the card starts, finds nothing to draw and
+says so. That is the quickest way to confirm the resource is loaded before you
+debug your own model — add `model.url` and the house appears.
 
 ---
 
@@ -36,8 +36,8 @@ model:
   dracoPath: /local/draco/
 ```
 
-- `url` — a Sweet Home 3D save (`.sh3d`) or a glTF/glb mesh. Absent (or
-  `demo: true`) means the demo house. `config/www/x.sh3d` is served as
+- `url` — a Sweet Home 3D save (`.sh3d`) or a glTF/glb mesh. Without it there
+  is nothing to draw. `config/www/x.sh3d` is served as
   `/local/x.sh3d`; bump `?v=` after every re-save or the browser will serve a
   stale file. The bytes decide the format, so a `.sh3d` under the wrong
   extension still loads.
@@ -422,8 +422,6 @@ render:
   toneMapping: aces
   exposure: 1.0
   ambientIntensity: 0.28
-  daylight: true
-  daylightEntity: sun.sun
   background: ""
   maxPixelRatio: 2
   onDemand: true
@@ -433,9 +431,6 @@ render:
 - `quality` picks a tier: pixel ratio and antialiasing. `auto` decides from the
   device. It never reduces geometry, and it never changes how the card looks —
   only how finely it is sampled.
-- `daylight` adds a sun/sky rig driven by `daylightEntity`'s `elevation` and
-  `azimuth` attributes. Point it at `sun.sun` (the default) and the model gets
-  darker in the evening on its own.
 - `ambientIntensity` is the base fill that keeps an all-lights-off house
   readable. Raise it if your interiors are too dark; lower it for drama.
 - `exposure` is the brightness multiplier — the correct knob for "everything is

@@ -162,7 +162,7 @@ export function renderModelSection(ctx: EditorContext): TemplateResult {
         ctx.t('editor.model', 'Model'),
         ctx.t(
           'editor.model_desc',
-          'The card renders a built-in demo house until you point it at your own glTF/GLB file.',
+          'Point the card at your Sweet Home 3D save or glTF/GLB file; it ships no house of its own.',
         ),
       )}
       ${textField({

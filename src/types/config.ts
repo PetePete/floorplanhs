@@ -341,10 +341,7 @@ export interface RenderConfig {
   exposure?: number;
   /** Base ambient level so an all-lights-off house is not pitch black. */
   ambientIntensity?: number;
-  /** Sun/sky, optionally driven by sun.sun. */
-  daylight?: boolean;
-  daylightEntity?: string;
-  /**
+    /**
    * `transparent` (default) lets the dashboard card show through. `light` and
    * `dark` pin a neutral backdrop regardless of the theme — needed with the
    * mono palettes, which are otherwise invisible against a same-polarity
@@ -524,11 +521,6 @@ export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
   quality: 'auto',
   exposure: 1.0,
   ambientIntensity: 0.34,
-  // Off by default: a floorplan should look the same at 3am as at noon, so the
-  // lamps stay the thing that changes. Set `daylight: true` to let sun.sun
-  // drive a sun/sky rig instead.
-  daylight: false,
-  daylightEntity: 'sun.sun',
   background: '',
   maxPixelRatio: 2,
   onDemand: true,

@@ -93,6 +93,8 @@ const LOCAL_VIEWS_PREFIX = 'floorplan-3d-card:views:';
 
 /** Marks a view generated from a detected storey rather than saved by a user. */
 const LEVEL_PRESET_PREFIX = 'level:';
+/** Generated view of the whole building; see `overviewPreset`. */
+const OVERVIEW_PRESET_ID = 'overview:all';
 
 /**
  * True isometric: the camera looks along (1, 1, 1), so the three axes are
@@ -1034,7 +1036,50 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   private allPresets(): CameraPreset[] {
-    return [...(this.config?.presets ?? []), ...this.localPresets, ...this.levelPresets()];
+    return [
+      ...(this.config?.presets ?? []),
+      ...this.localPresets,
+      ...this.overviewPreset(),
+      ...this.levelPresets(),
+    ];
+  }
+
+  /**
+   * The whole house, as the first thing in the bar.
+   *
+   * Generated like the storey views and for the same reason: it is derived from
+   * the model, so it is right about a house nobody has configured yet — and
+   * without it the bar offers every storey and no way back to the building.
+   * A saved view of your own sits earlier in the bar and takes over the job.
+   */
+  private overviewPreset(): CameraPreset[] {
+    if (this.config?.ui?.levelPresets === false) return [];
+    if ((this.config?.presets ?? []).length > 0) return [];
+
+    const bounds = this.bounds;
+    const spanX = bounds ? bounds.max[0] - bounds.min[0] : 12;
+    const spanY = bounds ? bounds.max[1] - bounds.min[1] : 6;
+    const spanZ = bounds ? bounds.max[2] - bounds.min[2] : 10;
+    const centre: Vec3 = bounds
+      ? [
+          (bounds.max[0] + bounds.min[0]) / 2,
+          (bounds.max[1] + bounds.min[1]) / 2,
+          (bounds.max[2] + bounds.min[2]) / 2,
+        ]
+      : [0, 1.6, 0];
+    const reach = Math.max(spanX, spanY, spanZ, 6) * 1.9;
+
+    return [
+      {
+        id: OVERVIEW_PRESET_ID,
+        name: this.t('ui.preset.overview', 'Overview'),
+        icon: 'mdi:home',
+        position: [centre[0] + reach * ISO, centre[1] + reach * ISO, centre[2] + reach * ISO],
+        target: centre,
+        visibleLevels: null,
+        section: { ...JSON.parse(JSON.stringify(DEFAULT_SECTION_STATE)), mode: 'none' as const },
+      },
+    ];
   }
 
   /**
@@ -1092,7 +1137,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   private isLevelPreset(presetId: string): boolean {
-    return presetId.startsWith(LEVEL_PRESET_PREFIX);
+    return presetId.startsWith(LEVEL_PRESET_PREFIX) || presetId === OVERVIEW_PRESET_ID;
   }
 
   /**

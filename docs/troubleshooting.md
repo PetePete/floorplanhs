@@ -152,8 +152,6 @@ Work down this list:
 
 - Raise `render.exposure` (try `1.3`) before touching individual lights.
 - Raise `render.ambientIntensity` (try `0.4`).
-- Check `render.daylight: true` and that `daylightEntity` (default `sun.sun`)
-  exists — at night the sun rig contributes nothing on purpose.
 - Opaque windows block all indoor light spill. Add the pane materials to
   `model.glassNodes`.
 - A `low` quality tier disables post-processing; the image is flatter there.
@@ -239,10 +237,6 @@ the second save overwrites the first. Close one.
 **Cause C — you edited YAML while the visual editor was open.** Switch fully
 back to the visual editor (or fully to YAML) before continuing; mixing the two
 in one dialog session can lose the last change.
-
-**Cause D — the model URL was cleared by switching source.** Choosing "Built-in
-demo house" in the Model tab sets `model.demo: true`; it does not delete your
-`url`. Switch back to "Own model file" and the URL is still there.
 
 Before a big edit, use **Copy config as YAML** in the Advanced tab and paste it
 somewhere safe.

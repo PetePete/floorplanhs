@@ -7,9 +7,10 @@ The card takes your house from any of three places:
 | **Sweet Home 3D** | `url: /local/house.sh3d` | The easiest route by a wide margin. Draw the house, save, point the card at the save file. |
 | **glTF 2.0** | `url: /local/house.glb` | Blender, SketchUp, IFC — anything that can export a mesh. Most control, most work. |
 
-If you just want to see the card work, skip all of this: with no `model` at all
-the card builds a procedural demo house (three storeys — `basement`, `ground`,
-`upper` — 12.9 × 10 m, 2.9 m storey height) entirely in code.
+There is no house to fall back to: with no `model` the card starts, finds
+nothing to draw and says so. The shortest route to something on screen is a
+Sweet Home 3D save — twenty minutes of tracing over a scan beats an evening in
+Blender.
 
 Sections 2 onward are about the glTF route. If you use Sweet Home 3D you can
 stop after section 1.
@@ -239,8 +240,6 @@ Budgets that keep a wall tablet happy:
 | Draw calls (≈ material/mesh splits) | < 150 | ~400 |
 | Textures | 1–2 k px, few of them | 4 k px |
 | File size | < 5 MB | ~20 MB |
-
-(The built-in demo house is 4 646 triangles and 94 draw calls — you have room.)
 
 **In Blender, before exporting:**
 

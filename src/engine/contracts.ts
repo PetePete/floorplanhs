@@ -11,6 +11,7 @@ import type {
   Floorplan3dCardConfig,
   LevelDefinition,
   PlacedEntity,
+  RenderConfig,
   SectionState,
   Vec3,
 } from '@/types/config';
@@ -81,8 +82,6 @@ export interface LoadedModel {
   nodes: Map<string, THREE.Object3D>;
   /** Meshes that should receive light and shadows. */
   receivers: THREE.Mesh[];
-  /** True when the procedural demo house was used. */
-  isDemo: boolean;
 }
 
 export interface ModelLoadProgress {
@@ -189,9 +188,9 @@ export interface LightSample {
 }
 
 export interface ILightingSystem extends Subsystem {
-  /** Ambient/sun rig, driven by sun.sun when configured. */
-  setDaylight(elevation: number, azimuth: number, enabled: boolean): void;
-  /** Create or update the three.js light for a placed entity. */
+  /** Re-apply the `render` block: exposure, ambient level, room-fill mode. */
+  setRenderConfig(render: RenderConfig): void;
+    /** Create or update the three.js light for a placed entity. */
   syncLight(placed: PlacedEntity, sample: LightSample): void;
   removeLight(entityId: string): void;
   /** Called when a placed light is dragged. */

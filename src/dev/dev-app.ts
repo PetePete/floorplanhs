@@ -108,7 +108,7 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
     camera: { fov: 45, transitionDuration: 1.1 },
     // Opaque, and deliberately so: the drawing reads best on a ground darker
     // than any dashboard card.
-    render: { quality: 'high', daylight: false, background: 'dark' },
+    render: { quality: 'high', background: 'dark' },
     ui: {
       height: '100%',
       showToolbar: true,

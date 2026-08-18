@@ -1,11 +1,11 @@
 /**
- * Owns the house: loads it (a Sweet Home 3D .sh3d, a glTF mesh, or the
- * procedural demo), normalises its placement, works out its storeys and
- * answers every "what is where" question the rest of the engine asks.
+ * Owns the house: loads it (a Sweet Home 3D .sh3d or a glTF mesh), normalises
+ * its placement, works out its storeys and answers every "what is where"
+ * question the rest of the engine asks.
  *
- * Source precedence is `demo: true` > `url`, and any failure along the way
- * falls through to the demo house with an actionable message rather than
- * leaving the card blank.
+ * There is no house of our own to fall back to, so a failure is reported rather
+ * than papered over: an actionable message beats a building the user never
+ * asked for.
  *
  * Loading deliberately does the download itself instead of handing the URL to
  * GLTFLoader. Two reasons: we get real `loaded`/`total` byte counts for the
@@ -164,7 +164,7 @@ export class ModelManager implements IModelManager {
 
     // Recentre imported models only: XZ centre on the origin, lowest point on
     // y = 0, which is what makes orbiting an arbitrary export feel right.
-    // Procedurally built houses — the demo one and Sweet Home 3D homes — are
+    // Procedurally built houses — Sweet Home 3D homes — are
     // authored around their own origin with a basement below zero, and
     // ARCHITECTURE.md pins level 0's floor to y = 0. Moving them would break
     // every coordinate the user has already placed against them.
@@ -209,7 +209,7 @@ export class ModelManager implements IModelManager {
     const receivers = this.applyShadowsAndGlass(root, config?.glassNodes);
 
     this.root = root;
-    this.loaded = { root, bounds, levels, nodes, receivers, isDemo: false };
+    this.loaded = { root, bounds, levels, nodes, receivers };
     this.visibleLevels = null;
     this.pickDirty = true;
     if (!this.ceilingsVisible) {
@@ -266,7 +266,27 @@ export class ModelManager implements IModelManager {
   }
 
   setVisibleLevels(levelIds: string[] | null): void {
-    const wanted = levelIds && levelIds.length > 0 ? new Set(levelIds) : null;
+    let wanted = levelIds && levelIds.length > 0 ? new Set(levelIds) : null;
+
+    // A view that names storeys this model does not have hides the building
+    // instead of isolating part of it — an empty card and nothing to explain it.
+    // A stale saved view is the usual way there, or a config written against a
+    // different house. Keep whatever matches; if nothing does, show everything.
+    if (wanted) {
+      const known = new Set(this.levelNodes.keys());
+      const matched = [...wanted].filter((id) => known.has(id));
+      if (matched.length === 0) {
+        if (known.size > 0) {
+          console.warn(
+            `[floorplan-3d] no storey matches ${[...wanted].join(', ')}; showing all of them.`,
+          );
+        }
+        wanted = null;
+      } else if (matched.length !== wanted.size) {
+        wanted = new Set(matched);
+      }
+    }
+
     this.visibleLevels = wanted ? [...wanted] : null;
 
     // Precomputed at load time — this must stay a handful of writes, because

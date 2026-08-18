@@ -19,7 +19,7 @@ import type {
   RenderContext,
 } from '@/engine/contracts';
 import { LightRig } from '@/engine/lighting/light-rig';
-import { DaylightRig } from '@/engine/lighting/daylight';
+import { AmbientRig } from '@/engine/lighting/ambient-rig';
 import { LightBudget, type LightCandidate } from '@/engine/lighting/light-budget';
 import { RoomFill, type RoomFillLight, type RoomFillSource } from '@/engine/lighting/room-fill';
 
@@ -35,7 +35,7 @@ export class LightingSystem implements ILightingSystem {
   private readonly root = new THREE.Group();
   private readonly rigs = new Map<string, LightRig>();
   private readonly budget = new LightBudget();
-  private readonly daylightRig: DaylightRig;
+  private readonly ambientRig: AmbientRig;
   private readonly roomFill = new RoomFill();
   /** Explicit `entities[].room` overrides, by entity id. */
   private readonly roomHints = new Map<string, string | null>();
@@ -57,7 +57,6 @@ export class LightingSystem implements ILightingSystem {
   private visibleLevels: Set<string> | null = null;
 
   private releaseLease: (() => void) | null = null;
-  private daylightSettled = false;
   private modelChildCount = -1;
   private disposed = false;
 
@@ -66,8 +65,8 @@ export class LightingSystem implements ILightingSystem {
     this.roomFill.setEnabled(this.renderCfg.lightMode === 'room');
     this.roomFill.setStrength(this.renderCfg.roomFillStrength);
     this.root.name = 'lighting';
-    this.daylightRig = new DaylightRig({
-      ambientIntensity: this.renderCfg.ambientIntensity,
+    this.ambientRig = new AmbientRig({
+      intensity: this.renderCfg.ambientIntensity,
       environment: true,
     });
   }
@@ -81,8 +80,7 @@ export class LightingSystem implements ILightingSystem {
 
     this.budget.setQuality(this.tier);
 
-    this.daylightRig.setQuality(this.tier);
-    this.daylightRig.init(ctx);
+    this.ambientRig.init(ctx);
 
     for (const [entityId, entry] of this.pending) {
       this.applyLight(entityId, entry.placed, entry.sample);
@@ -109,27 +107,13 @@ export class LightingSystem implements ILightingSystem {
     this.roomHints.clear();
     this.fillSamples.length = 0;
 
-    this.daylightRig.dispose();
+    this.ambientRig.dispose();
     this.root.parent?.remove(this.root);
     this.root.clear();
     this.ctx = null;
   }
 
   /* --------------------------------------------------------------- inputs */
-
-  setDaylight(elevation: number, azimuth: number, enabled: boolean): void {
-    const changed = this.daylightRig.setDaylight(elevation, azimuth, enabled);
-    if (!changed) return;
-    // The very first daylight push lands during mount; snapping avoids a 1.5 s
-    // sunrise every time the card is added to a dashboard.
-    if (!this.daylightSettled) {
-      this.daylightSettled = true;
-      this.daylightRig.settle();
-    } else {
-      this.takeLease();
-    }
-    this.ctx?.invalidate();
-  }
 
   syncLight(placed: PlacedEntity, sample: LightSample): void {
     const entityId = placed.entity;
@@ -216,11 +200,11 @@ export class LightingSystem implements ILightingSystem {
 
   /* ------------------------------------------------- optional wiring (extra) */
 
-  /** Re-apply a changed render block (exposure/ambient/daylight flag). */
+  /** Re-apply a changed render block (exposure, ambient level). */
   setRenderConfig(render: RenderConfig): void {
     const wasRoomFill = this.roomFillActive;
     this.renderCfg = { ...DEFAULT_RENDER_CONFIG, ...render };
-    this.daylightRig.setAmbientIntensity(this.renderCfg.ambientIntensity);
+    this.ambientRig.setAmbientIntensity(this.renderCfg.ambientIntensity);
 
     this.roomFill.setEnabled(this.roomFillActive);
     this.roomFill.setStrength(this.renderCfg.roomFillStrength);
@@ -286,21 +270,12 @@ export class LightingSystem implements ILightingSystem {
     this.ctx?.invalidate();
   }
 
-  /** Fit the sun rig to the house. */
-  setModelBounds(bounds: THREE.Box3): void {
-    this.daylightRig.setBounds(bounds);
-    this.ctx?.invalidate();
-  }
-
   /** Hard cap on simultaneously active lights; null restores the tier default. */
   setMaxLights(max: number | null): void {
     this.budget.setMaxLights(max);
     this.ctx?.invalidate();
   }
 
-  get daylight(): DaylightRig {
-    return this.daylightRig;
-  }
 
   /* --------------------------------------------------------------- update */
 
@@ -310,14 +285,13 @@ export class LightingSystem implements ILightingSystem {
     if (ctx.quality !== this.tier) {
       this.tier = ctx.quality;
       this.budget.setQuality(this.tier);
-      this.daylightRig.setQuality(this.tier);
       for (const rig of this.rigs.values()) rig.setQuality(this.tier);
       this.budget.markDirty();
     }
 
     this.refreshModelBounds(ctx);
 
-    let animating = this.daylightRig.update(dt);
+    let animating = false;
 
     const cameraPosition = ctx.activeCamera.position;
     if (this.rigs.size > 0 && this.budget.shouldEvaluate(now(), cameraPosition)) {
@@ -349,7 +323,6 @@ export class LightingSystem implements ILightingSystem {
     if (count === 0 || count === this.modelChildCount) return;
     this.modelChildCount = count;
     scratchBox.setFromObject(ctx.modelRoot);
-    if (!scratchBox.isEmpty()) this.daylightRig.setBounds(scratchBox);
   }
 
   private evaluateBudget(cameraPosition: THREE.Vector3): void {

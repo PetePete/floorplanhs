@@ -1,5 +1,5 @@
 /**
- * The shared material palette. Every mesh in the procedural demo house — and
+ * The shared material palette. Every mesh the card builds itself — and
  * every override the model manager applies to an imported glTF — draws from
  * this small set, so the whole building costs ~10 materials instead of one per
  * mesh. That matters twice over: shader programs are the expensive part of a

@@ -10,7 +10,6 @@ import {
 } from '@/types/config';
 import {
   colorField,
-  entityField,
   numberField,
   sectionTitle,
   selectField,
@@ -41,7 +40,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
   const ui = uiOf(ctx);
   const d = DEFAULT_RENDER_CONFIG;
   const du = DEFAULT_UI_CONFIG;
-  const daylightOn = r.daylight ?? d.daylight;
 
   return html`
     <div class="section">
@@ -118,26 +116,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
         ),
         onChange: (v) => patchRender(ctx, { ambientIntensity: v }),
       })}
-      ${switchRow({
-        label: ctx.t('editor.daylight', 'Daylight'),
-        checked: daylightOn,
-        helper: ctx.t('editor.daylight_help', 'Sun and sky rig, driven by a sun entity.'),
-        onChange: (v) => patchRender(ctx, { daylight: v }, true),
-      })}
-      ${daylightOn
-        ? entityField({
-            label: ctx.t('editor.daylight_entity', 'Daylight entity'),
-            value: r.daylightEntity ?? d.daylightEntity,
-            hass: ctx.hass,
-            includeDomains: ['sun'],
-            suggestions: ctx.entities({ domain: 'sun' }),
-            helper: ctx.t(
-              'editor.daylight_entity_help',
-              'Uses the elevation and azimuth attributes of sun.sun.',
-            ),
-            onChange: (v) => patchRender(ctx, { daylightEntity: v || undefined }, true),
-          })
-        : ''}
       ${colorField({
         label: ctx.t('editor.background', 'Background'),
         value: r.background ?? '',

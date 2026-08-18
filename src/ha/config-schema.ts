@@ -41,7 +41,6 @@ import {
 import type { HomeAssistant } from '@/types/hass';
 import { parseCssColor } from '@/util/color';
 import { slugify, vRound } from '@/util/math';
-import { listEntitiesByDomain } from '@/ha/registry';
 
 /** Bumped whenever the persisted shape changes; see `MIGRATIONS`. */
 export const CURRENT_CONFIG_VERSION = 1;
@@ -782,7 +781,6 @@ const RENDER_ALIASES: Record<string, string> = {
   tone_mapping: 'toneMapping',
   room_fill_strength: 'roomFillStrength',
   ambient_intensity: 'ambientIntensity',
-  daylight_entity: 'daylightEntity',
   max_pixel_ratio: 'maxPixelRatio',
   on_demand: 'onDemand',
   fps_limit: 'fpsLimit',
@@ -809,18 +807,10 @@ function readRender(raw: unknown, path: string): RenderConfig {
   assign('quality', readEnum(obj, 'quality', path, ['low', 'medium', 'high', 'auto'] as const));
   assign('exposure', readNumber(obj, 'exposure', path, { min: 0.05, max: 10 }));
   assign('ambientIntensity', readNumber(obj, 'ambientIntensity', path, { min: 0, max: 10 }));
-  assign('daylight', readBoolean(obj, 'daylight', path));
   assign('maxPixelRatio', readNumber(obj, 'maxPixelRatio', path, { min: 0.5, max: 4 }));
   assign('onDemand', readBoolean(obj, 'onDemand', path));
   assign('fpsLimit', readNumber(obj, 'fpsLimit', path, { min: 1, max: 240 }));
 
-  const daylightEntity = readString(obj, 'daylightEntity', path);
-  if (daylightEntity) {
-    if (!ENTITY_ID_RE.test(daylightEntity)) {
-      return fail(path, `"daylightEntity" must be an entity id like "sun.sun" (got "${daylightEntity}")`);
-    }
-    render.daylightEntity = daylightEntity;
-  }
   const background = readColor(obj, 'background', path);
   if (background) render.background = background;
 
@@ -1153,66 +1143,21 @@ export function validateConfig(raw: unknown): Floorplan3dCardConfig {
 
 /* ------------------------------------------------------------------- stub */
 
-/** Room centres of the built-in demo house, ceiling height on the ground floor. */
-const STUB_POSITIONS: Vec3[] = [
-  [-2.6, 2.35, -2.36],
-  [3.2, 2.35, -2.36],
-  [-4.1, 2.35, 1.96],
-  [-0.6, 2.35, 1.96],
-];
-
 /**
- * What the HA card picker previews. Real lights from the user's own install,
- * already placed in the demo house — the difference between "interesting" and
- * "an empty grey box" on first click.
+ * What the HA card picker inserts. Nothing but the type and a height.
+ *
+ * It used to carry two presets — "Ground floor" and "Upper floor" — pinned to
+ * level ids `ground` and `upper`, and a handful of the user's lights parked at
+ * coordinates from a demo house that no longer exists. Against anyone's real
+ * model those ids match nothing: the default preset made every storey invisible,
+ * so the card opened on an empty view and named two storeys the building does
+ * not have. The card derives a view per *detected* storey by itself, which is
+ * the only version of this that can be right about a house it has not seen yet.
  */
-export function stubConfig(hass: HomeAssistant): Floorplan3dCardConfig {
-  const lights = listEntitiesByDomain(hass, ['light'])
-    .filter((option) => hass?.states?.[option.entity_id]?.state !== 'unavailable')
-    .slice(0, STUB_POSITIONS.length);
-
-  const entities: PlacedEntity[] = lights.map((option, index) => ({
-    entity: option.entity_id,
-    position: STUB_POSITIONS[index],
-    level: 'ground',
-  }));
-
+export function stubConfig(_hass: HomeAssistant): Floorplan3dCardConfig {
   return {
     type: `custom:${CARD_TYPE}`,
     config_version: CURRENT_CONFIG_VERSION,
-    presets: [
-      // The card opens on the plan, not on a 3/4 exterior render: this is a
-      // floorplan first and a 3D model second. The outside of the house tells
-      // you nothing about your home; the rooms and their lights do.
-      // Isometric: the camera looks along (1, 1, 1) with an orthographic
-      // projection, so all three axes foreshorten equally. Unlike a straight
-      // plan it shows the height of a storey as well as its layout, which is
-      // what makes a lit lamp read as being *in* a room.
-      {
-        id: 'ground_floor',
-        name: 'Ground floor',
-        icon: 'mdi:home-floor-g',
-        position: [16, 16, 16],
-        target: [0, 1.2, 0],
-        orthographic: true,
-        visibleLevels: ['ground'],
-        section: { ...clone(DEFAULT_SECTION_STATE), mode: 'level', levelId: 'ground' },
-        default: true,
-        inTour: true,
-      },
-      {
-        id: 'upper_floor',
-        name: 'Upper floor',
-        icon: 'mdi:home-floor-1',
-        position: [16, 18.9, 16],
-        target: [0, 4.1, 0],
-        orthographic: true,
-        visibleLevels: ['upper'],
-        section: { ...clone(DEFAULT_SECTION_STATE), mode: 'level', levelId: 'upper' },
-        inTour: true,
-      },
-    ],
-    entities,
     ui: { height: '520px' },
   };
 }

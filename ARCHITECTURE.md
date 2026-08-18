@@ -27,7 +27,7 @@ src/
                           sh3d/ Sweet Home 3D import, level detection
     section/              clipping planes, level isolation, cut caps, handles
     camera/               orbit controls, preset capture + flight
-    lighting/             HA light state -> room fill, daylight rig, light budget
+    lighting/             HA light state -> room fill, ambient rig, light budget
     entities/             markers/hotspots, sprites, hover + pick
     interaction/          pointer routing, drag & drop placement, gizmos
   ha/                     Home Assistant glue (state mapping, actions, registry)

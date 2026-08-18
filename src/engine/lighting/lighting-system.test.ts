@@ -121,7 +121,7 @@ describe('room fill, end to end', () => {
         realLights += 1;
       }
     });
-    // The daylight rig owns whatever is left; the lamp must not add a point
+    // The ambient rig owns whatever is left; the lamp must not add a point
     // light on top of the fill, or the hotspot is back.
     expect(realLights).toBeLessThanOrEqual(2);
     system.dispose();
