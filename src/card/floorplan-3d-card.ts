@@ -359,7 +359,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       }
     }
     if (changed.has('layout')) this.setAttribute('data-layout', this.layout);
-    if (changed.has('config') || changed.has('isPanel')) this.applyHostSizing();
+    // Every update, not just when `config` or `isPanel` changed. Home Assistant
+    // sets `isPanel` on its own schedule — sometimes before the module that
+    // defines this element has even loaded — and a card that missed the memo
+    // stays at its configured height in a view meant to be filled. Writing four
+    // style properties is not worth the bookkeeping to avoid.
+    this.applyHostSizing();
     this.placeViewCube();
     // setConfig can arrive after the first render (HA does this when a card is
     // created empty and configured afterwards); firstUpdated has been and gone.
@@ -383,9 +388,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private observeSize(): void {
     if (typeof ResizeObserver === 'undefined') return;
     this.resizeObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
+      const box = entries[0]?.contentRect;
+      const width = box?.width ?? 0;
       if (width <= 0) return;
       this.layout = width < NARROW_PX ? 'narrow' : width < MEDIUM_PX ? 'medium' : 'wide';
+      // The renderer watches its own container, but the card is the element
+      // whose box the dashboard changes — a view switching to panel, a sidebar
+      // folding away. Telling the viewer here costs a measurement and closes
+      // the gap where the card had grown and the canvas had not noticed.
+      this.viewer?.resize();
     });
     this.resizeObserver.observe(this);
   }
@@ -1036,12 +1047,17 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   private allPresets(): CameraPreset[] {
-    return [
-      ...(this.config?.presets ?? []),
-      ...this.localPresets,
-      ...this.overviewPreset(),
-      ...this.levelPresets(),
-    ];
+    return [...(this.config?.presets ?? []), ...this.localPresets, ...this.generatedPresets()];
+  }
+
+  /**
+   * Views derived from the model rather than saved: the whole building, then a
+   * plan per storey. One list, because anything that offers them has to be able
+   * to *apply* them too — looked up in half of it, the Overview button was in
+   * the bar and did nothing.
+   */
+  private generatedPresets(): CameraPreset[] {
+    return [...this.overviewPreset(), ...this.levelPresets()];
   }
 
   /**
@@ -1136,7 +1152,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     }));
   }
 
-  private isLevelPreset(presetId: string): boolean {
+  private isGeneratedPreset(presetId: string): boolean {
     return presetId.startsWith(LEVEL_PRESET_PREFIX) || presetId === OVERVIEW_PRESET_ID;
   }
 
@@ -1368,8 +1384,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // the card applies them by hand.
     const derived =
       this.localPresets.find((preset) => preset.id === presetId) ??
-      (this.isLevelPreset(presetId)
-        ? this.levelPresets().find((preset) => preset.id === presetId)
+      (this.isGeneratedPreset(presetId)
+        ? this.generatedPresets().find((preset) => preset.id === presetId)
         : undefined);
     if (derived) {
       this.applyLocalPreset(derived, animate);
