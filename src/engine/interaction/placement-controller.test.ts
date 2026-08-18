@@ -250,6 +250,39 @@ describe('which storey a drop belongs to', () => {
   });
 });
 
+describe('dragging a marker out of its room', () => {
+  it('records the room it came from, so the leader has somewhere to point', () => {
+    // The gesture the leader line exists for: a sensor parked beside the plan
+    // where you can reach it, still saying which room it measures. The room is
+    // only recorded on the way *out* — dropped inside one, the position already
+    // says which, and an override would go stale the moment the model changes.
+    const built = house();
+    const entities = {
+      moveEntity: () => {},
+      setEntities: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: () => null,
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(built), entities, noopCamera);
+    placement.init(stubContext());
+    placement.setRoomResolver((x, _y, z) =>
+      Math.abs(x) <= 2 && Math.abs(z) <= 2 ? 'living' : null,
+    );
+
+    placement.beginMove('sensor.a');
+    const outside = placement.commitPlacement(...screen(6, 0));
+    expect(outside, 'a drop beside the house is allowed').not.toBeNull();
+    expect(outside!.room).toBe('living');
+
+    // And back inside: no override, because the position speaks for itself.
+    placement.beginMove('sensor.a');
+    const inside = placement.commitPlacement(...screen(0, 0));
+    expect(inside!.room).toBeNull();
+    placement.dispose();
+  });
+});
+
 describe('placing outside the building', () => {
   it('drops onto the floor when there is one under the pointer', () => {
     const placement = controller();

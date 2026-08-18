@@ -455,6 +455,11 @@ export class Viewer implements IViewer {
             entityId,
             position: vRound(result.position),
             level: result.levelId,
+            // The room the marker came from, when it was dragged out of one.
+            // Dropping this on the way out is what left a chip parked outside
+            // the plan with nothing to say which room it belongs to — the
+            // placement works it out, and then nobody wrote it down.
+            room: result.room ?? undefined,
           });
         }),
       );
