@@ -123,6 +123,14 @@ export class EdgeOverlay {
       this.surfaces.push(mesh);
       // Glass already reads as an outline; edging it doubles every window.
       if (mesh.userData.glass) return;
+      // A storey's floor is one slab per room, and the rooms neither meet nor
+      // cover the storey: measured on a real three-storey house, 42 outline
+      // segments per floor of which 33 are buried under a wall and the rest draw
+      // room rectangles across the open floor — the layout of the plan, printed
+      // on the ground where no wall stands. Nothing of the slab is worth a line
+      // that the walls standing on it do not already give, so it draws none.
+      // The mesh stays a surface: it has to go on hiding the storey below.
+      if (mesh.userData.part === 'floor') return;
       // Asked for explicitly rather than read off `visible`, which also carries
       // level isolation: rebuilding while a storey is hidden would drop its
       // lines for good.
