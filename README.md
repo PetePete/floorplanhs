@@ -90,38 +90,59 @@ and rooms; otherwise it detects storeys from the geometry.
 
 ## Installation
 
-### HACS (recommended)
+### HACS
+
+This is the way to install it. The repository is not in the HACS default store,
+so it is added once by hand; after that it behaves like anything else in there,
+updates included.
 
 1. HACS → **Frontend** → ⋮ → **Custom repositories**.
-2. Repository: `https://github.com/PetePete/floorplanhs`, category
-   **Lovelace / Plugin**. Add.
-3. Install **Floorplan 3D Card**, then reload the browser (Ctrl/Cmd + Shift + R).
+2. Repository `https://github.com/PetePete/floorplanhs`, category **Lovelace**
+   (newer HACS versions call it **Dashboard**). Add.
+3. Open **Floorplan 3D Card** in the list and install it.
+4. Reload the browser (Ctrl/Cmd + Shift + R).
 
-HACS registers the resource for you. If it does not, add it manually as below.
+HACS downloads the bundle from the [release
+assets](https://github.com/PetePete/floorplanhs/releases) and registers the
+dashboard resource for you. Every later release shows up as an update, and the
+resource entry moves with it — which is the whole reason to prefer this over
+copying the file around.
 
-### Manual
+Your `.sh3d` still goes into `config/www/` by hand: it is your floor plan, and
+no package manager can ship it for you. See [Quick start](#quick-start).
 
-1. Download `floorplan-3d-card.js` from the
-   [latest release](https://github.com/PetePete/floorplanhs/releases).
+### Without HACS
+
+For a build that has no release yet — a branch you are testing, or your own
+working copy.
+
+1. Build the bundle, or download `floorplan-3d-card.js` from the
+   [latest release](https://github.com/PetePete/floorplanhs/releases):
+
+   ```bash
+   npm ci
+   npm run build   # → dist/floorplan-3d-card.js
+   ```
+
 2. Copy it to `config/www/floorplan-3d-card.js` — that path is served as
    `/local/floorplan-3d-card.js`.
 3. **Settings → Dashboards → ⋮ → Resources → Add resource**:
 
    | Field | Value |
    | ----- | ----- |
-   | URL   | `/local/floorplan-3d-card.js?v=0.1.0` |
+   | URL   | `/local/floorplan-3d-card.js?v=1` |
    | Type  | **JavaScript module** (`type: module`) |
 
    In YAML-mode dashboards:
 
    ```yaml
    resources:
-     - url: /local/floorplan-3d-card.js?v=0.1.0
+     - url: /local/floorplan-3d-card.js?v=1
        type: module
    ```
 
-   Bump the `?v=` query after every update, or the browser will keep serving the
-   old bundle.
+   Bump the `?v=` query after every rebuild, or the browser will keep serving
+   the old bundle. That bookkeeping is exactly what HACS takes off your hands.
 
 Minimum Home Assistant version: **2024.4.0**.
 
