@@ -104,6 +104,10 @@ export class Fp3dEntityPalette extends FpBaseElement {
         position: relative;
         flex: 1 1 auto;
         min-height: 120px;
+        /* The panel is as tall as the card, so the overflow belongs here: the
+           list takes what is left under the search box and scrolls inside it. */
+        overflow-y: auto;
+        overscroll-behavior: contain;
         padding: 0 6px 8px;
         /* The list must scroll with a finger even though the canvas behind it
            sets touch-action: none for orbiting. */

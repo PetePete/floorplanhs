@@ -1549,7 +1549,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const canSection = mode !== 'never' && (ui.showSectionControls === true || author);
 
     return html`
-      <div class=${classMap({ chrome: true, 'no-toolbar': !showToolbar })}>
+      <div
+        class=${classMap({
+          chrome: true,
+          'no-toolbar': !showToolbar,
+          'has-title': Boolean(config?.title),
+        })}
+      >
         ${config?.title
           ? html`<div class="at-topleft"><div class="title-chip">${config.title}</div></div>`
           : nothing}

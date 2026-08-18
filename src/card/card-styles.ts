@@ -674,8 +674,16 @@ export const cardStyles = css`
     justify-self: start;
     align-self: start;
   }
+  /*
+   * Spans both upper rows on purpose. An auto row grows to its tallest cell,
+   * and this cluster is tall — toolbar, the strip reserved for the orientation
+   * cube, then the zoom gauge. Left in row one it made that row some 370 px
+   * high and squeezed everything in the middle row, which is where the side
+   * panels live. Spanning lets the flexible row absorb the height instead.
+   */
   .at-topright {
     grid-area: topright;
+    grid-row: 1 / 3;
     justify-self: end;
     align-self: start;
     display: flex;
@@ -736,6 +744,9 @@ export const cardStyles = css`
    */
   .at-left {
     grid-area: left;
+    /* From the top inset down to the bottom row: a panel you pick from wants
+       every pixel the card can spare. */
+    grid-row: 1 / 3;
     justify-self: start;
     align-self: stretch;
     display: flex;
@@ -768,6 +779,11 @@ export const cardStyles = css`
     align-self: end;
     min-width: 0;
   }
+  /* A card with a title keeps the corner for it, and the rail starts below. */
+  .chrome.has-title .at-left {
+    grid-row: 2;
+  }
+
   .at-hud {
     grid-area: left;
     justify-self: start;
