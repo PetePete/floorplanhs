@@ -301,8 +301,7 @@ plus a fixed `color` when you want a constant tint.
 
 `section.mode` picks the technique:
 
-- `level` — isolate one storey; everything above and below is clipped away (or
-  faded, with `ghostAbove: true`).
+- `level` — isolate one storey; everything above and below is clipped away.
 - `plane` — up to three clipping planes, one per axis, draggable in the card.
 
 Cut surfaces are filled with solid caps using a stencil pass so a sliced wall
@@ -453,7 +452,6 @@ tour:
 | `levelId` | string \| null | `null` | Used when `mode: level`. |
 | `caps` | boolean | `true` | Fill cut surfaces so walls read as solid. |
 | `capColor` | string | `#8a8f98` | Colour of the cut caps. |
-| `ghostAbove` | boolean | `false` | Fade levels above the active one instead of hiding them. |
 
 #### `ClipPlaneState`
 
@@ -561,7 +559,6 @@ tour:
 | `showCeilings` | boolean | `true` | Draw the ceiling slabs. Off is often the better floorplan: a ceiling is the one surface you never look at, and in a plan or exploded view it is all you see of the storey below it. |
 | `explode` | number | `0` | Pull the storeys apart along Y by this many metres per step, so you can see into all of them at once. Everything moves together — geometry, room tints, markers and their leader lines, and the cross-section. Positions in the config stay the real ones. |
 | `explodeDuration` | number | `0.7` | Seconds the storeys take to travel when the exploded view is switched on or off. `0` puts them straight there. |
-| `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
 | `showPresetBar` | boolean | `false` | The old saved-views strip along the bottom. The side panel carries the same views; this brings the strip back for its drag-reordering and per-view tour toggle. |
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |

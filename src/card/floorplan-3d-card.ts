@@ -56,7 +56,6 @@ import type { ToolbarAction } from '@/ui/toolbar';
 import '@/ui/error-panel';
 import '@/ui/loading-overlay';
 import '@/ui/toolbar';
-import '@/ui/preset-bar';
 import '@/ui/zoom-slider';
 import '@/ui/level-selector';
 import '@/ui/section-panel';
@@ -171,9 +170,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private editing = false;
   @property({ type: Boolean, reflect: true }) private dark = false;
   @state() private bounds: Bounds | null = null;
-  /** Session-only preset thumbnails; see `capturePresetThumbnail`. */
-  @state() private thumbnails: Record<string, string> = {};
-  @state() private thumbnailsEnabled = false;
   /** Views saved while Lovelace would not take them. Browser-local. */
   @state() private localPresets: CameraPreset[] = [];
   @state() private tourPlaying = false;
@@ -382,6 +378,17 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.toggleAttribute('aspect', !full && Boolean(ui.aspectRatio));
     if (ui.aspectRatio) this.style.setProperty('--fp3d-aspect', ui.aspectRatio.replace(':', ' / '));
     this.style.setProperty('--fp3d-card-height', full ? '100%' : height);
+    if (!full) {
+      this.style.removeProperty('--fp3d-card-top');
+      return;
+    }
+    // Where the card starts in the viewport; the stylesheet takes the rest.
+    // Written only when it moves, because this runs from a ResizeObserver and
+    // writing it is what makes the box change size.
+    const top = `${Math.max(0, Math.round(this.getBoundingClientRect().top))}px`;
+    if (this.style.getPropertyValue('--fp3d-card-top') !== top) {
+      this.style.setProperty('--fp3d-card-top', top);
+    }
   }
 
   private observeSize(): void {
@@ -391,6 +398,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       const width = box?.width ?? 0;
       if (width <= 0) return;
       this.layout = width < NARROW_PX ? 'narrow' : width < MEDIUM_PX ? 'medium' : 'wide';
+      // The card may have moved as well as changed size — a sidebar folding
+      // away, a view switching to panel — and its top edge is what the full
+      // height is measured from.
+      this.applyHostSizing();
       // The renderer watches its own container, but the card is the element
       // whose box the dashboard changes — a view switching to panel, a sidebar
       // folding away. Telling the viewer here costs a measurement and closes
@@ -1131,11 +1142,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       visibleLevels: [level.id],
       section: {
         ...JSON.parse(JSON.stringify(DEFAULT_SECTION_STATE)),
-        // Generated views are still *your* views: the cut-cap and ghost
-        // preferences from the `section` block carry over, so there is one
-        // place to decide how a storey is presented rather than two.
+        // Generated views are still *your* views: the cut-cap preference from
+        // the `section` block carries over, so there is one place to decide how
+        // a storey is presented rather than two.
         caps: this.config?.section?.caps ?? DEFAULT_SECTION_STATE.caps,
-        ghostAbove: this.config?.section?.ghostAbove ?? DEFAULT_SECTION_STATE.ghostAbove,
         mode: 'level' as const,
         levelId: level.id,
       },
@@ -1393,10 +1403,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // one on screen. Section and visible levels are the card's to add.
     preset.section = JSON.parse(JSON.stringify(this.section)) as SectionState;
     preset.visibleLevels = this.visibleLevels;
-    if (this.thumbnailsEnabled) {
-      const thumb = this.capturePresetThumbnail();
-      if (thumb) this.thumbnails = { ...this.thumbnails, [preset.id]: thumb };
-    }
 
     if (!this.canPersistConfig()) {
       this.saveLocalPreset(preset);
@@ -1407,34 +1413,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.hud?.toast({ message: this.t('ui.preset.saved', 'View "{name}" saved', { name }) });
   }
 
-  /**
-   * The renderer runs with `preserveDrawingBuffer: false` (the right default —
-   * it costs memory bandwidth on every frame), so the only safe way to read
-   * pixels is to draw and copy inside the same task.
-   *
-   * The result is kept in memory rather than in the config: `CameraPreset` has
-   * no field for it, and a base64 blob has no business in a hand-edited YAML.
-   */
-  private capturePresetThumbnail(): string | null {
-    const ctx = this.viewer?.ctx;
-    if (!ctx) return null;
-    try {
-      ctx.renderer.render(ctx.scene, ctx.activeCamera);
-      const source = ctx.renderer.domElement;
-      const width = 96;
-      const height = Math.max(1, Math.round((source.height / source.width) * width));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) return null;
-      context.drawImage(source, 0, 0, width, height);
-      const url = canvas.toDataURL('image/jpeg', 0.6);
-      return url.length > 200 ? url : null;
-    } catch {
-      return null;
-    }
-  }
 
   private onEntityPatch(entityId: string, patch: Partial<PlacedEntity>): void {
     this.applyIntent({ kind: 'update-entity', entityId, patch }, false);
@@ -1530,7 +1508,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private renderChrome(showToolbar: boolean, selected: PlacedEntity | null): TemplateResult {
     const config = this.config;
     const ui = config?.ui ?? {};
-    const presets = this.allPresets();
     const author = this.showAuthorTools;
     const mode = this.authorMode;
     // The edit toggle is how an admin *enters* author mode, so it cannot be
@@ -1656,45 +1633,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
             : nothing}
         </div>
         ${this.renderRightSheet(selected)}
-        ${ui.showPresetBar === true && (presets.length > 0 || author)
-          ? html`<div class="at-bottom">
-              <fp3d-preset-bar
-                data-hass
-                .dark=${this.dark}
-                .size=${this.layout}
-                .presets=${presets}
-                .activeId=${this.activePreset}
-                .editMode=${this.editing}
-                .canSave=${author}
-                .localIds=${this.localPresets.map((preset) => preset.id)}
-                .thumbnails=${this.thumbnails}
-                .thumbnailsEnabled=${this.thumbnailsEnabled}
-                .tourControls=${this.tourCfg.showControls !== false}
-                .generatedIds=${this.levelPresets().map((preset) => preset.id)}
-                @fp3d-preset-select=${(event: CustomEvent<{ presetId: string }>) =>
-                  this.onPresetSelect(event.detail.presetId)}
-                @fp3d-preset-save=${(event: CustomEvent<{ name: string }>) =>
-                  this.onPresetSave(event.detail.name)}
-                @fp3d-preset-patch=${(event: CustomEvent<{ presetId: string; patch: Partial<CameraPreset> }>) =>
-                  this.applyIntent(
-                    { kind: 'update-preset', presetId: event.detail.presetId, patch: event.detail.patch },
-                    false,
-                  )}
-                @fp3d-preset-remove=${(event: CustomEvent<{ presetId: string }>) =>
-                  this.isLocalPreset(event.detail.presetId)
-                    ? this.removeLocalPreset(event.detail.presetId)
-                    : this.applyIntent(
-                        { kind: 'remove-preset', presetId: event.detail.presetId },
-                        false,
-                      )}
-                @fp3d-preset-move=${(event: CustomEvent<{ presetId: string; toIndex: number }>) =>
-                  this.reorderPreset(event.detail.presetId, event.detail.toIndex)}
-                @fp3d-thumbnails=${(event: CustomEvent<{ enabled: boolean }>) => {
-                  this.thumbnailsEnabled = event.detail.enabled;
-                }}
-              ></fp3d-preset-bar>
-            </div>`
-          : nothing}
         <div class="at-hud">
           <fp3d-hud
             data-hass
@@ -1751,14 +1689,4 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     </div>`;
   }
 
-  private reorderPreset(presetId: string, toIndex: number): void {
-    if (this.isLocalPreset(presetId)) return;
-    const config = this.config;
-    const presets = [...(config?.presets ?? [])];
-    const from = presets.findIndex((entry) => entry.id === presetId);
-    if (from < 0 || toIndex < 0 || toIndex >= presets.length || from === toIndex) return;
-    const [moved] = presets.splice(from, 1);
-    presets.splice(toIndex, 0, moved);
-    this.commitConfig({ ...(config as Floorplan3dCardConfig), presets }, { reload: false });
-  }
 }

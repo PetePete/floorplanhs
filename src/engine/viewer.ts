@@ -596,8 +596,8 @@ export class Viewer implements IViewer {
     const modelChanged = !deepEqual(previous.model, next.model);
     const entitiesChanged = !deepEqual(previous.entities, next.entities);
     const sectionChanged = !deepEqual(previous.section, next.section);
-    // `ui` is mostly the card's own DOM, but three of its flags are engine-side
-    // — ghosted storeys, the orientation cube and marker depth testing — and
+    // `ui` is mostly the card's own DOM, but a few of its flags are engine-side
+    // — the orientation cube, marker depth testing, the exploded view — and
     // without this diff they were only ever picked up when something in the
     // `render` block happened to change alongside them.
     const uiChanged = !deepEqual(previous.ui, next.ui);
@@ -865,14 +865,6 @@ export class Viewer implements IViewer {
       target.setHiddenLine?.(wire);
       target.setGroundDark?.(groundDark);
     });
-
-    // Whether ghosted storeys appear at all is a decision about the card, not
-    // about one viewpoint, so it overrides every preset's own section state.
-    this.guard('section', this._section, (s) =>
-      (s as ISectionController & { setGhostOverride?(v: boolean | null): void }).setGhostOverride?.(
-        this.config.ui?.ghostAbove ?? null,
-      ),
-    );
 
     const hideCeilings = this.config.ui?.showCeilings === false;
     // Out of the scene entirely, not kept as an invisible depth mask: a mask

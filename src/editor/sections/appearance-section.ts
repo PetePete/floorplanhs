@@ -134,11 +134,6 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
         onChange: (v) => patchUi(ctx, { showToolbar: v }, true),
       })}
       ${switchRow({
-        label: ctx.t('editor.show_preset_bar', 'Preset bar'),
-        checked: ui.showPresetBar ?? du.showPresetBar,
-        onChange: (v) => patchUi(ctx, { showPresetBar: v }, true),
-      })}
-      ${switchRow({
         label: ctx.t('editor.show_level_selector', 'Level selector'),
         checked: ui.showLevelSelector ?? du.showLevelSelector,
         onChange: (v) => patchUi(ctx, { showLevelSelector: v }, true),

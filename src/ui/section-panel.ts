@@ -399,16 +399,6 @@ export class Fp3dSectionPanel extends FpBaseElement {
                 })}
             />
           </div>
-          <button
-            class="switch"
-            role="switch"
-            aria-checked=${this.section.ghostAbove ? 'true' : 'false'}
-            @click=${() =>
-              this.emitCommit({ ...this.section, ghostAbove: !this.section.ghostAbove })}
-          >
-            <span>${this.t('ui.section.ghost_above', 'Ghost levels above')}</span>
-            <span class="track"></span>
-          </button>
           <div class="foot">
             <button class="text-btn" @click=${this.reset}>
               ${icon('refresh')}${this.t('ui.action.reset', 'Reset')}

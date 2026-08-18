@@ -581,8 +581,18 @@ export const cardStyles = css`
     container-name: fp3d-card;
   }
 
+  /*
+   * Filling the view is not a matter of height 100%. That only works when every
+   * ancestor has a definite height, and in a Home Assistant panel view one of
+   * the wrappers does not — the card then falls back to its content height,
+   * which is a canvas with no intrinsic size of its own. So the card measures
+   * where it starts and takes the rest of the viewport; --fp3d-card-top is
+   * written by applyHostSizing. The vh line is the fallback for browsers
+   * without dynamic viewport units.
+   */
   :host([full]) {
-    height: 100%;
+    height: calc(100vh - var(--fp3d-card-top, 0px));
+    height: calc(100dvh - var(--fp3d-card-top, 0px));
   }
 
   .card {

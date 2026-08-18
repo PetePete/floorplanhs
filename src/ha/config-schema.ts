@@ -425,7 +425,6 @@ const AXES: readonly Axis[] = ['x', 'y', 'z'];
 const SECTION_ALIASES: Record<string, string> = {
   level_id: 'levelId',
   cap_color: 'capColor',
-  ghost_above: 'ghostAbove',
   snap_placement: 'snapPlacement',
   ceiling_cut: 'ceilingCut',
 };
@@ -465,8 +464,6 @@ function readSection(raw: unknown, path: string): SectionState {
   if (caps !== undefined) section.caps = caps;
   const capColor = readColor(obj, 'capColor', path);
   if (capColor) section.capColor = capColor;
-  const ghostAbove = readBoolean(obj, 'ghostAbove', path);
-  if (ghostAbove !== undefined) section.ghostAbove = ghostAbove;
   const ceilingCut = readNumber(obj, 'ceilingCut', path, { min: 0, max: 10 });
   if (ceilingCut !== undefined) section.ceilingCut = ceilingCut;
 
@@ -813,7 +810,6 @@ function readRender(raw: unknown, path: string): RenderConfig {
 
 const UI_ALIASES: Record<string, string> = {
   show_toolbar: 'showToolbar',
-  show_preset_bar: 'showPresetBar',
   show_level_selector: 'showLevelSelector',
   show_section_controls: 'showSectionControls',
   show_legend: 'showLegend',
@@ -823,7 +819,6 @@ const UI_ALIASES: Record<string, string> = {
   explode_duration: 'explodeDuration',
   show_zoom_slider: 'showZoomSlider',
   level_presets: 'levelPresets',
-  ghost_above: 'ghostAbove',
   markers_through_walls: 'markersThroughWalls',
   author_tools: 'authorTools',
   aspect_ratio: 'aspectRatio',
@@ -841,10 +836,8 @@ function readUi(raw: unknown, path: string): UiConfig {
   assign('showCeilings', readBoolean(obj, 'showCeilings', path));
   assign('explode', readNumber(obj, 'explode', path, { min: 0, max: 20 }));
   assign('explodeDuration', readNumber(obj, 'explodeDuration', path, { min: 0, max: 10 }));
-  assign('ghostAbove', readBoolean(obj, 'ghostAbove', path));
   assign('snapPlacement', readBoolean(obj, 'snapPlacement', path));
   assign('showToolbar', readBoolean(obj, 'showToolbar', path));
-  assign('showPresetBar', readBoolean(obj, 'showPresetBar', path));
   assign('showLevelSelector', readBoolean(obj, 'showLevelSelector', path));
   assign('showSectionControls', readBoolean(obj, 'showSectionControls', path));
   assign('showLegend', readBoolean(obj, 'showLegend', path));

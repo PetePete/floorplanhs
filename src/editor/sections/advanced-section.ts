@@ -170,16 +170,6 @@ export function renderAdvancedSection(ctx: EditorContext): TemplateResult {
             onChange: (v) => patchSection(ctx, { capColor: v || undefined }),
           })
         : ''}
-      ${switchRow({
-        label: ctx.t('editor.ghost_above', 'Ghost the levels above'),
-        checked: section.ghostAbove ?? false,
-        helper: ctx.t(
-          'editor.ghost_above_help',
-          'Levels above the active one fade out instead of disappearing.',
-        ),
-        onChange: (v) => patchSection(ctx, { ghostAbove: v }, true),
-      })}
-
       ${sectionTitle(ctx.t('editor.camera', 'Camera'))}
       <div class="grid two">
         ${numberField({

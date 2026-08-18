@@ -43,7 +43,6 @@ const EN = {
   'ui.section.axis_z': 'Z axis',
   'ui.section.invert': 'Flip side',
   'ui.section.caps': 'Solid cuts',
-  'ui.section.ghost_above': 'Ghost levels above',
   'ui.section.handles': 'Show handles',
 
   /* -------------------------------------------------------- preset dialog */
@@ -130,7 +129,6 @@ const DE: Table = {
   'ui.section.axis_z': 'Z-Achse',
   'ui.section.invert': 'Seite wechseln',
   'ui.section.caps': 'Massive Schnittflächen',
-  'ui.section.ghost_above': 'Obere Etagen transparent',
   'ui.section.handles': 'Griffe anzeigen',
 
   'ui.preset.title': 'Kameraansichten',

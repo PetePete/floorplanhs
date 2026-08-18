@@ -209,7 +209,6 @@ section:
   levelId: ground
   caps: true
   capColor: "#8a8f98"
-  ghostAbove: true
 ```
 
 **Cut planes** — a doll's-house slice:
@@ -257,20 +256,6 @@ section:
 
   The storeys travel rather than jump, so you can see which one went where;
   `explodeDuration: 0` puts them straight there if you would rather they did.
-- `ghostAbove: true` fades the levels above the active one instead of hiding
-  them — good for understanding how storeys stack. It also applies to the
-  per-storey views the card generates itself (`ui.levelPresets`), together with
-  `caps`: the `section` block is the one place that decides how a storey is
-  presented.
-
-  A saved preset carries its own `section`, so ghosting can differ from view to
-  view. When you would rather decide once for the whole card, set
-  **`ui.ghostAbove`** — it outranks every preset:
-
-  ```yaml
-  ui:
-    ghostAbove: false    # never; `true` = always; omit = let each preset decide
-  ```
 - `invert: true` keeps the other half of a plane cut.
 
 ---

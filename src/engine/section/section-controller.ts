@@ -27,8 +27,6 @@ import { SectionHandles, type SectionHandleSpec } from '@/engine/section/section
 const TRANSITION = 0.45;
 /** Lets the floor slab itself survive the level cut. */
 const LEVEL_EPS = 0.02;
-const GHOST_OPACITY = 0.12;
-const GHOST_COLOR = 0xaeb6c2;
 /** Seconds between safety re-scans for materials created after the last load. */
 const RESCAN_INTERVAL = 1;
 
@@ -76,13 +74,6 @@ export class SectionController implements ISectionController {
   private readonly touched = new Set<THREE.Material>();
   private scanTimer = 0;
 
-  private ghostRoot: THREE.Group | null = null;
-  private ghostMaterial: THREE.MeshStandardMaterial | null = null;
-  private readonly ghostPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  private readonly ghostPlanes: THREE.Plane[] = [this.ghostPlane];
-  private ghostTween: Tween<number> | null = null;
-  /** `ui.ghostAbove`; null means "whatever the state says". See setGhostOverride. */
-  private ghostOverride: boolean | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
   /** Measured height of each storey's geometry above its own floor. */
   private levelTops: ReadonlyMap<string, number> | null = null;
@@ -141,7 +132,6 @@ export class SectionController implements ISectionController {
     this.clips.clear();
     if (this.ctx) this.ctx.clippingPlanes.length = 0;
 
-    this.destroyGhost();
     this.handles.dispose();
     this.caps.dispose();
 
@@ -157,20 +147,6 @@ export class SectionController implements ISectionController {
 
   /* ----------------------------------------------------------- public API */
 
-  /**
-   * Master switch for the translucent storeys above a cut, outranking whatever
-   * each preset asks for. `null` leaves the decision to the state.
-   *
-   * This exists because ghosting is a taste question about the whole card, not
-   * a property of one viewpoint: having to set it on every preset separately is
-   * the wrong shape for "I do or do not want to see this".
-   */
-  setGhostOverride(value: boolean | null): void {
-    if (this.ghostOverride === value) return;
-    this.ghostOverride = value;
-    this.updateGhost(true);
-    this.ctx?.invalidate();
-  }
 
   /**
    * How tall each storey's geometry actually is, above its own elevation. The
@@ -186,12 +162,6 @@ export class SectionController implements ISectionController {
   setLevelOffsets(offsets: ReadonlyMap<string, number> | null, settled = true): void {
     if (sameOffsets(this.levelOffsets, offsets)) return;
     this.levelOffsets = offsets;
-    // The ghost is a *clone*, so it holds the transforms the model had when it
-    // was taken. Leave it standing after the storeys move and it hangs in the
-    // gap they opened — a solid grey copy of the building where the building no
-    // longer is. While they are still moving it stays away entirely: re-cloning
-    // the model per frame is not something to do for a shape nobody can follow.
-    this.destroyGhost();
     if (settled) this.rebuild(false);
     else this.moveClips();
   }
@@ -227,7 +197,6 @@ export class SectionController implements ISectionController {
       levelId: this.state.levelId ?? null,
       caps: this.state.caps,
       capColor: this.state.capColor,
-      ghostAbove: this.state.ghostAbove,
     };
   }
 
@@ -281,11 +250,6 @@ export class SectionController implements ISectionController {
     if (!this.ctx) return;
     this.scan();
     this.caps.setSources(this.meshes);
-    if (this.ghostRoot) {
-      // The mirror is a snapshot of the model; a reload invalidates it.
-      this.destroyGhost();
-      this.updateGhost(false);
-    }
     this.ctx.invalidate();
   }
 
@@ -410,7 +374,6 @@ export class SectionController implements ISectionController {
     }
 
     this.syncPlanes();
-    this.updateGhost(animate);
   }
 
   private createClip(spec: DesiredClip, animate: boolean): Clip {
@@ -511,7 +474,6 @@ export class SectionController implements ISectionController {
 
   /** Cheap per-frame follow-up while positions animate or a handle is dragged. */
   private markMoved(): void {
-    this.updateGhostPlane();
     this.caps.refresh();
     this.syncHandles();
     this.ctx?.invalidate();
@@ -526,144 +488,6 @@ export class SectionController implements ISectionController {
       }
     }
     this.handles.sync(specs, this.bounds);
-  }
-
-  /* ----------------------------------------------------------------- ghost */
-
-  /**
-   * `ghostAbove` keeps the storeys above the cut on screen as a translucent
-   * shell instead of deleting them, so the isolated floor still sits inside a
-   * recognisable house. The slab clip removes them from the real model, so the
-   * ghost is a mirror of the model clipped the other way round: a second,
-   * flat-shaded copy that shares every geometry and owns one material.
-   */
-  private updateGhost(animate: boolean): void {
-    const wanted =
-      this.state.mode === 'level' &&
-      (this.ghostOverride ?? this.state.ghostAbove === true) &&
-      this.clips.has('level:max');
-
-    if (!wanted) {
-      if (!this.ghostRoot) return;
-      this.fadeGhost(0, animate, () => this.destroyGhost());
-      return;
-    }
-
-    if (!this.ghostRoot) this.buildGhost();
-    this.updateGhostPlane();
-    this.fadeGhost(GHOST_OPACITY, animate);
-  }
-
-  private buildGhost(): void {
-    const ctx = this.ctx;
-    if (!ctx) return;
-
-    const material = new THREE.MeshStandardMaterial({
-      color: GHOST_COLOR,
-      roughness: 0.95,
-      metalness: 0,
-      transparent: true,
-      opacity: 0,
-      // Without this the ghost occludes the storey below it and the whole point
-      // of keeping context is lost.
-      depthWrite: false,
-      side: THREE.FrontSide,
-    });
-    material.clippingPlanes = this.ghostPlanes;
-    material.clipShadows = false;
-
-    const root = new THREE.Group();
-    root.name = 'sectionGhost';
-    root.userData.fp3dInternal = true;
-
-    for (const child of [...ctx.modelRoot.children]) {
-      if (child.userData.fp3dInternal === true) continue;
-      root.add(child.clone(true));
-    }
-
-    const doomed: THREE.Object3D[] = [];
-    root.traverse((object) => {
-      // Read before overwriting: `clone(true)` also copied the cap renderer's
-      // stencil meshes, which would write the stencil buffer twice with the
-      // wrong planes and shred the caps.
-      const wasInternal = object.userData.fp3dInternal === true && object !== root;
-      object.userData = { fp3dInternal: true };
-      object.castShadow = false;
-      object.receiveShadow = false;
-      const maybeLight = object as Partial<THREE.Light> & Partial<THREE.Camera>;
-      if (wasInternal || maybeLight.isLight === true || maybeLight.isCamera === true) {
-        doomed.push(object);
-        return;
-      }
-      const mesh = object as THREE.Mesh;
-      if (mesh.isMesh) {
-        mesh.material = material;
-        mesh.raycast = () => {};
-      }
-    });
-    for (const object of doomed) object.removeFromParent();
-
-    // Identity transform under modelRoot: the clones keep their own local
-    // transforms, so the mirror lands exactly on the original.
-    ctx.modelRoot.add(root);
-    this.ghostRoot = root;
-    this.ghostMaterial = material;
-  }
-
-  private updateGhostPlane(): void {
-    const ceiling = this.clips.get('level:max');
-    if (!ceiling) return;
-    // Keep everything *above* the storey: the exact complement of the slab.
-    this.ghostPlane.normal.set(0, 1, 0);
-    this.ghostPlane.constant = -ceiling.position;
-  }
-
-  private fadeGhost(opacity: number, animate: boolean, onDone?: () => void): void {
-    const material = this.ghostMaterial;
-    if (!material) {
-      onDone?.();
-      return;
-    }
-    this.ghostTween?.cancel();
-    this.ghostTween = null;
-
-    if (!animate || Math.abs(material.opacity - opacity) < 1e-3) {
-      material.opacity = opacity;
-      onDone?.();
-      this.ctx?.invalidate();
-      return;
-    }
-
-    const tween = tweenValue(
-      material.opacity,
-      opacity,
-      TRANSITION,
-      (value) => {
-        material.opacity = value;
-        this.ctx?.invalidate();
-      },
-      {
-        easing: easeInOutCubic,
-        onComplete: (completed) => {
-          this.ghostTween = null;
-          if (completed) onDone?.();
-        },
-      },
-    );
-    this.ghostTween = tween;
-    this.runner.add(tween);
-    this.holdLease();
-  }
-
-  private destroyGhost(): void {
-    this.ghostTween?.cancel();
-    this.ghostTween = null;
-    // Geometries are shared with the real model — disposing them here would
-    // blank the house. Only the one material we created is ours to free.
-    this.ghostRoot?.removeFromParent();
-    this.ghostRoot = null;
-    this.ghostMaterial?.dispose();
-    this.ghostMaterial = null;
   }
 
   /* ------------------------------------------------------------- materials */
@@ -773,7 +597,6 @@ function sanitize(state: SectionState | undefined): SectionState {
     levelId: state?.levelId ?? null,
     caps: state?.caps !== false,
     capColor: state?.capColor ?? DEFAULT_SECTION_STATE.capColor,
-    ghostAbove: state?.ghostAbove === true,
   };
   return result;
 }

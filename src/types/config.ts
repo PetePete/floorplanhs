@@ -70,8 +70,6 @@ export interface SectionState {
   /** Render solid caps on cut surfaces instead of hollow shells. */
   caps?: boolean;
   capColor?: string;
-  /** Levels above the active one fade out instead of disappearing. */
-  ghostAbove?: boolean;
   /**
    * Metres taken off the top of an isolated storey, so the cut lands below the
    * ceiling slab and you look *into* the rooms instead of onto their ceiling.
@@ -369,14 +367,7 @@ export interface UiConfig {
    * instant jump reads as a different drawing.
    */
   explodeDuration?: number;
-  /**
-   * Master switch for the translucent storeys above an isolated level. Set it
-   * once — `true` always, `false` never — and it wins over every preset's own
-   * `section.ghostAbove`. Omit it (or `null`) and each preset decides.
-   */
-  ghostAbove?: boolean | null;
   showToolbar?: boolean;
-  showPresetBar?: boolean;
   showLevelSelector?: boolean;
   showSectionControls?: boolean;
   showLegend?: boolean;
@@ -448,7 +439,6 @@ export const DEFAULT_SECTION_STATE: SectionState = {
   levelId: null,
   caps: true,
   capColor: '#8a8f98',
-  ghostAbove: false,
   // Roughly a floor slab plus a little: enough to clear the ceiling of a
   // normal storey without eating into the walls that give the room its shape.
   ceilingCut: 0.45,
@@ -508,15 +498,11 @@ export const DEFAULT_RENDER_CONFIG: Required<RenderConfig> = {
 };
 
 export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
-  // Not a boolean default: absent means "no opinion", which is what leaves the
-  // per-preset setting in charge.
-  ghostAbove: null,
   showCeilings: true,
   explode: 0,
   explodeDuration: 0.7,
   snapPlacement: false,
   showToolbar: true,
-  showPresetBar: false,
   // Off by default. Isolating a storey and dragging cut planes is how you
   // *author* a view; day to day you just want to jump between the views you
   // saved. Both reappear automatically in edit mode, so nothing is lost.
