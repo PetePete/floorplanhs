@@ -147,7 +147,9 @@ export class PlacementController implements IPlacementController {
   /** Storey of the last surface this gesture touched; see `freeLevel`. */
   private lastHitLevel: LevelDefinition | null = null;
   /** Injected by the Viewer; see `setRoomResolver`. */
-  private roomAt: ((x: number, y: number, z: number) => string | null) | null = null;
+  private roomAt:
+    | ((x: number, y: number, z: number, level?: string | null) => string | null)
+    | null = null;
   private lastResult: PlacementResult | null = null;
   private domDrag = false;
   private cameraWasEnabled = true;
@@ -478,7 +480,7 @@ export class PlacementController implements IPlacementController {
       normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
       levelId: level?.id ?? null,
       nodeName: hit.object.name || undefined,
-      room: this.resolveRoom(),
+      room: this.resolveRoom(level),
     };
   }
 
@@ -528,7 +530,7 @@ export class PlacementController implements IPlacementController {
       position: vRound([this.anchor.x, this.anchor.y, this.anchor.z]),
       normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
       levelId: level?.id ?? null,
-      room: this.resolveRoom(),
+      room: this.resolveRoom(level),
     };
   }
 
@@ -691,7 +693,11 @@ export class PlacementController implements IPlacementController {
    * treated as landing outside a room, which is also the correct answer for a
    * model that has no rooms at all.
    */
-  setRoomResolver(resolver: ((x: number, y: number, z: number) => string | null) | null): void {
+  setRoomResolver(
+    resolver:
+      | ((x: number, y: number, z: number, level?: string | null) => string | null)
+      | null,
+  ): void {
     this.roomAt = resolver;
   }
 
@@ -703,12 +709,16 @@ export class PlacementController implements IPlacementController {
    * Dropped outside: the room it came from — that is the whole gesture of
    * dragging a chip clear of the plan, and it is what makes the leader appear.
    */
-  private resolveRoom(): string | null {
+  private resolveRoom(level: LevelDefinition | null): string | null {
     if (!this.roomAt) return null;
-    const here = this.roomAt(this.anchor.x, this.anchor.y, this.anchor.z);
+    // The storey goes with the question: two rooms stacked on top of each other
+    // both claim a point near the floor between them, and only the storey says
+    // which of the two the drop meant.
+    const id = level?.id ?? null;
+    const here = this.roomAt(this.anchor.x, this.anchor.y, this.anchor.z, id);
     if (here) return null;
     const from = this.originalPosition;
-    return from ? this.roomAt(from[0], from[1], from[2]) : null;
+    return from ? this.roomAt(from[0], from[1], from[2], id) : null;
   }
 
   /** Opt into fixture-aware drop heights instead of what-you-see placement. */

@@ -74,6 +74,8 @@ function roomKey(level: string, room: string): string {
 interface RoomShape {
   level: string;
   room: string;
+  /** Height of this room's own floor; see `locate`. */
+  floorY: number;
   /** Floor polygon as world-space XZ triangles, flat: [ax,az,bx,bz,cx,cz, …]. */
   triangles: Float32Array;
   minX: number;
@@ -102,9 +104,9 @@ export interface RoomFillSource {
    * it usable on wall geometry: a wall's inner face lies exactly on the room
    * polygon it faces, and its outer face a wall thickness beyond it.
    */
-  slotAt(x: number, y: number, z: number): number;
+  slotAt(x: number, y: number, z: number, level?: string | null): number;
   /** Name of the room a world point falls in, or null when it is outside. */
-  roomNameAt(x: number, y: number, z: number): string | null;
+  roomNameAt(x: number, y: number, z: number, level?: string | null): string | null;
   /** Current fill of a slot into `out`; returns its 0..1 level, 0 when dark. */
   levelInto(slot: number, out: THREE.Color): number;
 }
@@ -454,12 +456,12 @@ export class RoomFill {
     return this.slotOf.get(roomKey(level, room)) ?? -1;
   }
 
-  slotAt(x: number, y: number, z: number): number {
-    return this.locate(x, y, z);
+  slotAt(x: number, y: number, z: number, level?: string | null): number {
+    return this.locate(x, y, z, level);
   }
 
-  roomNameAt(x: number, y: number, z: number): string | null {
-    const slot = this.locate(x, y, z);
+  roomNameAt(x: number, y: number, z: number, level?: string | null): string | null {
+    const slot = this.locate(x, y, z, level);
     return slot < 0 ? null : this.shapes[slot].room;
   }
 
@@ -508,20 +510,47 @@ export class RoomFill {
         if (key.endsWith(`${KEY_SEPARATOR}${light.room}`)) return slot;
       }
     }
-    return this.locate(light.position.x, light.position.y, light.position.z);
+    return this.locate(light.position.x, light.position.y, light.position.z, light.level);
   }
 
-  private locate(x: number, y: number, z: number): number {
+  /**
+   * The room a world point falls in.
+   *
+   * Storeys deliberately overlap here: each room's height range is its storey
+   * plus a hand's width above and below, so a lamp just under a ceiling or a
+   * line just above a floor still counts as inside. That slack is also why the
+   * first match is the wrong answer — a lamp two centimetres above an upstairs
+   * floor is inside the *cellar's* range too, and on a real house 14 of 17
+   * rooms lit the wrong storey because the cellar came first in the list.
+   *
+   * So the point belongs to the room whose own floor is directly beneath it,
+   * and an explicit storey — a placed lamp records one — settles it outright.
+   */
+  private locate(x: number, y: number, z: number, level?: string | null): number {
+    let best = -1;
+    let bestFloor = -Infinity;
     for (let i = 0; i < this.shapes.length; i += 1) {
       const s = this.shapes[i];
+      if (level && s.level && s.level !== level) continue;
       // Same tolerance as the triangle test, or the cheap reject throws away
       // exactly the boundary hits that test exists to accept.
       if (x < s.minX - EDGE_TOLERANCE_M || x > s.maxX + EDGE_TOLERANCE_M) continue;
       if (z < s.minZ - EDGE_TOLERANCE_M || z > s.maxZ + EDGE_TOLERANCE_M) continue;
       if (y < s.minY || y > s.maxY) continue;
-      if (pointInTriangles(s.triangles, x, z)) return i;
+      if (!pointInTriangles(s.triangles, x, z)) continue;
+
+      // Floors at or below the point win over floors above it, and among those
+      // the highest one — the storey you would be standing on.
+      const floor = s.floorY <= y + EDGE_TOLERANCE_M ? s.floorY : -1e6 - s.floorY;
+      if (floor > bestFloor) {
+        bestFloor = floor;
+        best = i;
+      }
     }
-    return -1;
+    // An explicit storey that has no room at that point is a miss worth
+    // retrying without it: the storey may be right and the polygon just short.
+    if (best < 0 && level) return this.locate(x, y, z, null);
+    return best;
   }
 
   private clearModel(): void {
@@ -617,6 +646,7 @@ function buildShape(
   return {
     level: entry.level,
     room: entry.room,
+    floorY: level ? level.elevation : bounds.max.y,
     triangles: new Float32Array(triangles),
     minX: bounds.min.x,
     maxX: bounds.max.x,

@@ -388,9 +388,11 @@ export class Viewer implements IViewer {
           this.guard('placement', this._placement, (p) =>
             (
               p as IPlacementController & {
-                setRoomResolver?(fn: (x: number, y: number, z: number) => string | null): void;
+                setRoomResolver?(
+                  fn: (x: number, y: number, z: number, level?: string | null) => string | null,
+                ): void;
               }
-            ).setRoomResolver?.((x, y, z) => rooms.roomNameAt(x, y, z)),
+            ).setRoomResolver?.((x, y, z, level) => rooms.roomNameAt(x, y, z, level)),
           );
         }
         lighting.setFillListener?.(() => this.edges.refreshRoomColors());

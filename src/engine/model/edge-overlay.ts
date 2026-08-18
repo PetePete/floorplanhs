@@ -178,7 +178,15 @@ export class EdgeOverlay {
       } else if (this.rooms) {
         const position = edges.attributes.position;
         for (let i = 0; i < count; i += 1) {
-          const found = this.rooms.slotAt(position.getX(i), position.getY(i), position.getZ(i));
+          // With the storey, because a wall's bottom edge sits on the boundary
+          // between two of them and would otherwise take the colour of the room
+          // below it.
+          const found = this.rooms.slotAt(
+            position.getX(i),
+            position.getY(i),
+            position.getZ(i),
+            level || null,
+          );
           if (found >= 0) slots[i] = found + 1;
         }
       }

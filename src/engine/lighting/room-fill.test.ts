@@ -357,6 +357,67 @@ describe('fill overlay', () => {
   });
 });
 
+describe('two rooms stacked on top of each other', () => {
+  /** One room per storey, same footprint, floors at 0 and 2.62 m. */
+  function stacked(): RoomFill {
+    const root = new THREE.Group();
+    const slab = (level: string, room: string, top: number): THREE.Mesh => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 4));
+      mesh.position.set(0, top - 0.06, 0);
+      mesh.userData = { level, room, part: 'floor' };
+      return mesh;
+    };
+    root.add(slab('lower', 'cellar', 0), slab('upper', 'bedroom', 2.62));
+    root.updateMatrixWorld(true);
+
+    const fill = new RoomFill();
+    fill.setModel(root, [
+      { id: 'lower', name: 'Cellar', elevation: 0, height: 2.62 },
+      { id: 'upper', name: 'Bedroom', elevation: 2.62, height: 2.5 },
+    ]);
+    return fill;
+  }
+
+  it('puts a lamp just above a floor in that floor’s room', () => {
+    // Each room's height range runs a hand's width past its storey, so a lamp
+    // two centimetres above an upstairs floor is inside the cellar's range too.
+    // Taking the first match meant the cellar won — measured on a real house,
+    // 14 of 17 placed lamps lit the storey below the one they were dropped on.
+    const fill = stacked();
+    expect(fill.roomAt(new THREE.Vector3(0, 2.64, 0))).toBe('bedroom');
+    expect(fill.roomAt(new THREE.Vector3(0, 0.02, 0))).toBe('cellar');
+    fill.dispose();
+  });
+
+  it('lets an explicit storey settle it outright', () => {
+    const fill = stacked();
+    expect(fill.roomNameAt(0, 2.64, 0, 'upper')).toBe('bedroom');
+    // Same point, the other storey asked for: still answered, from its own room.
+    expect(fill.roomNameAt(0, 2.64, 0, 'lower')).toBe('cellar');
+    fill.dispose();
+  });
+
+  it('lights the room a placed lamp is actually in', () => {
+    const fill = stacked();
+    fill.setEnabled(true);
+    fill.apply([
+      {
+        room: null,
+        level: 'upper',
+        position: new THREE.Vector3(0, 2.64, 0),
+        color: new THREE.Color(1, 1, 1),
+        weight: 1,
+      },
+    ]);
+    const values = uniformArray(fill);
+    const cellar = values.slice(0, 3).reduce((a, b) => a + b, 0);
+    const bedroom = values.slice(3, 6).reduce((a, b) => a + b, 0);
+    expect(bedroom, 'the room the lamp is in').toBeGreaterThan(0);
+    expect(cellar, 'the room below it').toBe(0);
+    fill.dispose();
+  });
+});
+
 /* ------------------------------------------------------------------ helpers */
 
 function roomNames(): string[] {
