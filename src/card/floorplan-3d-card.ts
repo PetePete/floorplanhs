@@ -1545,6 +1545,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // On unless switched off: this panel *is* the card's navigation now — the
     // building, its storeys and your own saved views, in one list.
     const showLevels = ui.showLevelSelector !== false;
+    const showPalette = this.editing && this.panel === 'palette';
     const canSection = mode !== 'never' && (ui.showSectionControls === true || author);
 
     return html`
@@ -1589,9 +1590,37 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
               `
             : nothing}
         </div>
-        ${showLevels && this.panel !== 'palette'
-          ? html`<div class="at-left">
-              <fp3d-level-selector
+        <div class="at-left">
+          ${showPalette
+            ? html`<div class="sheet">
+                <fp3d-entity-palette
+                data-hass
+                .dark=${this.dark}
+                .size=${this.layout}
+                .placed=${config?.entities ?? []}
+                @fp3d-palette-close=${() => {
+                  this.panel = 'none';
+                }}
+                @fp3d-placement-begin=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.beginPlacement(event.detail.entityId)}
+                @fp3d-placement-move=${(event: CustomEvent<{ x: number; y: number }>) =>
+                  this.queuePlacementUpdate(event.detail.x, event.detail.y)}
+                @fp3d-placement-commit=${(event: CustomEvent<{ x: number; y: number }>) =>
+                  this.dragEntityId &&
+                  this.commitPlacement(this.dragEntityId, event.detail.x, event.detail.y)}
+                @fp3d-placement-cancel=${() => this.cancelPlacement()}
+                @fp3d-entity-focus=${(event: CustomEvent<{ entityId: string }>) => {
+                  this.selectedEntity = event.detail.entityId;
+                }}
+                @fp3d-quick-add=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.quickAdd(event.detail.entityId)}
+                @fp3d-entity-remove=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.applyIntent({ kind: 'remove-entity', entityId: event.detail.entityId }, false)}
+              ></fp3d-entity-palette>
+              </div>`
+            : nothing}
+          ${showLevels && !(showPalette && this.layout === 'narrow')
+            ? html`<fp3d-level-selector
                 data-hass
                 .dark=${this.dark}
                 .size=${this.layout}
@@ -1617,38 +1646,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                         { kind: 'remove-preset', presetId: event.detail.presetId },
                         false,
                       )}
-              ></fp3d-level-selector>
-            </div>`
-          : nothing}
+              ></fp3d-level-selector>`
+            : nothing}
+        </div>
         ${this.renderRightSheet(selected)}
-        ${this.editing && this.panel === 'palette'
-          ? html`<div class="at-left sheet">
-              <fp3d-entity-palette
-                data-hass
-                .dark=${this.dark}
-                .size=${this.layout}
-                .placed=${config?.entities ?? []}
-                @fp3d-palette-close=${() => {
-                  this.panel = 'none';
-                }}
-                @fp3d-placement-begin=${(event: CustomEvent<{ entityId: string }>) =>
-                  this.beginPlacement(event.detail.entityId)}
-                @fp3d-placement-move=${(event: CustomEvent<{ x: number; y: number }>) =>
-                  this.queuePlacementUpdate(event.detail.x, event.detail.y)}
-                @fp3d-placement-commit=${(event: CustomEvent<{ x: number; y: number }>) =>
-                  this.dragEntityId &&
-                  this.commitPlacement(this.dragEntityId, event.detail.x, event.detail.y)}
-                @fp3d-placement-cancel=${() => this.cancelPlacement()}
-                @fp3d-entity-focus=${(event: CustomEvent<{ entityId: string }>) => {
-                  this.selectedEntity = event.detail.entityId;
-                }}
-                @fp3d-quick-add=${(event: CustomEvent<{ entityId: string }>) =>
-                  this.quickAdd(event.detail.entityId)}
-                @fp3d-entity-remove=${(event: CustomEvent<{ entityId: string }>) =>
-                  this.applyIntent({ kind: 'remove-entity', entityId: event.detail.entityId }, false)}
-              ></fp3d-entity-palette>
-            </div>`
-          : nothing}
         ${ui.showPresetBar === true && (presets.length > 0 || author)
           ? html`<div class="at-bottom">
               <fp3d-preset-bar

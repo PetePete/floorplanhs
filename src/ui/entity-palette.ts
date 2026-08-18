@@ -47,6 +47,9 @@ export class Fp3dEntityPalette extends FpBaseElement {
       :host {
         display: flex;
         pointer-events: none;
+        /* Down the whole side: picking one entity out of a houseful is a
+           scrolling job, and a panel that stops half way makes it a longer one. */
+        height: 100%;
         max-height: 100%;
         min-height: 0;
       }
@@ -56,6 +59,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
         flex-direction: column;
         width: 300px;
         max-width: 100%;
+        height: 100%;
         max-height: 100%;
         min-height: 0;
       }

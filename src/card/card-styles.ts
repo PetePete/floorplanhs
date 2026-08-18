@@ -740,8 +740,19 @@ export const cardStyles = css`
     align-self: stretch;
     display: flex;
     align-items: stretch;
+    gap: var(--fp3d-gap);
     max-height: 100%;
     min-height: 0;
+  }
+
+  /*
+   * The palette opens *beside* the navigator rather than over it: picking an
+   * entity and picking the storey to drop it on are two halves of one job, and
+   * a panel that covers the other one turns that into a memory game.
+   */
+  .at-left > .sheet {
+    min-height: 0;
+    max-height: 100%;
   }
   .at-right {
     grid-area: right;

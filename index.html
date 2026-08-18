@@ -177,6 +177,10 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* Nothing to report is not a report. */
+      #status:empty {
+        display: none;
+      }
       #status.bad {
         color: #fff;
         background: var(--error-color);
@@ -187,7 +191,7 @@
   <body>
     <main id="stage"></main>
     <aside id="panel"></aside>
-    <div id="status">booting…</div>
+    <div id="status"></div>
     <script type="module" src="/src/dev/dev-app.ts"></script>
   </body>
 </html>

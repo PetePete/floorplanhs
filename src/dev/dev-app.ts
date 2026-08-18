@@ -171,7 +171,8 @@ async function boot(): Promise<void> {
   const applyConfig = () => {
     try {
       card.setConfig(structuredClone(config));
-      status.textContent = 'ok';
+      // Silence is the good case; the box hides itself when empty.
+      status.textContent = '';
       status.classList.remove('bad');
     } catch (err) {
       status.textContent = `setConfig threw: ${(err as Error).message}`;
