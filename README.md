@@ -251,7 +251,6 @@ render:
   quality: auto
 ui:
   height: 560px
-  showLevelSelector: true
 ```
 
 ## How it works
@@ -564,11 +563,11 @@ tour:
 | `explodeDuration` | number | `0.7` | Seconds the storeys take to travel when the exploded view is switched on or off. `0` puts them straight there. |
 | `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
-| `showPresetBar` | boolean | `true` | The saved-views strip — the primary navigation. |
+| `showPresetBar` | boolean | `false` | The old saved-views strip along the bottom. The side panel carries the same views; this brings the strip back for its drag-reordering and per-view tour toggle. |
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |
 | `showZoomSlider` | boolean | `true` | Vertical zoom control under the cube. |
 | `levelPresets` | boolean | `true` | Add one generated isometric view per detected storey to the view bar. They follow the model, so they are not editable and never written to the config; saved views come first. |
-| `showLevelSelector` | boolean | `false` | Opt-in lift-panel storey switcher. Saved views and `levelPresets` cover the same ground with less chrome. |
+| `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. |
 | `showSectionControls` | boolean | `false` | Cross-section controls. Shown anyway while author tools are visible. |
 | `showLegend` | boolean | `false` | Colour/state legend. |
 | `showFps` | boolean | `false` | FPS counter (diagnostics). |

@@ -112,7 +112,6 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
     ui: {
       height: '100%',
       showToolbar: true,
-      showPresetBar: true,
     },
     // Plain viewpoints only. Pinning a section to a level id the harness
     // invented is how a cut ends up referring to a storey that does not exist;

@@ -517,8 +517,8 @@ render:
 ```yaml
 ui:
   showToolbar: true
-  showPresetBar: true
   showLevelSelector: true
+  showPresetBar: false
   showSectionControls: true
   showLegend: false
   showFps: false
