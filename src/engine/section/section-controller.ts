@@ -183,15 +183,33 @@ export class SectionController implements ISectionController {
   }
 
   /** Lift the level cut with its storey; see `engine/model/explode.ts`. */
-  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
-    if (this.levelOffsets === offsets) return;
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null, settled = true): void {
+    if (sameOffsets(this.levelOffsets, offsets)) return;
     this.levelOffsets = offsets;
     // The ghost is a *clone*, so it holds the transforms the model had when it
     // was taken. Leave it standing after the storeys move and it hangs in the
     // gap they opened — a solid grey copy of the building where the building no
-    // longer is.
+    // longer is. While they are still moving it stays away entirely: re-cloning
+    // the model per frame is not something to do for a shape nobody can follow.
     this.destroyGhost();
-    this.rebuild(false);
+    if (settled) this.rebuild(false);
+    else this.moveClips();
+  }
+
+  /**
+   * Slide the existing cut planes to their new positions and nothing else —
+   * cheap enough to run on every frame while the storeys are travelling.
+   */
+  private moveClips(): void {
+    for (const spec of this.desiredClips()) {
+      const clip = this.clips.get(spec.key);
+      if (!clip) continue;
+      clip.tween?.cancel();
+      clip.tween = null;
+      clip.position = spec.target;
+      this.applyClip(clip);
+    }
+    this.ctx?.invalidate();
   }
 
   setState(state: SectionState, animate = true): void {
@@ -703,6 +721,23 @@ export class SectionController implements ISectionController {
     const state = this.getState();
     for (const cb of [...this.changeCallbacks]) cb(state);
   }
+}
+
+/**
+ * By value, not by identity: the exploded view hands out a freshly built map on
+ * every frame of its flight, and an identity check would call every one of them
+ * a change — including the last one, which is usually the same as the one before.
+ */
+function sameOffsets(
+  a: ReadonlyMap<string, number> | null,
+  b: ReadonlyMap<string, number> | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.size !== b.size) return false;
+  for (const [key, value] of a) {
+    if (Math.abs((b.get(key) ?? Number.NaN) - value) > 1e-6) return false;
+  }
+  return true;
 }
 
 /* ------------------------------------------------------------- validation */

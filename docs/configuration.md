@@ -240,15 +240,20 @@ section:
 - `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
-- `showCeilings: false` drops the ceiling slabs, line work included. Worth it in
-  a plan or exploded view, where the ceiling is all you can see of the storey
-  under it.
+- `showCeilings: false` stops the ceilings being drawn, line work included.
+  Worth it in a plan or exploded view, where the ceiling is all you can see of
+  the storey under it. In `style: wireframe` the slab stays in the scene and
+  keeps writing depth — it paints nothing there anyway, and taking it out would
+  open every storey like a box with the lid off, which reads as walls you can
+  see straight through. In `style: solid` the surface *is* the drawing, so there
+  it is removed and you look into the rooms.
 - `explode` pulls the storeys apart along Y, an assembly drawing rather than a
   house:
 
   ```yaml
   ui:
-    explode: 2.8      # metres of separation per storey; 0 is off
+    explode: 2.8           # metres of separation per storey; 0 is off
+    explodeDuration: 0.7   # seconds the storeys take to travel; 0 is instant
   ```
 
   The toolbar has a toggle for it, which uses a storey height when nothing is
@@ -257,6 +262,9 @@ section:
   level cut — while positions written back to the config stay the real ones. A
   marker dropped on a storey that is drawn three metres up is still recorded at
   the height the building actually has.
+
+  The storeys travel rather than jump, so you can see which one went where;
+  `explodeDuration: 0` puts them straight there if you would rather they did.
 - `ghostAbove: true` fades the levels above the active one instead of hiding
   them — good for understanding how storeys stack. It also applies to the
   per-storey views the card generates itself (`ui.levelPresets`), together with

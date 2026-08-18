@@ -98,6 +98,28 @@ describe('sh3d parse', () => {
   });
 });
 
+/**
+ * The line work of a wall, in world space — the drawing itself rather than the
+ * mesh behind it. `EdgesGeometry` at the overlay's own threshold is what decides
+ * which lines the card shows, so assertions about lines have to go through it:
+ * the tessellation is free to put a vertex wherever it likes as long as no line
+ * comes out of it.
+ */
+function wallEdges(home: { nodes: Map<string, THREE.Object3D> }): Array<[THREE.Vector3, THREE.Vector3]> {
+  const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
+  mesh.updateWorldMatrix(true, false);
+  const edges = new THREE.EdgesGeometry(mesh.geometry, 24);
+  const position = edges.getAttribute('position');
+  const out: Array<[THREE.Vector3, THREE.Vector3]> = [];
+  for (let i = 0; i + 1 < position.count; i += 2) {
+    out.push([
+      new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld),
+      new THREE.Vector3().fromBufferAttribute(position, i + 1).applyMatrix4(mesh.matrixWorld),
+    ]);
+  }
+  return out;
+}
+
 describe('sh3d build', () => {
   const house = buildSh3dHome(parseHomeXml(HOME_XML), { textures: false });
 
@@ -295,24 +317,62 @@ describe('sh3d build', () => {
 </home>`),
       { textures: false },
     );
-    const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
-    mesh.updateWorldMatrix(true, false);
-    const position = mesh.geometry.getAttribute('position');
-    const v = new THREE.Vector3();
-
     // The reveal sits at x = ±0.5 m from the wall's centre, and the window runs
-    // from 0.90 to 2.10 m. Wall geometry at those two x values must exist only
-    // between those heights — anything at the floor or the wall top there is the
-    // old full-height pier face.
+    // from 0.90 to 2.10 m. Every vertical line there must stay between those
+    // heights — one reaching the floor or the wall top is the old pier face.
     let atReveal = 0;
-    for (let i = 0; i < position.count; i += 1) {
-      v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
-      if (Math.abs(Math.abs(v.x) - 0.5) > 0.02) continue;
+    for (const [a, b] of wallEdges(home)) {
+      if (Math.abs(a.y - b.y) < 0.01) continue;
+      if (Math.abs(Math.abs(a.x) - 0.5) > 0.02 || Math.abs(Math.abs(b.x) - 0.5) > 0.02) continue;
       atReveal += 1;
-      expect(v.y, `reveal vertex at y=${v.y.toFixed(2)}`).toBeGreaterThan(0.85);
-      expect(v.y).toBeLessThan(2.15);
+      const lo = Math.min(a.y, b.y);
+      const hi = Math.max(a.y, b.y);
+      expect(lo, `reveal line from y=${lo.toFixed(2)} to ${hi.toFixed(2)}`).toBeGreaterThan(0.85);
+      expect(hi).toBeLessThan(2.15);
     }
     expect(atReveal, 'the reveal has to exist at all').toBeGreaterThan(0);
+  });
+
+  it('keeps two windows at the same height apart', () => {
+    // Triangulating one outline with two holes bridges hole to hole, and the
+    // bridge reads as a boundary: a horizontal line ran across the pier between
+    // the windows and on through both of them, at the sill and again at the
+    // head. Each window has to be its own rectangle.
+    const home = buildSh3dHome(
+      parseHomeXml(`<?xml version='1.0'?>
+<home version='7400' name='Windows' wallHeight='250.0'>
+  <level id='level0' name='Ground' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <wall id='w0' level='level0' xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0'
+        height='250.0' thickness='20.0'/>
+  <doorOrWindow id='d0' level='level0' name='Window' x='200.0' y='0.0' elevation='90.0'
+                width='100.0' depth='20.0' height='120.0' angle='0.0'/>
+  <doorOrWindow id='d1' level='level0' name='Window' x='400.0' y='0.0' elevation='90.0'
+                width='100.0' depth='20.0' height='120.0' angle='0.0'/>
+</home>`),
+      { textures: false },
+    );
+
+    // The wall is centred on the origin, so the windows span x -1.5..-0.5 and
+    // 0.5..1.5. A horizontal line at either window height may only run inside
+    // one of them.
+    const windows: Array<[number, number]> = [
+      [-1.5, -0.5],
+      [0.5, 1.5],
+    ];
+    let horizontals = 0;
+    for (const [a, b] of wallEdges(home)) {
+      if (Math.abs(a.y - b.y) > 0.01) continue;
+      if (Math.abs(a.y - 0.9) > 0.02 && Math.abs(a.y - 2.1) > 0.02) continue;
+      horizontals += 1;
+      const lo = Math.min(a.x, b.x);
+      const hi = Math.max(a.x, b.x);
+      const inside = windows.some(([from, to]) => lo > from - 0.02 && hi < to + 0.02);
+      expect(
+        inside,
+        `line at y=${a.y.toFixed(2)} running x=${lo.toFixed(2)}..${hi.toFixed(2)}`,
+      ).toBe(true);
+    }
+    expect(horizontals, 'the windows have to be drawn at all').toBeGreaterThan(0);
   });
 
   it('slopes a wall top when heightAtEnd differs', () => {

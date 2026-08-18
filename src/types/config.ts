@@ -378,6 +378,13 @@ export interface UiConfig {
    */
   explode?: number;
   /**
+   * Seconds the storeys take to travel when the exploded view is switched on or
+   * off. 0 puts them straight there. The motion is the point: a building that
+   * comes apart in front of you reads as one building taken apart, where an
+   * instant jump reads as a different drawing.
+   */
+  explodeDuration?: number;
+  /**
    * Master switch for the translucent storeys above an isolated level. Set it
    * once — `true` always, `false` never — and it wins over every preset's own
    * `section.ghostAbove`. Omit it (or `null`) and each preset decides.
@@ -534,6 +541,7 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   ghostAbove: null,
   showCeilings: true,
   explode: 0,
+  explodeDuration: 0.7,
   snapPlacement: false,
   showToolbar: true,
   showToolbarInPanel: false,

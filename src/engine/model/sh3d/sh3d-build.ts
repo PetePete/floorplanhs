@@ -560,9 +560,8 @@ function buildSegment(segment: WallSegment, out: WallBuild): void {
     })
     .filter((o) => o.b - o.a > EPS && o.head - o.sill > EPS);
 
-  for (const geometry of wallOutlines(length, heightAt, openings, thickness)) {
-    out.solid.push(geometry);
-  }
+  const solid = wallSolid(length, heightAt, openings, thickness);
+  if (solid) out.solid.push(solid);
 
   for (const opening of openings) {
     const clear = opening.head - opening.sill;
@@ -583,95 +582,187 @@ interface PlacedSpan {
   head: number;
 }
 
+/** A maximal run of solid wall within one column, in the segment's local frame. */
+interface WallRun {
+  y0: number;
+  y1: number;
+  /** Reaches the wall's own top edge, which may be sloped. */
+  toTop: boolean;
+}
+
+/** Sorted, with anything closer together than `EPS` collapsed to one value. */
+function unique(values: readonly number[]): number[] {
+  const sorted = [...values].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const value of sorted) {
+    if (out.length === 0 || value - out[out.length - 1] > EPS) out.push(value);
+  }
+  return out;
+}
+
+type Span = readonly [number, number];
+
+/** The parts of `from` that `cut` does not cover. Both must be sorted. */
+function subtractSpans(from: readonly Span[], cut: readonly Span[]): Span[] {
+  const out: Span[] = [];
+  for (const [start, end] of from) {
+    let lo = start;
+    for (const [cutLo, cutHi] of cut) {
+      if (cutHi <= lo + EPS) continue;
+      if (cutLo >= end - EPS) break;
+      if (cutLo - lo > EPS) out.push([lo, Math.min(cutLo, end)]);
+      lo = Math.max(lo, cutHi);
+      if (lo >= end - EPS) break;
+    }
+    if (end - lo > EPS) out.push([lo, end]);
+  }
+  return out;
+}
+
 /**
- * The wall's cross-section in its own (u, height) frame, extruded across the
- * thickness.
+ * One wall segment as a solid, tessellated by hand.
  *
- * An opening is a *hole* only while solid wall remains on all four sides. A door
- * runs to the floor, so it is a notch in the bottom edge instead — a hole that
- * touches the outline cannot be triangulated. One that reaches the top notches
- * the top edge, and one doing both splits the wall in two, which is why this
- * returns a list.
+ * Two earlier attempts are worth knowing about, because both failed on the same
+ * thing — the *lines*, not the shading.
+ *
+ * A row of boxes (pier, sill, lintel, pier) gave every window a floor-to-ceiling
+ * line down each side, because the pier's end face is full height. Extruding one
+ * outline with the openings as holes fixed that, but earcut bridges each hole to
+ * the outline — and to the previous hole — with a pair of coincident edges. Those
+ * bridges are seams the edge pass reads as boundaries: with two windows at the
+ * same height you get a horizontal line across the pier between them and another
+ * straight through both. Welding the vertices does not help; the seam survives as
+ * two triangles that merely touch.
+ *
+ * So the wall is built as a grid instead. It is split into columns at every
+ * opening edge, each column into the runs of solid wall left between its
+ * openings, and each run at every sill and head height in the whole segment —
+ * that last subdivision is the point. Neighbouring cells then meet vertex for
+ * vertex, and `EdgesGeometry` drops an interior edge only when it finds the same
+ * two positions traversed the other way by an equally-facing triangle. Shared
+ * cell boundaries vanish; the outline of the wall and of each opening is the only
+ * thing left, which is exactly the drawing.
  */
-function wallOutlines(
+function wallSolid(
   length: number,
   heightAt: (u: number) => number,
   openings: readonly PlacedSpan[],
   thickness: number,
-): THREE.BufferGeometry[] {
-  if (length <= EPS) return [];
+): THREE.BufferGeometry | null {
+  if (length <= EPS) return null;
+  const half = thickness / 2;
 
-  const splits = openings.filter((o) => o.sill <= EPS && o.head >= heightAt(o.a) - EPS);
-  if (splits.length > 0) {
-    // Full-height gap: build the stretches either side of it independently.
-    const pieces: THREE.BufferGeometry[] = [];
-    let cursor = 0;
-    for (const gap of splits) {
-      pieces.push(...slice(cursor, gap.a));
-      cursor = Math.max(cursor, gap.b);
+  const cuts = unique([0, length, ...openings.flatMap((o) => [o.a, o.b])]).filter(
+    (x) => x > -EPS && x < length + EPS,
+  );
+  const breaks = unique(openings.flatMap((o) => [o.sill, o.head]));
+
+  const positions: number[] = [];
+  const normals: number[] = [];
+
+  type Point = readonly [number, number, number];
+  /** A quad wound counter-clockwise as seen from outside the wall. */
+  const quad = (a: Point, b: Point, c: Point, d: Point): void => {
+    const ux = b[0] - a[0];
+    const uy = b[1] - a[1];
+    const uz = b[2] - a[2];
+    const vx = c[0] - a[0];
+    const vy = c[1] - a[1];
+    const vz = c[2] - a[2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz);
+    if (len <= 1e-12) return;
+    nx /= len;
+    ny /= len;
+    nz /= len;
+    for (const p of [a, b, c, a, c, d]) {
+      positions.push(p[0], p[1], p[2]);
+      normals.push(nx, ny, nz);
     }
-    pieces.push(...slice(cursor, length));
-    return pieces;
+  };
 
-    function slice(from: number, to: number): THREE.BufferGeometry[] {
-      if (to - from <= EPS) return [];
-      const within = openings
-        .filter((o) => o.a >= from - EPS && o.b <= to + EPS && !splits.includes(o))
-        .map((o) => ({ ...o, a: o.a - from, b: o.b - from }));
-      return wallOutlines(to - from, (u) => heightAt(u + from), within, thickness).map((g) => {
-        g.translate(from, 0, 0);
-        return g;
-      });
+  const columns: Array<{ x0: number; x1: number; runs: WallRun[] }> = [];
+  for (let i = 0; i + 1 < cuts.length; i += 1) {
+    const x0 = cuts[i];
+    const x1 = cuts[i + 1];
+    const mid = (x0 + x1) / 2;
+    // The lower of the two ends: a sloped top is carried by the run that reaches
+    // it, not by the heights the openings were clipped against.
+    const top = Math.min(heightAt(x0), heightAt(x1));
+
+    const gaps: Span[] = openings
+      .filter((o) => o.a <= mid && o.b >= mid)
+      .map((o) => [Math.max(0, o.sill), Math.min(top, o.head)] as Span)
+      .filter(([lo, hi]) => hi - lo > EPS)
+      .sort((p, q) => p[0] - q[0]);
+
+    const runs: WallRun[] = [];
+    for (const [lo, hi] of subtractSpans([[0, top]], gaps)) {
+      runs.push({ y0: lo, y1: hi, toTop: top - hi <= EPS });
+    }
+    columns.push({ x0, x1, runs });
+  }
+
+  for (const column of columns) {
+    const { x0, x1 } = column;
+    const top0 = heightAt(x0);
+    const top1 = heightAt(x1);
+
+    for (const run of column.runs) {
+      const ys = [
+        run.y0,
+        ...breaks.filter((y) => y > run.y0 + EPS && y < run.y1 - EPS),
+        run.y1,
+      ];
+      for (let i = 0; i + 1 < ys.length; i += 1) {
+        const lo = ys[i];
+        const sloped = run.toTop && i + 2 === ys.length;
+        const h0 = sloped ? top0 : ys[i + 1];
+        const h1 = sloped ? top1 : ys[i + 1];
+        quad([x0, lo, half], [x1, lo, half], [x1, h1, half], [x0, h0, half]);
+        quad([x0, lo, -half], [x0, h0, -half], [x1, h1, -half], [x1, lo, -half]);
+      }
+
+      // The underside of the run: the foot of the wall, or the head of the
+      // opening below it.
+      quad([x0, run.y0, -half], [x1, run.y0, -half], [x1, run.y0, half], [x0, run.y0, half]);
+      // Its top: the wall's own top edge, or the sill of the opening above.
+      const t0 = run.toTop ? top0 : run.y1;
+      const t1 = run.toTop ? top1 : run.y1;
+      quad([x0, t0, half], [x1, t1, half], [x1, t1, -half], [x0, t0, -half]);
     }
   }
 
-  const shape = new THREE.Shape();
-  const doors = openings.filter((o) => o.sill <= EPS);
-  const skylights = openings.filter((o) => o.sill > EPS && o.head >= heightAt(o.a) - EPS);
-  const holes = openings.filter((o) => o.sill > EPS && o.head < heightAt(o.a) - EPS);
+  // Jambs and end faces: wherever one side of a column boundary has material and
+  // the other does not. An opening that runs the full height of the wall leaves
+  // no material at all in its column, so the wall parts around it with no special
+  // case for it.
+  const spansAt = (index: number, x: number): Span[] => {
+    const column = columns[index];
+    if (!column) return [];
+    return column.runs.map((run) => [run.y0, run.toTop ? heightAt(x) : run.y1] as Span);
+  };
 
-  // Bottom edge, stepping up and over every door.
-  shape.moveTo(0, 0);
-  for (const door of doors) {
-    shape.lineTo(door.a, 0);
-    shape.lineTo(door.a, door.head);
-    shape.lineTo(door.b, door.head);
-    shape.lineTo(door.b, 0);
-  }
-  shape.lineTo(length, 0);
-
-  // Up the far end, back along the top stepping *down* around anything that
-  // breaks it, and down the near end.
-  shape.lineTo(length, heightAt(length));
-  for (const gap of [...skylights].reverse()) {
-    shape.lineTo(gap.b, heightAt(gap.b));
-    shape.lineTo(gap.b, gap.sill);
-    shape.lineTo(gap.a, gap.sill);
-    shape.lineTo(gap.a, heightAt(gap.a));
-  }
-  shape.lineTo(0, heightAt(0));
-  shape.closePath();
-
-  for (const hole of holes) {
-    const path = new THREE.Path();
-    path.moveTo(hole.a, hole.sill);
-    path.lineTo(hole.b, hole.sill);
-    path.lineTo(hole.b, hole.head);
-    path.lineTo(hole.a, hole.head);
-    path.closePath();
-    shape.holes.push(path);
+  for (let i = 0; i < cuts.length; i += 1) {
+    const x = cuts[i];
+    const left = spansAt(i - 1, x);
+    const right = spansAt(i, x);
+    for (const [lo, hi] of subtractSpans(left, right)) {
+      quad([x, lo, -half], [x, hi, -half], [x, hi, half], [x, lo, half]);
+    }
+    for (const [lo, hi] of subtractSpans(right, left)) {
+      quad([x, lo, half], [x, hi, half], [x, hi, -half], [x, lo, -half]);
+    }
   }
 
-  let geometry: THREE.ExtrudeGeometry;
-  try {
-    geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
-  } catch {
-    // A self-intersecting outline can defeat the triangulator; one bad wall is
-    // not a reason to fail the import.
-    return [];
-  }
-  geometry.translate(0, 0, -thickness / 2);
-  return [geometry];
+  if (positions.length === 0) return null;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  return geometry;
 }
 
 /* ---------------------------------------------------------------- builder */

@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import {
   DEFAULT_RENDER_CONFIG,
   DEFAULT_SECTION_STATE,
+  DEFAULT_UI_CONFIG,
   type CameraPreset,
   type Floorplan3dCardConfig,
   type LevelDefinition,
@@ -39,7 +40,7 @@ import type {
   ViewerEvents,
 } from '@/engine/contracts';
 import { Emitter } from '@/util/events';
-import { vRound } from '@/util/math';
+import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
@@ -266,6 +267,12 @@ export class Viewer implements IViewer {
   private wired = false;
   /** Serialises overlapping model loads; see `loadModel`. */
   private loadToken = 0;
+  /** Toolbar override for `ui.explode`; see `setExplode`. */
+  private explodeOverride: number | null = null;
+  /** Metres the storeys are *drawn* apart by right now; see `stepExplode`. */
+  private explodeGap = 0;
+  private explodeFlight: { from: number; to: number; t: number; duration: number } | null = null;
+  private explodeLease: (() => void) | null = null;
   private readonly unwire: Array<() => void> = [];
   private handleHideTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly edges = new EdgeOverlay();
@@ -471,6 +478,7 @@ export class Viewer implements IViewer {
     const core = this.core;
     if (!core || !core.canRender) return;
 
+    this.stepExplode(dt);
 
     // Camera first: everything else positions itself relative to the view.
     this.tick('camera', this._cameraCtl, dt, ctx);
@@ -556,10 +564,9 @@ export class Viewer implements IViewer {
     }
 
     if (renderChanged || uiChanged) this.applyRenderStyle();
-    if (uiChanged) {
-      const levels = this._model?.model?.levels;
-      if (levels) this.applyExplode(levels);
-    }
+    // `ui.explode` is as much a view change as pressing the toolbar button, so
+    // an edit to it travels rather than teleports.
+    if (uiChanged) this.flyExplode(true);
 
     if (cameraChanged) this.pushCameraSettings();
 
@@ -806,7 +813,8 @@ export class Viewer implements IViewer {
     // so depth-testing one there just makes it vanish with nothing to explain
     // why. Markers always draw through in `wireframe`.
     const style = render.style ?? DEFAULT_RENDER_CONFIG.style;
-    const depthTested = style !== 'wireframe' && this.config.ui?.markersThroughWalls !== true;
+    const wire = style === 'wireframe';
+    const depthTested = !wire && this.config.ui?.markersThroughWalls !== true;
     this.guard('entities', this._entities, (e) =>
       (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(depthTested),
     );
@@ -826,7 +834,11 @@ export class Viewer implements IViewer {
     );
 
     const hideCeilings = this.config.ui?.showCeilings === false;
-    this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings));
+    // A hidden-line drawing keeps the slab and only stops drawing it: it paints
+    // nothing anyway, and taking it out of the scene opens the storey like a box
+    // with the lid off, which reads as walls you can see straight through. In
+    // `solid` the surface is the drawing, so there it really does have to go.
+    this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings || wire));
     // The line work is merged per storey, so dropping the ceilings from it means
     // rebuilding — cheap enough for something that changes on a click.
     if (this.edges.setHideCeilings(hideCeilings)) {
@@ -870,8 +882,9 @@ export class Viewer implements IViewer {
    * out — and the room anchors are re-read afterwards, since they are measured
    * off geometry that just moved.
    */
-  private applyExplode(levels: readonly LevelDefinition[]): void {
-    const offsets = explodeOffsets(levels, this.config.ui?.explode ?? 0);
+  private applyExplode(levels: readonly LevelDefinition[], settled = true): void {
+    if (settled) this.explodeGap = this.explode;
+    const offsets = explodeOffsets(levels, this.explodeGap);
     const value = offsets.size > 0 ? offsets : null;
 
     this.guard('model', this._model, (m) => m.setLevelOffsets(value));
@@ -887,27 +900,86 @@ export class Viewer implements IViewer {
     this.guard('section', this._section, (sc) =>
       (
         sc as ISectionController & {
-          setLevelOffsets?(o: ReadonlyMap<string, number> | null): void;
+          setLevelOffsets?(o: ReadonlyMap<string, number> | null, settled?: boolean): void;
         }
-      ).setLevelOffsets?.(value),
+      ).setLevelOffsets?.(value, settled),
     );
 
-    const root = this._model?.model?.root;
-    if (root) this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(root)));
+    // Measured off the geometry that just moved, so it waits until the geometry
+    // has stopped: a leader line chasing its room every frame costs a full
+    // traversal per frame and lands in the same place either way.
+    if (settled) {
+      const root = this._model?.model?.root;
+      if (root) this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(root)));
+    }
     this.core?.invalidate();
   }
 
   /** Metres the storeys are currently pulled apart by. */
   get explode(): number {
-    return this.config.ui?.explode ?? 0;
+    return this.explodeOverride ?? this.config.ui?.explode ?? 0;
   }
 
-  /** Live change, without going through a config round-trip. */
-  setExplode(metres: number): void {
-    const ui = { ...(this.config.ui ?? {}), explode: Math.max(0, metres) };
-    this.config = { ...this.config, ui };
+  /**
+   * Live change, without going through a config round-trip.
+   *
+   * Held beside the config rather than written into it. Separating the storeys
+   * is something you switch on to look at the building, and the card is handed
+   * a fresh config on every unrelated edit — folding it in meant the first such
+   * edit silently collapsed the view again.
+   */
+  setExplode(metres: number, animate = true): void {
+    this.explodeOverride = Math.max(0, metres);
+    this.flyExplode(animate);
+  }
+
+  /**
+   * Send the storeys to wherever `explode` now says, over `ui.explodeDuration`
+   * seconds. Idempotent: called with the storeys already there, it does nothing
+   * but re-apply the same offsets.
+   */
+  private flyExplode(animate: boolean): void {
     const levels = this._model?.model?.levels;
-    if (levels) this.applyExplode(levels);
+    if (!levels) return;
+
+    const duration =
+      animate && Math.abs(this.explode - this.explodeGap) > 1e-4
+        ? (this.config.ui?.explodeDuration ?? DEFAULT_UI_CONFIG.explodeDuration)
+        : 0;
+    if (duration <= 0) {
+      this.explodeFlight = null;
+      this.releaseExplodeLease();
+      this.applyExplode(levels, true);
+      return;
+    }
+
+    this.explodeFlight = { from: this.explodeGap, to: this.explode, t: 0, duration };
+    // The loop renders on demand, so the flight has to keep it awake for its own
+    // duration — nothing else is going to invalidate on its behalf.
+    this.explodeLease ??= this.core?.holdContinuous() ?? null;
+    this.core?.invalidate();
+  }
+
+  /** Move the storeys one frame closer to where `explode` says they belong. */
+  private stepExplode(dt: number): void {
+    const flight = this.explodeFlight;
+    const levels = this._model?.model?.levels;
+    if (!flight || !levels) return;
+
+    flight.t = Math.min(1, flight.t + dt / flight.duration);
+    this.explodeGap = flight.from + (flight.to - flight.from) * easeInOutCubic(flight.t);
+
+    const settled = flight.t >= 1;
+    this.applyExplode(levels, settled);
+    if (settled) {
+      this.explodeFlight = null;
+      this.releaseExplodeLease();
+    }
+  }
+
+  private releaseExplodeLease(): void {
+    this.explodeLease?.();
+    this.explodeLease = null;
   }
 
   /** World bounds of the geometry currently drawn, or null when there is none. */
@@ -975,6 +1047,8 @@ export class Viewer implements IViewer {
       clearTimeout(this.handleHideTimer);
       this.handleHideTimer = null;
     }
+    this.explodeFlight = null;
+    this.releaseExplodeLease();
     this.edges.dispose();
     for (const off of this.unwire) off();
     this.unwire.length = 0;
