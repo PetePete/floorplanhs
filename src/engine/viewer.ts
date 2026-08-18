@@ -450,22 +450,55 @@ export class Viewer implements IViewer {
       this.unwire.push(
         placement.on('placement-commit', ({ entityId, mode, result }) => {
           if (mode !== 'move') return;
+          const position = vRound(result.position);
+          // The room the marker came from, when it was dragged out of one.
+          // Dropping this on the way out is what left a chip parked outside the
+          // plan with nothing to say which room it belongs to — the placement
+          // works it out, and then nobody wrote it down.
+          const room = result.room ?? undefined;
           this.emit('edit-intent', {
             kind: 'move-entity',
             entityId,
-            position: vRound(result.position),
+            position,
             level: result.levelId,
-            // The room the marker came from, when it was dragged out of one.
-            // Dropping this on the way out is what left a chip parked outside
-            // the plan with nothing to say which room it belongs to — the
-            // placement works it out, and then nobody wrote it down.
-            room: result.room ?? undefined,
+            room,
           });
+          this.adoptMove(entityId, position, result.levelId, room);
         }),
       );
     }
 
     camera.setDefaultPreset(this.findDefaultPreset());
+  }
+
+  /**
+   * Take a drag's result into our own copy of the config, straight away.
+   *
+   * The dashboard is where a placement is *stored*, and it hands the config
+   * back on its own schedule — the editor's YAML round-trip, a Lovelace
+   * re-render. The marker cannot wait for that: the room it was dragged out of
+   * is what its leader line points at, and a chip parked outside the plan with
+   * no line is exactly the thing the gesture is for. So the layer is told now,
+   * with the same values the dashboard will confirm later.
+   */
+  private adoptMove(
+    entityId: string,
+    position: Vec3,
+    level: string | null,
+    room: string | undefined,
+  ): void {
+    const entities = this.config.entities ?? [];
+    const index = entities.findIndex((entry) => entry.entity === entityId);
+    if (index < 0) return;
+
+    const moved: PlacedEntity = { ...entities[index], position, level };
+    if (room) moved.room = room;
+    else delete moved.room;
+
+    const next = [...entities];
+    next[index] = moved;
+    this.config = { ...this.config, entities: next };
+    this.guard('entities', this._entities, (e) => e.setEntities(next));
   }
 
   /** Default preset if there is one, otherwise frame whatever we loaded. */
