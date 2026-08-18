@@ -98,6 +98,7 @@ export class CameraController implements ICameraController {
   private viewCubeVisible = true;
   /** Mirrors the card background so the cube picks the readable ink. */
   private groundDark = true;
+  private viewCubeTopMargin: number | null = null;
 
   /** Shift swaps the wheel button from pan to orbit. See `applyNavigationMode`. */
   private shiftHeld = false;
@@ -168,6 +169,7 @@ export class CameraController implements ICameraController {
     this.viewCube.init(ctx);
     this.viewCube.setVisible(this.viewCubeVisible);
     this.viewCube.setGroundDark(this.groundDark);
+    if (this.viewCubeTopMargin !== null) this.viewCube.setTopMargin(this.viewCubeTopMargin);
   }
 
   update(dt: number): void {
@@ -489,6 +491,16 @@ export class CameraController implements ICameraController {
   setGroundDark(dark: boolean): void {
     this.groundDark = dark;
     this.viewCube?.setGroundDark(dark);
+  }
+
+  /**
+   * How far below the top edge the orientation cube sits, in CSS px. The card
+   * pushes it, because whether there is a toolbar above the cube to clear is a
+   * question about the chrome and the cube is painted on the canvas.
+   */
+  setViewCubeTopMargin(px: number): void {
+    this.viewCubeTopMargin = px;
+    this.viewCube?.setTopMargin(px);
   }
 
   isViewCubeVisible(): boolean {

@@ -291,6 +291,17 @@ export class ViewCube {
     this.ctx?.invalidate();
   }
 
+  /**
+   * How far below the top edge the cube sits. The card owns this: the cube is
+   * painted on the canvas and cannot see the chrome, so it has no way of
+   * knowing whether there is a toolbar above it to clear.
+   */
+  setTopMargin(px: number): void {
+    if (this.options.margin.y === px) return;
+    this.options.margin = { ...this.options.margin, y: px };
+    this.ctx?.invalidate();
+  }
+
   setVisible(visible: boolean): void {
     if (this.visible === visible) return;
     this.visible = visible;

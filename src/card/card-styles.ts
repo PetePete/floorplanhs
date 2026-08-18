@@ -712,6 +712,19 @@ export const cardStyles = css`
   :host([data-layout='narrow']) .cube-gap {
     --fp3d-cube-gap: 112px;
   }
+
+  /*
+   * No toolbar (a panel view) means the cube moves up to the top inset — see
+   * placeViewCube in the card — so the strip it occupies starts higher and is
+   * that much shorter. The two numbers have to move together or the cube lands
+   * on the zoom control.
+   */
+  .chrome.no-toolbar .cube-gap {
+    --fp3d-cube-gap: 114px;
+  }
+  :host([data-layout='narrow']) .chrome.no-toolbar .cube-gap {
+    --fp3d-cube-gap: 90px;
+  }
   :host([data-layout='narrow']) .cube-column {
     --fp3d-cube-size: 72px;
   }

@@ -149,6 +149,12 @@ export interface ICameraController extends Subsystem {
   setOrthographic(enabled: boolean, animate?: boolean): void;
   isOrthographic(): boolean;
   setAutoRotate(enabled: boolean): void;
+  /**
+   * How far below the top edge the orientation cube sits, in CSS px. The cube
+   * is painted on the canvas and cannot see the chrome, so the card has to say
+   * whether there is a toolbar above it to clear.
+   */
+  setViewCubeTopMargin(px: number): void;
   /** Blocks orbit while a drag/placement gesture owns the pointer. */
   setEnabled(enabled: boolean): void;
   readonly controls: { enabled: boolean; target: THREE.Vector3 } & Record<string, unknown>;

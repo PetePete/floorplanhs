@@ -358,6 +358,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     }
     if (changed.has('layout')) this.setAttribute('data-layout', this.layout);
     if (changed.has('config') || changed.has('isPanel')) this.applyHostSizing();
+    this.placeViewCube();
     // setConfig can arrive after the first render (HA does this when a card is
     // created empty and configured afterwards); firstUpdated has been and gone.
     if (changed.has('config') && this.config && !this.viewer && this.isConnected) {
@@ -1468,6 +1469,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     return true;
   }
 
+  /**
+   * Where the orientation cube hangs. With a toolbar above it the cube has to
+   * clear it; in a panel view there is no toolbar, and leaving the cube down
+   * there both wasted the corner and had it sitting on top of the zoom control,
+   * which reserves its strip in the chrome grid from the same two numbers.
+   */
+  private placeViewCube(): void {
+    const camera = this.viewer?.cameraCtl;
+    if (!camera) return;
+    camera.setViewCubeTopMargin(this.toolbarVisible(this.config?.ui ?? {}) ? 88 : 16);
+  }
+
   private renderChrome(showToolbar: boolean, selected: PlacedEntity | null): TemplateResult {
     const config = this.config;
     const ui = config?.ui ?? {};
@@ -1488,7 +1501,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const activeLevel = this.visibleLevels?.length === 1 ? this.visibleLevels[0] : null;
 
     return html`
-      <div class=${classMap({ chrome: true })}>
+      <div class=${classMap({ chrome: true, 'no-toolbar': !showToolbar })}>
         ${config?.title
           ? html`<div class="at-topleft"><div class="title-chip">${config.title}</div></div>`
           : nothing}
