@@ -18,7 +18,6 @@ export type ToolbarAction =
   | 'reset'
   | 'fit'
   | 'explode'
-  | 'projection'
   | 'section'
   | 'autorotate'
   | 'tour'
@@ -247,18 +246,6 @@ export class Fp3dToolbar extends FpBaseElement {
         pressed: this.openPanel === 'section' || this.sectionActive,
         hidden: !this.canSection,
         rank: 3,
-      },
-      {
-        action: 'projection',
-        glyph: this.orthographic ? 'orthographic' : 'perspective',
-        // Says where the button goes, not where you are. The old wording read
-        // as a status line and made an isometric view look like a perspective
-        // one. `pressed` is deliberately false: it is a switch, not a state.
-        label: this.orthographic
-          ? this.t('ui.toolbar.to_perspective', 'Switch to perspective')
-          : this.t('ui.toolbar.to_isometric', 'Switch to isometric'),
-        pressed: false,
-        rank: 4,
       },
       {
         action: 'tour',

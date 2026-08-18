@@ -1,6 +1,9 @@
 /**
- * Orbit camera: OrbitControls plus preset flights, a perspective/orthographic
- * "flatten to floorplan" transition, framing and idle return.
+ * Orbit camera: OrbitControls plus preset flights, framing and idle return.
+ *
+ * One projection, always: the axonometric. A floorplan is a drawing rather than
+ * a photograph, so parallel walls stay parallel and a room at the back is drawn
+ * the same size as one at the front.
  *
  * Two things here are subtler than they look:
  *
@@ -34,14 +37,10 @@ import {
   type ViewCubeOptions,
 } from '@/engine/camera/view-cube';
 
-/** Narrow enough that the residual perspective is invisible, wide enough to be stable. */
-const FLATTEN_FOV = 12;
-/** Fraction of a preset transition spent on the projection change. */
-const PROJECTION_SHARE = 0.55;
 const CHANGE_THROTTLE_MS = 60;
 const FRAME_MARGIN = 1.12;
 
-type ContinuousReason = 'flight' | 'damping' | 'interaction' | 'rotate' | 'projection';
+type ContinuousReason = 'flight' | 'damping' | 'interaction' | 'rotate';
 
 type OrbitCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
 
@@ -69,7 +68,6 @@ export class CameraController implements ICameraController {
 
   private readonly runner = new TweenRunner();
   private flight: Tween<OrbitFrame> | null = null;
-  private fovTween: Tween<number> | null = null;
   private zoomTween: Tween<number> | null = null;
 
   private ortho = false;
@@ -87,9 +85,6 @@ export class CameraController implements ICameraController {
 
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
-
-  /** Used while the projection transition needs to pull the camera far out. */
-  private savedMaxDistance: number | null = null;
 
   private readonly fallbackControls = { enabled: true, target: new THREE.Vector3() };
 
@@ -159,10 +154,6 @@ export class CameraController implements ICameraController {
     this.applyProjectionParams();
     controls.update();
 
-    // Start in the configured projection even when there is no preset at all,
-    // or when the default preset does not mention one.
-    if (this.cfg.projection !== 'perspective') void this.setOrthographic(true, false);
-
     // Built here, not in the constructor: subsystems must not touch three.js
     // before they have a render context.
     this.viewCube = new ViewCube(this.viewCubeBridge, this.viewCubeOptions);
@@ -170,6 +161,12 @@ export class CameraController implements ICameraController {
     this.viewCube.setVisible(this.viewCubeVisible);
     this.viewCube.setGroundDark(this.groundDark);
     if (this.viewCubeTopMargin !== null) this.viewCube.setTopMargin(this.viewCubeTopMargin);
+
+    // The card draws one projection: the axonometric. A floorplan is a drawing,
+    // not a photograph — parallel walls stay parallel and a room at the back is
+    // the same size as one at the front. Last, because everything above it has
+    // to exist whatever this does.
+    this.commitProjection(true, this.visibleHeight());
   }
 
   update(dt: number): void {
@@ -282,33 +279,19 @@ export class CameraController implements ICameraController {
     if (!ctx || !controls) return;
 
     this.currentPresetId = preset.id;
-    // A preset that says nothing about projection follows `camera.projection`
-    // rather than silently meaning "perspective". That is what makes isometric
-    // an actual default instead of something every preset has to opt into.
-    const wantOrtho = preset.orthographic ?? this.cfg.projection !== 'perspective';
     const full = animate ? Math.max(this.cfg.transitionDuration, 0) : 0;
 
-    if (wantOrtho !== this.ortho) {
-      await this.setOrthographic(wantOrtho, animate);
-      if (this.disposed) return;
-    }
-
-    const flightDuration = full > 0 && wantOrtho !== this.ortho ? full * (1 - PROJECTION_SHARE) : full;
-
-    if (!wantOrtho && preset.fov !== undefined) {
-      this.tweenFov(preset.fov, flightDuration);
-    }
-    if (wantOrtho && preset.orthoZoom !== undefined) {
-      this.tweenZoom(preset.orthoZoom, flightDuration);
-    } else if (wantOrtho) {
+    if (preset.orthoZoom !== undefined) {
+      this.tweenZoom(preset.orthoZoom, full);
+    } else {
       // No zoom saved: fit the building instead of keeping whatever zoom the
       // camera happened to be at. A hard-coded number only ever suits the house
       // it was measured on — this works for any model, at any card size.
       const fitted = this.orthoZoomToFit();
-      if (fitted !== null) this.tweenZoom(fitted, flightDuration);
+      if (fitted !== null) this.tweenZoom(fitted, full);
     }
 
-    await this.flyTo(toVector(preset.position), toVector(preset.target), flightDuration);
+    await this.flyTo(toVector(preset.position), toVector(preset.target), full);
   }
 
   capture(name: string): CameraPreset {
@@ -321,10 +304,7 @@ export class CameraController implements ICameraController {
       target: vRound([target.x, target.y, target.z] as Vec3),
       fov: round(this.ctx?.camera.fov ?? this.cfg.fov, 2),
     };
-    if (this.ortho) {
-      preset.orthographic = true;
-      preset.orthoZoom = round(this.ctx?.orthoCamera.zoom ?? 1, 4);
-    }
+    preset.orthoZoom = round(this.ctx?.orthoCamera.zoom ?? 1, 4);
     return preset;
   }
 
@@ -366,80 +346,6 @@ export class CameraController implements ICameraController {
 
     const position = sphere.center.clone().addScaledVector(direction, distance);
     void this.flyTo(position, sphere.center.clone(), duration);
-  }
-
-  /**
-   * Perspective <-> orthographic with identical framing across the switch.
-   *
-   * The visible height at the orbit target, `2 * d * tan(fov/2)`, is the
-   * invariant. Animating the field of view down to a long lens while pulling the
-   * camera back to hold that height *is* the flatten: by the time we swap the
-   * projection matrix at 12 degrees, the two renders are indistinguishable.
-   */
-  async setOrthographic(enabled: boolean, animate = true): Promise<void> {
-    const ctx = this.ctx;
-    const controls = this.orbit;
-    if (!ctx || !controls || enabled === this.ortho) return;
-
-    const duration = animate ? Math.max(this.cfg.transitionDuration * PROJECTION_SHARE, 0) : 0;
-    const height = this.visibleHeight();
-
-    this.cancelTween(this.fovTween);
-    this.fovTween = null;
-
-    if (duration <= 0) {
-      this.commitProjection(enabled, height);
-      return;
-    }
-
-    this.addReason('projection');
-    this.savedMaxDistance = controls.maxDistance;
-    controls.maxDistance = Math.max(controls.maxDistance, this.distanceForFov(height, FLATTEN_FOV) * 1.2);
-
-    const startFov = enabled ? ctx.camera.fov : FLATTEN_FOV;
-    const endFov = enabled ? FLATTEN_FOV : (this.cfg.fov ?? DEFAULT_CAMERA_CONFIG.fov);
-
-    if (!enabled) {
-      // Come back as a very long lens first so the frame does not pop.
-      this.commitProjection(false, height, FLATTEN_FOV);
-    }
-
-    const tween = tweenValue(
-      startFov,
-      endFov,
-      duration,
-      (fov) => {
-        ctx.camera.fov = fov;
-        ctx.camera.updateProjectionMatrix();
-        this.setDistance(this.distanceForFov(height, fov));
-        ctx.invalidate();
-      },
-      {
-        easing: easeInOutCubic,
-        onComplete: () => {
-          this.fovTween = null;
-          if (enabled) this.commitProjection(true, height);
-          else {
-            ctx.camera.fov = endFov;
-            ctx.camera.updateProjectionMatrix();
-            this.setDistance(this.distanceForFov(height, endFov));
-          }
-          if (this.savedMaxDistance !== null && this.orbit) {
-            this.orbit.maxDistance = this.savedMaxDistance;
-            this.savedMaxDistance = null;
-          }
-          this.clearReason('projection');
-          ctx.invalidate();
-        },
-      },
-    );
-    this.fovTween = tween;
-    this.runner.add(tween);
-    await tween.promise;
-  }
-
-  isOrthographic(): boolean {
-    return this.ortho;
   }
 
   setAutoRotate(enabled: boolean): void {
@@ -619,7 +525,7 @@ export class CameraController implements ICameraController {
     this.applyNavigationMode();
 
     // Orthographic dollying is a zoom, not a distance; mirror the perspective
-    // limits so both projections feel like the same camera.
+    // limits so the zoom slider and the wheel agree.
     const tanHalf = Math.tan(degToRad(this.cfg.fov) / 2);
     const reference = this.orthoRefHeight() / 2;
     controls.minZoom = reference / (this.cfg.maxDistance * tanHalf);
@@ -972,25 +878,6 @@ export class CameraController implements ICameraController {
     tween.cancel();
   }
 
-  private tweenFov(fov: number, duration: number): void {
-    const ctx = this.ctx;
-    if (!ctx) return;
-    this.cancelTween(this.fovTween);
-    this.fovTween = null;
-    if (duration <= 0) {
-      ctx.camera.fov = fov;
-      ctx.camera.updateProjectionMatrix();
-      ctx.invalidate();
-      return;
-    }
-    const tween = tweenValue(ctx.camera.fov, fov, duration, (value) => {
-      ctx.camera.fov = value;
-      ctx.camera.updateProjectionMatrix();
-      ctx.invalidate();
-    });
-    this.fovTween = tween;
-    this.runner.add(tween);
-  }
 
   private tweenZoom(zoom: number, duration: number): void {
     const ctx = this.ctx;

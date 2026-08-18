@@ -145,12 +145,7 @@ function renderPresetRow(
         onChange: (v) => updatePreset(ctx, index, { fov: v }),
       })}
     </div>
-    ${switchRow({
-      label: ctx.t('editor.orthographic', 'Orthographic (flat floorplan look)'),
-      checked: preset.orthographic === true,
-      onChange: (v) => updatePreset(ctx, index, { orthographic: v || undefined }, true),
-    })}
-    ${preset.orthographic
+    ${preset.orthoZoom !== undefined || true
       ? numberField({
           label: ctx.t('editor.ortho_zoom', 'Orthographic zoom'),
           value: preset.orthoZoom,

@@ -408,7 +408,7 @@ export class Fp3dPresetBar extends FpBaseElement {
       >
         ${thumb
           ? html`<img class="thumb" src=${thumb} alt="" aria-hidden="true" />`
-          : icon(resolveIconName(preset.icon, preset.orthographic ? 'orthographic' : 'camera'))}
+          : icon(resolveIconName(preset.icon, 'camera'))}
         <span>${preset.name}</span>
         ${local
           ? html`<span

@@ -140,9 +140,6 @@ export function normalizePreset(raw: unknown, indexHint = 0): CameraPreset {
     preset.fov = fov;
   }
 
-  const ortho = toBool(raw.orthographic ?? raw.ortho);
-  if (ortho !== null) preset.orthographic = ortho;
-
   const orthoZoom = toNumber(raw.orthoZoom ?? raw.ortho_zoom ?? raw.zoom);
   if (orthoZoom !== null) {
     if (orthoZoom <= 0) {

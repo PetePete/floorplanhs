@@ -552,12 +552,14 @@ export class Viewer implements IViewer {
   };
 
   private syncCameraRig(core: RenderCore): void {
+    // The projection never changes: the card draws the axonometric and nothing
+    // else, so the core is put in it once and left there.
+    core.setOrthographic(true);
     if (!this._cameraCtl || this.failed.has('camera')) {
       core.syncCameras(ORIGIN);
       return;
     }
     try {
-      core.setOrthographic(this._cameraCtl.isOrthographic());
       core.syncCameras(this._cameraCtl.controls.target);
     } catch (err) {
       this.disable('camera', 'Camera controller failed', err);

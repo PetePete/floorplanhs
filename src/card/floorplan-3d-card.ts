@@ -166,7 +166,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private section: SectionState = { ...DEFAULT_SECTION_STATE };
   @state() private activePreset: string | null = null;
   @state() private selectedEntity: string | null = null;
-  @state() private orthographic = false;
   @state() private autoRotate = false;
   @state() private fullscreen = false;
   @state() private editing = false;
@@ -451,7 +450,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       if (!this.isConnected || this.viewer !== viewer) return;
       viewer.setEditMode(this.editing);
       if (this.autoRotate) viewer.cameraCtl.setAutoRotate(true);
-      this.orthographic = viewer.cameraCtl.isOrthographic();
     } catch (err) {
       if (this.viewer !== viewer) return;
       this.status = 'error';
@@ -592,11 +590,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         // at the model, and it sticks only if a view is saved with it on.
         viewer.setExplode(viewer.explode > 0 ? 0 : this.explodeGap());
         this.exploded = viewer.explode > 0;
-        break;
-      case 'projection':
-        if (!viewer) break;
-        this.orthographic = !this.orthographic;
-        viewer.cameraCtl.setOrthographic(this.orthographic, !this.prefersReducedMotion());
         break;
       case 'autorotate':
         this.autoRotate = !this.autoRotate;
@@ -1122,9 +1115,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     // Reuse the framing of a saved plan view when there is one, so the
     // generated views sit at the same zoom instead of jumping.
-    const reference = (this.config?.presets ?? []).find(
-      (preset) => preset.orthographic && preset.orthoZoom,
-    );
+    const reference = (this.config?.presets ?? []).find((preset) => preset.orthoZoom);
 
     const reach = span * 2.2;
 
@@ -1136,7 +1127,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       // Aim slightly above the floor so the storey sits in the middle of the
       // frame rather than hanging off the bottom edge.
       target: [centreX, level.elevation + 1.2, centreZ],
-      orthographic: true,
       orthoZoom: reference?.orthoZoom,
       visibleLevels: [level.id],
       section: {
@@ -1569,7 +1559,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .dark=${this.dark}
                 .size=${this.layout}
                 .openPanel=${this.panel}
-                .orthographic=${this.orthographic}
                 .autoRotate=${this.autoRotate}
                 .fullscreen=${this.fullscreen}
                 .editing=${this.editing}

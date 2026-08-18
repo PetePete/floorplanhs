@@ -211,7 +211,6 @@ presets:
     icon: mdi:floor-plan
     position: [0, 18, 0.01]
     target: [0, 0, 0]
-    orthographic: true
     orthoZoom: 26
     visibleLevels: [ground]
     section:
@@ -314,7 +313,7 @@ falls back to hollow shells rather than failing.
 ### Presets
 
 A preset stores the camera position and target, and optionally the field of
-view, orthographic mode, the cross-section state and which levels were visible.
+view, the cross-section state and which levels were visible.
 Frame the shot in the card, hit **Save current view** in the toolbar, and the
 preset is written into your dashboard YAML. Presets with `inTour: true` are
 included in the auto-rotate slideshow; the one with `default: true` is applied
@@ -421,7 +420,6 @@ Levels are half-open ranges `[elevation, elevation + height)`.
 | `position` | `[x, y, z]` | — | Required. Camera position in metres. |
 | `target` | `[x, y, z]` | — | Required. Look-at point. |
 | `fov` | number | inherits `camera.fov` | Per-preset field of view. |
-| `orthographic` | boolean | `false` | Flat top-down floorplan look. |
 | `orthoZoom` | number | auto-fit | Orthographic zoom factor. |
 | `section` | `SectionState` | — | Cross-section restored with the viewpoint. |
 | `visibleLevels` | string[] \| null | `null` | Level ids visible in this preset. `null`/absent = all. |

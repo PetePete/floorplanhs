@@ -148,7 +148,6 @@ presets:
     icon: mdi:floor-plan
     position: [0, 18, 0.01]
     target: [0, 0, 0]
-    orthographic: true
     orthoZoom: 26
     visibleLevels: [ground]
     section:
@@ -187,9 +186,6 @@ alternative.
   none, the card frames the whole house.
 - `visibleLevels: null` (or absent) means all levels. `visibleLevels: [ground]`
   restores that selection with the viewpoint.
-- `orthographic: true` gives the flat "architect's floorplan" look. Pair it with
-  a top-down `position` and a tiny Z offset (`0.01`) so the up-vector stays
-  well-defined.
 - Jump to a preset from anywhere with an action:
 
   ```yaml

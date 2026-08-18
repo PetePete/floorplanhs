@@ -145,8 +145,6 @@ export interface ICameraController extends Subsystem {
   /** Snapshot the current viewpoint into a new preset object. */
   capture(name: string): CameraPreset;
   frameObject(object: THREE.Object3D | THREE.Box3, animate?: boolean): void;
-  setOrthographic(enabled: boolean, animate?: boolean): void;
-  isOrthographic(): boolean;
   setAutoRotate(enabled: boolean): void;
   /**
    * How far below the top edge the orientation cube sits, in CSS px. The cube

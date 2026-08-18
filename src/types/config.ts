@@ -89,8 +89,7 @@ export interface CameraPreset {
   position: Vec3;
   target: Vec3;
   fov?: number;
-  /** Orthographic top-down "floorplan" look. */
-  orthographic?: boolean;
+  /** How much of the model fits the frame; 1 is the whole of it. */
   orthoZoom?: number;
   /** Section state restored together with the viewpoint. */
   section?: SectionState;
@@ -110,19 +109,8 @@ export interface CameraPreset {
  */
 export type NavigationMode = 'cad' | 'orbit';
 
-/**
- * `isometric` is an orthographic projection — parallel lines stay parallel and
- * a room at the back is drawn the same size as one at the front. It is the
- * default because a floorplan is a drawing, not a photograph.
- *
- * A preset's own `orthographic` field still wins; this only decides what a
- * preset that says nothing about projection means.
- */
-export type ProjectionMode = 'isometric' | 'perspective';
-
 export interface CameraConfig {
   navigation?: NavigationMode;
-  projection?: ProjectionMode;
   fov?: number;
   near?: number;
   far?: number;
@@ -470,7 +458,6 @@ export const DEFAULT_CAMERA_CONFIG: Required<
   Pick<
     CameraConfig,
     | 'navigation'
-    | 'projection'
     | 'fov'
     | 'near'
     | 'far'
@@ -485,7 +472,6 @@ export const DEFAULT_CAMERA_CONFIG: Required<
   >
 > = {
   navigation: 'cad',
-  projection: 'isometric',
   fov: 45,
   near: 0.1,
   far: 500,

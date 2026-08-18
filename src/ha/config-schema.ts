@@ -516,8 +516,6 @@ function readPresets(raw: unknown[], path: string): CameraPreset[] {
     if (icon) preset.icon = icon;
     const fov = readNumber(obj, 'fov', here, { min: 5, max: 150 });
     if (fov !== undefined) preset.fov = fov;
-    const orthographic = readBoolean(obj, 'orthographic', here);
-    if (orthographic !== undefined) preset.orthographic = orthographic;
     const orthoZoom = readNumber(obj, 'orthoZoom', here, { min: 0.01 });
     if (orthoZoom !== undefined) preset.orthoZoom = orthoZoom;
     if (obj.section !== undefined && obj.section !== null) {
@@ -730,10 +728,6 @@ function readCamera(raw: unknown, path: string): CameraConfig {
   assign('damping', readNumber(obj, 'damping', path, { min: 0, max: 1 }));
   assign('transitionDuration', readNumber(obj, 'transitionDuration', path, { min: 0, max: 30 }));
   assign('navigation', readEnum(obj, 'navigation', path, ['cad', 'orbit'] as const));
-  assign(
-    'projection',
-    readEnum(obj, 'projection', path, ['isometric', 'perspective'] as const),
-  );
   assign('autoRotate', readBoolean(obj, 'autoRotate', path));
   assign('autoRotateSpeed', readNumber(obj, 'autoRotateSpeed', path));
   assign('idleReturnAfter', readNumber(obj, 'idleReturnAfter', path, { min: 0 }));
