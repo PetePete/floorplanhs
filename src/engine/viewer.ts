@@ -977,7 +977,9 @@ export class Viewer implements IViewer {
       this.explodeFlight = null;
       this.releaseExplodeLease();
       this.applyExplode(levels, true);
-      if (moved) this.fitToView(animate);
+      // No flight, so no flight to run alongside: the frame lands with the
+      // storeys rather than travelling after them.
+      if (moved) this.fitToView(false);
       return;
     }
 
@@ -999,13 +1001,17 @@ export class Viewer implements IViewer {
 
     const settled = flight.t >= 1;
     this.applyExplode(levels, settled);
+
+    // Reframed every frame rather than flown to afterwards. A second animation
+    // chasing the first reads as two steps; refitting the frame the storeys
+    // currently occupy keeps the building the same size on screen while it comes
+    // apart, which is the one motion the eye is meant to follow. No tween is
+    // needed for it either — the gap is already eased, so the frame is too.
+    if (flight.fit) this.fitToView(false);
+
     if (settled) {
       this.explodeFlight = null;
       this.releaseExplodeLease();
-      // Afterwards, not during: a camera flight and the storeys moving at the
-      // same time is two motions to follow, and the frame would be aiming at a
-      // building that is still changing shape under it.
-      if (flight.fit) this.fitToView(true);
     }
   }
 
