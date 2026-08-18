@@ -171,6 +171,11 @@ export class DropIndicator {
 
   /* ------------------------------------------------------------ lifecycle */
 
+  /** Which ink the drop chip is drawn in; see `MarkerAtlas.setGroundDark`. */
+  setGroundDark(dark: boolean): void {
+    this.atlas.setGroundDark(dark);
+  }
+
   init(ctx: RenderContext): void {
     this.ctx = ctx;
     ctx.overlayRoot.add(this.group);

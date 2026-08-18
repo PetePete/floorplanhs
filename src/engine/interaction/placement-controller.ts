@@ -735,6 +735,11 @@ export class PlacementController implements IPlacementController {
     this.hiddenLine = value;
   }
 
+  /** Which ink the drop chip is drawn in; see `MarkerAtlas.setGroundDark`. */
+  setGroundDark(dark: boolean): void {
+    this.indicator.setGroundDark(dark);
+  }
+
   /* ------------------------------------------------------------- internals */
 
   private start(): void {

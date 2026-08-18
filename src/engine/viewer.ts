@@ -829,17 +829,26 @@ export class Viewer implements IViewer {
     const style = render.style ?? DEFAULT_RENDER_CONFIG.style;
     const wire = style === 'wireframe';
     const depthTested = !wire && this.config.ui?.markersThroughWalls !== true;
-    this.guard('entities', this._entities, (e) =>
-      (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(depthTested),
-    );
+    this.guard('entities', this._entities, (e) => {
+      const layer = e as IEntityLayer & {
+        setDepthTested?(v: boolean): void;
+        setGroundDark?(v: boolean): void;
+      };
+      layer.setDepthTested?.(depthTested);
+      // A marker is a plate with a hairline on it, and both have to sit on the
+      // same side of the paper as the drawing under them.
+      layer.setGroundDark?.(groundDark);
+    });
 
     this.guard('placement', this._placement, (p) => {
       const target = p as Subsystem & {
         setSnapPlacement?(v: boolean): void;
         setHiddenLine?(v: boolean): void;
+        setGroundDark?(v: boolean): void;
       };
       target.setSnapPlacement?.(this.config.ui?.snapPlacement === true);
       target.setHiddenLine?.(wire);
+      target.setGroundDark?.(groundDark);
     });
 
     // Whether ghosted storeys appear at all is a decision about the card, not

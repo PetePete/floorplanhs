@@ -288,6 +288,15 @@ export class EntityLayer implements IEntityLayer {
     this.ctx?.invalidate();
   }
 
+  /**
+   * Which ink the marker art is drawn in. The atlas is thrown away and redrawn,
+   * so this is a theme switch and nothing finer-grained.
+   */
+  setGroundDark(dark: boolean): void {
+    this.atlas.setGroundDark(dark);
+    this.ctx?.invalidate();
+  }
+
   /** Let walls and ceilings hide markers behind them. */
   setDepthTested(enabled: boolean): void {
     if (this.depthTested === enabled) return;

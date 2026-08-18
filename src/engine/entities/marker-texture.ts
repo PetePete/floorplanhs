@@ -41,6 +41,8 @@ export interface MarkerSpec {
   muted?: boolean;
   /** Entity is on/open/playing: accent border and accent glyph. */
   active?: boolean;
+  /** What the marker is drawn over. Filled in by the atlas; see `INK`. */
+  ground?: 'dark' | 'light';
 }
 
 /** Where a spec ended up in the atlas. Immutable; re-request after a repack. */
@@ -112,15 +114,53 @@ const DEFAULT_ACCENT = '#03a9f4';
  * technical drawing has one ink and one paper, and every soft edge added here is
  * a second visual language competing with the one the model is drawn in.
  */
-const BG = 'rgba(14,17,21,0.72)';
-const BG_HOVER = 'rgba(20,24,30,0.86)';
-const BG_MUTED = 'rgba(14,17,21,0.5)';
-const BORDER = 'rgba(214,219,226,0.45)';
-const TEXT = '#eef1f6';
-const TEXT_MUTED = '#858c98';
-const TEXT_VALUE = '#aab2be';
-const GLYPH_IDLE = '#c9cfd9';
-const GLYPH_MUTED = '#7b828e';
+interface MarkerInk {
+  bg: string;
+  bgHover: string;
+  bgMuted: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  textValue: string;
+  glyphIdle: string;
+  glyphMuted: string;
+}
+
+/**
+ * Two of them, because a marker is a plate with a hairline on it and both have
+ * to sit on the same side of the paper. Dark art over a light drawing gave the
+ * plate one edge and the hairline another half a pixel inside it — a double
+ * frame around every marker that was not lit, an active one taking the accent
+ * for its hairline and hiding the seam.
+ */
+const INK: Record<'dark' | 'light', MarkerInk> = {
+  dark: {
+    bg: 'rgba(14,17,21,0.72)',
+    bgHover: 'rgba(20,24,30,0.86)',
+    bgMuted: 'rgba(14,17,21,0.5)',
+    border: 'rgba(214,219,226,0.45)',
+    text: '#eef1f6',
+    textMuted: '#858c98',
+    textValue: '#aab2be',
+    glyphIdle: '#c9cfd9',
+    glyphMuted: '#7b828e',
+  },
+  light: {
+    bg: 'rgba(250,251,253,0.82)',
+    bgHover: 'rgba(255,255,255,0.94)',
+    bgMuted: 'rgba(250,251,253,0.6)',
+    border: 'rgba(38,50,68,0.42)',
+    text: '#18212e',
+    textMuted: '#727a87',
+    textValue: '#3d4757',
+    glyphIdle: '#333c49',
+    glyphMuted: '#8a919d',
+  },
+};
+
+function inkFor(spec: MarkerSpec): MarkerInk {
+  return INK[spec.ground ?? 'dark'];
+}
 
 /* -------------------------------------------------------------- internals */
 
@@ -161,6 +201,7 @@ export class MarkerAtlas {
   private shelfH = 0;
   private tick = 0;
   private gen = 0;
+  private groundDark = true;
   private disposed = false;
 
   /** Fallback returned when there is no 2D context (SSR / unit tests). */
@@ -256,10 +297,13 @@ export class MarkerAtlas {
   /* ----------------------------------------------------------------- cells */
 
   /** Rasterises `spec` if needed and returns its UV rect. */
-  cell(spec: MarkerSpec): AtlasCell {
+  cell(request: MarkerSpec): AtlasCell {
     const c2d = this.c2d;
     if (!c2d || this.disposed) return this.nullCell;
 
+    // Stamped here rather than asked of every caller: what a marker is drawn
+    // over is a property of the card, not of the entity.
+    const spec: MarkerSpec = { ...request, ground: this.groundDark ? 'dark' : 'light' };
     const key = specKey(spec);
     const existing = this.entries.get(key);
     if (existing) {
@@ -281,6 +325,19 @@ export class MarkerAtlas {
 
     this.entries.set(key, { spec: { ...spec }, cell, used: ++this.tick });
     return cell;
+  }
+
+  /**
+   * Which of the two inks the art is drawn in; see `INK`. Everything already
+   * rasterised is in the other one, so this throws the atlas away — a theme
+   * switch, not something that happens per frame.
+   */
+  setGroundDark(dark: boolean): void {
+    if (this.groundDark === dark || this.disposed) return;
+    this.groundDark = dark;
+    const c2d = this.c2d;
+    if (!c2d) return;
+    this.repack(c2d, true);
   }
 
   /** Re-rasterises everything at a new device pixel ratio. */
@@ -481,6 +538,7 @@ export class MarkerAtlas {
  * first is two rectangles where the drawing needs none.
  */
 function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
+  const ink = inkFor(spec);
   const accent = spec.color || DEFAULT_ACCENT;
   const muted = spec.muted === true;
   const selected = spec.state === 'selected';
@@ -489,37 +547,31 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
 
   c2d.save();
   roundRect(c2d, x, y, w, h, radius);
-  c2d.fillStyle = muted ? BG_MUTED : hovered ? BG_HOVER : BG;
+  c2d.fillStyle = muted ? ink.bgMuted : hovered ? ink.bgHover : ink.bg;
   c2d.fill();
   c2d.restore();
 
+  // One rectangle, whatever the state. Selection used to add a second one
+  // around the first, which is a frame around a frame — the marker's own
+  // hairline carries it instead, in the accent and a shade heavier.
   c2d.save();
   roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, radius);
-  c2d.lineWidth = 1;
-  if (muted) {
+  c2d.lineWidth = selected ? 1.8 : 1;
+  if (muted && !selected) {
     // A dashed outline is legible even at a glance and does not rely on colour.
     c2d.setLineDash([4, 3]);
-    c2d.strokeStyle = 'rgba(214,219,226,0.3)';
-  } else if (spec.active) {
-    c2d.strokeStyle = withAlpha(accent, 0.9);
+    c2d.strokeStyle = ink.border;
+  } else if (selected || spec.active) {
+    c2d.strokeStyle = withAlpha(accent, selected ? 1 : 0.9);
   } else {
-    c2d.strokeStyle = BORDER;
+    c2d.strokeStyle = ink.border;
   }
   c2d.stroke();
   c2d.restore();
 
-  if (selected) {
-    c2d.save();
-    roundRect(c2d, x - 3, y - 3, w + 6, h + 6, radius);
-    c2d.lineWidth = 1.5;
-    c2d.strokeStyle = accent;
-    c2d.stroke();
-    c2d.restore();
-  }
-
   const title = spec.title ?? '';
   const value = spec.value ?? '';
-  const glyph = muted ? GLYPH_MUTED : spec.active ? accent : GLYPH_IDLE;
+  const glyph = muted ? ink.glyphMuted : spec.active ? accent : ink.glyphIdle;
 
   if (!title && !value) {
     if (spec.icon) drawIcon(c2d, spec.icon, x + (w - ICON_SIZE) / 2, y + (h - ICON_SIZE) / 2, ICON_SIZE, glyph);
@@ -542,33 +594,34 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
     // down to a floor so it never disappears entirely.
     const valueBudget = Math.min(available * 0.45, measureWith(c2d, `500 12px ${FONT_STACK}`, value));
     const titleText = ellipsise(c2d, title, Math.max(available - valueBudget - GAP_TEXT, 24));
-    c2d.fillStyle = muted ? TEXT_MUTED : TEXT;
+    c2d.fillStyle = muted ? ink.textMuted : ink.text;
     c2d.fillText(titleText, cursor, midY);
     const used = c2d.measureText(titleText).width;
 
     c2d.font = `500 12px ${FONT_STACK}`;
     const valueText = ellipsise(c2d, value, Math.max(available - used - GAP_TEXT, 12));
-    c2d.fillStyle = muted ? TEXT_MUTED : TEXT_VALUE;
+    c2d.fillStyle = muted ? ink.textMuted : ink.textValue;
     c2d.fillText(valueText, cursor + used + GAP_TEXT, midY);
     return;
   }
 
   if (title) {
     c2d.font = `600 13px ${FONT_STACK}`;
-    c2d.fillStyle = muted ? TEXT_MUTED : TEXT;
+    c2d.fillStyle = muted ? ink.textMuted : ink.text;
     c2d.fillText(ellipsise(c2d, title, available), cursor, midY);
     return;
   }
 
   c2d.font = `500 12px ${FONT_STACK}`;
-  c2d.fillStyle = muted ? TEXT_MUTED : TEXT_VALUE;
+  c2d.fillStyle = muted ? ink.textMuted : ink.textValue;
   c2d.fillText(ellipsise(c2d, value, available), cursor, midY);
 }
 
 function drawChip(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
+  const ink = inkFor(spec);
   c2d.save();
   roundRect(c2d, x, y, w, h, 2);
-  c2d.fillStyle = BG;
+  c2d.fillStyle = ink.bg;
   c2d.fill();
   c2d.restore();
 
@@ -581,7 +634,7 @@ function drawChip(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
 
   c2d.font = `600 11px ${FONT_STACK}`;
   c2d.textBaseline = 'middle';
-  c2d.fillStyle = spec.muted ? TEXT_MUTED : TEXT;
+  c2d.fillStyle = spec.muted ? ink.textMuted : ink.text;
   drawTracked(
     c2d,
     ellipsise(c2d, (spec.title ?? '').toUpperCase(), w - CHIP_PAD * 2),
@@ -613,6 +666,7 @@ function trackedWidth(c2d: Ctx2D, text: string): number {
 }
 
 function drawDot(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
+  const ink = inkFor(spec);
   const cx = x + w / 2;
   const cy = y + h / 2;
   const accent = spec.color || DEFAULT_ACCENT;
@@ -623,7 +677,7 @@ function drawDot(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, 
   c2d.shadowOffsetY = 1;
   c2d.beginPath();
   c2d.arc(cx, cy, w / 2 - 1.5, 0, Math.PI * 2);
-  c2d.fillStyle = spec.muted ? BG_MUTED : spec.active ? accent : BG;
+  c2d.fillStyle = spec.muted ? ink.bgMuted : spec.active ? accent : ink.bg;
   c2d.fill();
   c2d.restore();
 
@@ -740,6 +794,7 @@ function specKey(spec: MarkerSpec): string {
     spec.state ?? 'idle',
     spec.muted ? 'm' : '',
     spec.active ? 'a' : '',
+    spec.ground ?? 'dark',
   ].join('');
 }
 
