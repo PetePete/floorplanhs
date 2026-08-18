@@ -144,6 +144,8 @@ export class PlacementController implements IPlacementController {
   private originalPosition: Vec3 | null = null;
   /** Latched once a drag leaves the building. See `resolve`. */
   private freePlacement = false;
+  /** Storey of the last surface this gesture touched; see `freeLevel`. */
+  private lastHitLevel: LevelDefinition | null = null;
   /** Injected by the Viewer; see `setRoomResolver`. */
   private roomAt: ((x: number, y: number, z: number) => string | null) | null = null;
   private lastResult: PlacementResult | null = null;
@@ -253,6 +255,7 @@ export class PlacementController implements IPlacementController {
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
     this.freePlacement = false;
+    this.lastHitLevel = null;
     this.lastResult = null;
     this.applyPreview({
       icon: placed?.marker?.icon,
@@ -443,7 +446,16 @@ export class PlacementController implements IPlacementController {
     // belongs to, so undo exactly that lift before anything reads the height —
     // a position written to the config must always be the real one.
     this.point.y -= this.model.levelOffset(hit.object.userData.level as string | undefined);
-    const level = this.model.levelAt(this.point);
+    // The storey is the one you are pointing at — the surface says which, and
+    // it is the only thing here that knows for certain. Reading it back out of
+    // the height instead was wrong in three ways at once: a floor slab's top
+    // face sits exactly on the boundary between two storeys, so rounding alone
+    // decided the answer; the storeys move in the exploded view; and a preset
+    // that isolates one storey then rejected the drop outright as "that storey
+    // is hidden" — the surface under the pointer belonged, on paper, to the one
+    // below.
+    const level = this.levelOfHit(hit) ?? this.model.levelAt(this.point);
+    this.lastHitLevel = level;
     this.hits.length = 0;
 
     if (level && this.isLevelHidden(level)) {
@@ -526,7 +538,18 @@ export class PlacementController implements IPlacementController {
    * the ground floor; otherwise whichever storey is on screen alone, and
    * failing that the one the model puts at the bottom.
    */
+  /** The storey a hit surface declares it belongs to, if the model named one. */
+  private levelOfHit(hit: THREE.Intersection): LevelDefinition | null {
+    const id = hit.object.userData.level;
+    if (typeof id !== 'string' || !id) return null;
+    return this.model.model?.levels.find((level) => level.id === id) ?? null;
+  }
+
   private freeLevel(): LevelDefinition | null {
+    // Where the gesture came *from*, before anything else: dragging a sensor
+    // out of an upstairs room and onto the lawn beside it is still a placement
+    // upstairs, and the surface it left said so.
+    if (this.lastHitLevel) return this.lastHitLevel;
     const original = this.originalPosition;
     if (original) {
       const level = this.model.levelAt(original);

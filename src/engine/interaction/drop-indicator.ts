@@ -62,11 +62,16 @@ export const GRID_STEP = 0.1;
 /**
  * Snapping keeps hand-placed markers tidy and, more importantly, makes the
  * YAML readable: `[2.4, 2.35, 1.1]` instead of `[2.397, 2.348, 1.103]`.
+ *
+ * In plan only. The height is left exactly as the drop computed it, because
+ * that number is measured *against a surface*: a lamp dropped on a floor whose
+ * top is at 2.62 m lands at 2.64, and rounding that to the nearest 10 cm put it
+ * at 2.60 — two centimetres inside the slab. Buried, the marker is hard to see
+ * and the room lookup reads the storey below it, so the wrong room lights up.
  */
 export function snapToGrid(vector: THREE.Vector3, step = GRID_STEP): THREE.Vector3 {
   if (step <= 0) return vector;
   vector.x = Math.round(vector.x / step) * step;
-  vector.y = Math.round(vector.y / step) * step;
   vector.z = Math.round(vector.z / step) * step;
   return vector;
 }

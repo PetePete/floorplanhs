@@ -208,6 +208,48 @@ describe('placing through a hidden-line drawing', () => {
   });
 });
 
+describe('which storey a drop belongs to', () => {
+  it('is the one the surface says, not the one the height implies', () => {
+    // A floor slab's top face sits exactly on the boundary between two storeys,
+    // so reading the storey back out of the hit height let rounding decide it.
+    // In an isolated view that was fatal: the drop was refused as "that storey
+    // is hidden" because the surface under the pointer belonged, on paper, to
+    // the storey below the one on screen.
+    const built = house();
+    built.floor.userData.level = 'upper';
+    const base = stubModel(built);
+    const model = {
+      ...base,
+      // Only the upper storey is on screen, and the height at the floor's top
+      // face reads as the ground floor.
+      getVisibleLevels: () => ['upper'],
+    } as IModelManager;
+
+    const placement = new PlacementController(model, noopEntities, noopCamera);
+    placement.init(stubContext());
+    placement.beginPlacement('light.a');
+    const result = placement.commitPlacement(...screen(0, 0));
+    expect(result, 'a drop onto the storey being shown must not be refused').not.toBeNull();
+    expect(result!.levelId).toBe('upper');
+    placement.dispose();
+  });
+
+  it('lands clear of the surface rather than snapped through it', () => {
+    // The plan grid is 10 cm. Applying it to the height too put a lamp dropped
+    // on a floor 2 cm *inside* the slab, where the room lookup reads the storey
+    // below and the wrong room lights up.
+    const placement = controller();
+    placement.beginPlacement('light.a');
+    const result = placement.commitPlacement(...screen(0.42, -0.37));
+    expect(result).not.toBeNull();
+    // The slab's top face is at y = 0; plan coordinates are still on the grid.
+    expect(result!.position[1]).toBeGreaterThan(0);
+    expect(result!.position[0]).toBeCloseTo(0.4, 6);
+    expect(result!.position[2]).toBeCloseTo(-0.4, 6);
+    placement.dispose();
+  });
+});
+
 describe('placing outside the building', () => {
   it('drops onto the floor when there is one under the pointer', () => {
     const placement = controller();

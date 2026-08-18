@@ -1219,6 +1219,7 @@ function levelTops(
 ): Map<string, number> {
   const highest = new Map<string, number>();
   const anything = new Map<string, number>();
+  const ceilings = new Map<string, { top: number; bottom: number }>();
   root.updateMatrixWorld(true);
   const box = new THREE.Box3();
 
@@ -1233,14 +1234,32 @@ function levelTops(
     // The walls, and nothing else. They are what a storey's height *means*: a
     // ceiling slab sits above them, which is the thing the cut is there to take
     // off, and a wardrobe that reaches it would otherwise raise the cut over it.
+    if (mesh.userData.part === 'ceiling') {
+      const under = ceilings.get(level);
+      ceilings.set(level, {
+        top: Math.max(under?.top ?? -Infinity, box.max.y),
+        bottom: Math.min(under?.bottom ?? Infinity, box.min.y),
+      });
+      return;
+    }
     if (mesh.userData.part !== 'walls') return;
     highest.set(level, Math.max(highest.get(level) ?? -Infinity, box.max.y));
   });
 
   const tops = new Map<string, number>();
   for (const level of levels) {
-    const top = highest.get(level.id) ?? anything.get(level.id);
-    if (top !== undefined && top > level.elevation) tops.set(level.id, top - level.elevation);
+    let top = highest.get(level.id) ?? anything.get(level.id);
+    if (top === undefined || top <= level.elevation) continue;
+
+    // Slide under a ceiling slab that caps the walls, and only such a slab.
+    // Isolating a storey is meant to let you look into the rooms, so its lid
+    // has to come off — but a flat ceiling in one room of a loft must not drag
+    // the cut down through the ridge of the pitched one beside it.
+    const ceiling = ceilings.get(level.id);
+    if (ceiling && ceiling.top > top - 0.05 && ceiling.bottom > level.elevation) {
+      top = Math.min(top, ceiling.bottom);
+    }
+    tops.set(level.id, top - level.elevation);
   }
   return tops;
 }
