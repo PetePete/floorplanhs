@@ -434,6 +434,11 @@ export class PlacementController implements IPlacementController {
 
     this.point.copy(hit.point);
     this.readNormal(hit);
+    // The exploded view lifts a storey's geometry, so a hit on it comes back
+    // higher than the building really is. The surface knows which storey it
+    // belongs to, so undo exactly that lift before anything reads the height —
+    // a position written to the config must always be the real one.
+    this.point.y -= this.model.levelOffset(hit.object.userData.level as string | undefined);
     const level = this.model.levelAt(this.point);
     this.hits.length = 0;
 
@@ -476,12 +481,16 @@ export class PlacementController implements IPlacementController {
 
     const level = this.freeLevel();
     const y = level?.elevation ?? this.model.model?.bounds.min.y ?? 0;
-    _freePlane.set(UP, -y);
+    // Aim at where the storey is *drawn*, then bring the result back down to
+    // where it really is, so an exploded view does not write lifted heights.
+    const lift = this.model.levelOffset(level?.id);
+    _freePlane.set(UP, -(y + lift));
 
     const ray = this.raycaster.ray;
     if (!ray.intersectPlane(_freePlane, this.point)) {
       return this.reject('Drop beside the house, not above the horizon');
     }
+    this.point.y -= lift;
     if (level && this.isLevelHidden(level)) {
       return this.reject(`${level.name} is hidden`, level);
     }

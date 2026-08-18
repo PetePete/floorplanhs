@@ -52,6 +52,8 @@ function stubModel(built: ReturnType<typeof house>, levels = [GROUND, UPPER]): I
     getPickTargets: () => [built.floor, built.wall],
     setVisibleLevels: () => {},
     getVisibleLevels: () => null,
+    setLevelOffsets: () => {},
+    levelOffset: () => 0,
     levelAt: (position: Vec3 | THREE.Vector3) => {
       const y = Array.isArray(position) ? position[1] : position.y;
       return y >= UPPER.elevation ? UPPER : GROUND;
@@ -109,6 +111,48 @@ function screen(x: number, z: number): [number, number] {
   const halfExtent = 40 * Math.tan(THREE.MathUtils.degToRad(30));
   return [50 + (x / halfExtent) * 50, 50 + (z / halfExtent) * 50];
 }
+
+describe('placing while the storeys are pulled apart', () => {
+  /** As if `upper` were lifted 3 m for the exploded view. */
+  function exploded(): IModelManager {
+    const built = house();
+    // Move the geometry the way the exploded view does, and report the lift.
+    built.floor.position.y += 3;
+    built.wall.position.y += 3;
+    built.floor.userData.level = 'upper';
+    built.wall.userData.level = 'upper';
+    built.root.updateMatrixWorld(true);
+
+    const base = stubModel(built);
+    return { ...base, levelOffset: (id) => (id === 'upper' ? 3 : 0) } as IModelManager;
+  }
+
+  it('writes back the real height, not the lifted one', () => {
+    // The whole point of the transform: a marker dropped on a storey that is
+    // drawn 3 m up belongs in the config at the height the building really has.
+    // Getting this wrong corrupts the config the moment anyone drags anything.
+    const placement = new PlacementController(exploded(), noopEntities, noopCamera);
+    placement.init(stubContext());
+    placement.beginPlacement('sensor.a');
+    const result = placement.commitPlacement(...screen(0, 0));
+    expect(result).not.toBeNull();
+    expect(result!.position[1]).toBeCloseTo(0, 1);
+    placement.dispose();
+  });
+
+  it('does the same for a drop beside the building', () => {
+    const placement = new PlacementController(exploded(), noopEntities, noopCamera);
+    placement.init(stubContext());
+    placement.beginPlacement('sensor.a');
+    const result = placement.commitPlacement(...screen(6, 0));
+    expect(result).not.toBeNull();
+    // A fresh placement with every storey visible lands on the bottom one, and
+    // what matters here is that it lands at *its* height rather than 3 m up.
+    expect(result!.levelId).toBe('ground');
+    expect(result!.position[1]).toBeCloseTo(GROUND.elevation, 1);
+    placement.dispose();
+  });
+});
 
 describe('placing outside the building', () => {
   it('drops onto the floor when there is one under the pointer', () => {

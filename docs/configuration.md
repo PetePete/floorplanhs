@@ -240,6 +240,20 @@ section:
 - `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
+- `explode` pulls the storeys apart along Y, an assembly drawing rather than a
+  house:
+
+  ```yaml
+  ui:
+    explode: 2.8      # metres of separation per storey; 0 is off
+  ```
+
+  The toolbar has a toggle for it, which uses a storey height when nothing is
+  configured. It is a *view*: everything in world space moves together —
+  geometry, edge lines, room tints, markers and their leader lines, and the
+  level cut — while positions written back to the config stay the real ones. A
+  marker dropped on a storey that is drawn three metres up is still recorded at
+  the height the building actually has.
 - `ghostAbove: true` fades the levels above the active one instead of hiding
   them — good for understanding how storeys stack. It also applies to the
   per-storey views the card generates itself (`ui.levelPresets`), together with

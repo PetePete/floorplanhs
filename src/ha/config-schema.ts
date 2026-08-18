@@ -852,6 +852,7 @@ function readUi(raw: unknown, path: string): UiConfig {
     if (value !== undefined) ui[key] = value;
   };
 
+  assign('explode', readNumber(obj, 'explode', path, { min: 0, max: 20 }));
   assign('ghostAbove', readBoolean(obj, 'ghostAbove', path));
   assign('snapPlacement', readBoolean(obj, 'snapPlacement', path));
   assign('showToolbar', readBoolean(obj, 'showToolbar', path));

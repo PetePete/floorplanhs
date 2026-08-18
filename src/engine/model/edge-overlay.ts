@@ -260,6 +260,16 @@ export class EdgeOverlay {
     return this.style;
   }
 
+  /** Mirrors the model's exploded-view lift so the lines stay on their walls. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    for (const [level, lines] of this.byLevel) {
+      lines.position.y = level ? (offsets?.get(level) ?? 0) : 0;
+      // The lines are built with `matrixAutoUpdate` off, since they never move
+      // in the ordinary case; moving one means updating its matrix by hand.
+      lines.updateMatrix();
+    }
+  }
+
   /** Mirrors `IModelManager.setVisibleLevels` so edges hide with their storey. */
   setVisibleLevels(levelIds: string[] | null): void {
     for (const [level, lines] of this.byLevel) {

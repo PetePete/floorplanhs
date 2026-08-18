@@ -526,6 +526,7 @@ tour:
 | `authorTools` | `auto` \| `never` \| `always` | `auto` | Master switch for every authoring affordance — level selector, section panel, entity palette, inspector, save-view, edit toggle. `auto` shows them only in edit mode; `never` hides them even in a dashboard being edited (the wall-tablet case); `always` keeps them visible. It outranks the individual `show*` flags below. |
 | `room` *(per entity)* | string | — | The room this entity belongs to. Sets which room a light fills in `lightMode: room`, and draws a leader line back to that room when the entity is placed outside it. |
 | `snapPlacement` | boolean | `false` | Drop an entity where you dropped it (default), or move it to the height the fixture would really sit at — a light to the ceiling, a switch to 1.10 m. |
+| `explode` | number | `0` | Pull the storeys apart along Y by this many metres per step, so you can see into all of them at once. Everything moves together — geometry, room tints, markers and their leader lines, and the cross-section. Positions in the config stay the real ones. |
 | `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
 | `showToolbarInPanel` | boolean | `false` | Panel views are the wall-tablet case, where the saved views and the cube are the whole interface. Set `true` to keep the toolbar there. |

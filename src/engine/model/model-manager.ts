@@ -56,6 +56,9 @@ export class ModelManager implements IModelManager {
   /** Material library of whichever procedural house we built; we own it. */
   private proceduralMaterials: MaterialLibrary | null = null;
   private levelNodes = new Map<string, THREE.Object3D[]>();
+  /** Unexploded local Y of every node the exploded view moves. */
+  private readonly restingY = new WeakMap<THREE.Object3D, number>();
+  private levelOffsets: ReadonlyMap<string, number> | null = null;
   private visibleLevels: string[] | null = null;
   private pickTargets: THREE.Object3D[] = [];
   private pickDirty = true;
@@ -214,6 +217,32 @@ export class ModelManager implements IModelManager {
     report({ phase: 'done', message: 'Model ready' });
     this.ctx?.invalidate();
     return this.loaded;
+  }
+
+  /**
+   * Lift each storey for the exploded view. Node positions are remembered on
+   * first use rather than accumulated, so repeated calls — a slider being
+   * dragged — cannot drift.
+   */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    this.levelOffsets = offsets;
+    for (const [id, objects] of this.levelNodes) {
+      const offset = offsets?.get(id) ?? 0;
+      for (const object of objects) {
+        let resting = this.restingY.get(object);
+        if (resting === undefined) {
+          resting = object.position.y;
+          this.restingY.set(object, resting);
+        }
+        object.position.y = resting + offset;
+      }
+    }
+    this.ctx?.invalidate();
+  }
+
+  /** How far a storey is currently lifted; 0 when not exploded. */
+  levelOffset(levelId: string | null | undefined): number {
+    return typeof levelId === 'string' ? (this.levelOffsets?.get(levelId) ?? 0) : 0;
   }
 
   setVisibleLevels(levelIds: string[] | null): void {

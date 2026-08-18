@@ -83,6 +83,7 @@ export class SectionController implements ISectionController {
   private ghostTween: Tween<number> | null = null;
   /** `ui.ghostAbove`; null means "whatever the state says". See setGhostOverride. */
   private ghostOverride: boolean | null = null;
+  private levelOffsets: ReadonlyMap<string, number> | null = null;
 
   private readonly changeCallbacks = new Set<(state: SectionState) => void>();
 
@@ -167,6 +168,12 @@ export class SectionController implements ISectionController {
     this.ghostOverride = value;
     this.updateGhost(true);
     this.ctx?.invalidate();
+  }
+
+  /** Lift the level cut with its storey; see `engine/model/explode.ts`. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    this.levelOffsets = offsets;
+    this.rebuild(false);
   }
 
   setState(state: SectionState, animate = true): void {
@@ -301,6 +308,9 @@ export class SectionController implements ISectionController {
           return [];
         }
         const height = level.height > 0 ? level.height : 3;
+        // The exploded view lifts the storey's geometry, so the cut has to rise
+        // with it or it slices whatever now happens to be at that height.
+        const base = level.elevation + (this.levelOffsets?.get(level.id) ?? 0);
         const ceilingCut = Math.max(0, this.state.ceilingCut ?? DEFAULT_SECTION_STATE.ceilingCut ?? 0);
         return [
           // Both bounds need the epsilon, and for the same reason: a storey's
@@ -309,7 +319,7 @@ export class SectionController implements ISectionController {
           // by floating-point rounding, so it flips in and out per frame and
           // the surface flickers. Nudging the planes outwards keeps whole
           // slabs unambiguously inside the slice.
-          { key: 'level:min', axis: 'y', dir: 1, target: level.elevation - LEVEL_EPS },
+          { key: 'level:min', axis: 'y', dir: 1, target: base - LEVEL_EPS },
           {
             key: 'level:max',
             axis: 'y',
@@ -319,7 +329,7 @@ export class SectionController implements ISectionController {
             // ceiling just shows you its underside from every angle above.
             // Never take more than 40% of the storey, so a low ceiling or a
             // mis-detected level cannot collapse the view to nothing.
-            target: level.elevation + Math.max(height - ceilingCut, height * 0.6) + LEVEL_EPS,
+            target: base + Math.max(height - ceilingCut, height * 0.6) + LEVEL_EPS,
           },
         ];
       }

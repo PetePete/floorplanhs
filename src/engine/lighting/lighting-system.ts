@@ -262,6 +262,12 @@ export class LightingSystem implements ILightingSystem {
     this.roomFill.onChange = cb;
   }
 
+  /** Lift each room's tint with its storey; see `engine/model/explode.ts`. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    this.roomFill.setLevelOffsets(offsets);
+    this.ctx?.invalidate();
+  }
+
   /** What the drawing stands on, so the room tint can read against it. */
   setGroundDark(dark: boolean): void {
     this.roomFill.setGroundDark(dark);

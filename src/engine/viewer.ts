@@ -41,6 +41,7 @@ import type {
 import { Emitter } from '@/util/events';
 import { vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
+import { explodeOffsets } from '@/engine/model/explode';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -320,6 +321,10 @@ export class Viewer implements IViewer {
       });
       this.guard('camera', this._cameraCtl, (c) => c.setBounds(loaded.bounds));
 
+      // Before the room anchors: those are read off the geometry, so the
+      // storeys have to be where they are going to be drawn first.
+      this.applyExplode(loaded.levels);
+
       // Markers that name a room draw a leader back to it, so they need to know
       // where the rooms are before the first frame.
       this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(loaded.root)));
@@ -525,6 +530,10 @@ export class Viewer implements IViewer {
     }
 
     if (renderChanged || uiChanged) this.applyRenderStyle();
+    if (uiChanged) {
+      const levels = this._model?.model?.levels;
+      if (levels) this.applyExplode(levels);
+    }
 
     if (cameraChanged) this.pushCameraSettings();
 
@@ -814,6 +823,52 @@ export class Viewer implements IViewer {
     const box = this.visibleBounds();
     if (!box || box.isEmpty()) return;
     this.guard('camera', this._cameraCtl, (c) => c.frameObject(box, animate));
+  }
+
+  /**
+   * Pull the storeys apart, or put them back. Everything that lives in world
+   * space has to agree on the same lift, so this is the one place that hands it
+   * out — and the room anchors are re-read afterwards, since they are measured
+   * off geometry that just moved.
+   */
+  private applyExplode(levels: readonly LevelDefinition[]): void {
+    const offsets = explodeOffsets(levels, this.config.ui?.explode ?? 0);
+    const value = offsets.size > 0 ? offsets : null;
+
+    this.guard('model', this._model, (m) => m.setLevelOffsets(value));
+    this.edges.setLevelOffsets(value);
+    this.guard('entities', this._entities, (e) => e.setLevelOffsets(value));
+    this.guard('lighting', this._lighting, (l) =>
+      (
+        l as ILightingSystem & {
+          setLevelOffsets?(o: ReadonlyMap<string, number> | null): void;
+        }
+      ).setLevelOffsets?.(value),
+    );
+    this.guard('section', this._section, (sc) =>
+      (
+        sc as ISectionController & {
+          setLevelOffsets?(o: ReadonlyMap<string, number> | null): void;
+        }
+      ).setLevelOffsets?.(value),
+    );
+
+    const root = this._model?.model?.root;
+    if (root) this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(root)));
+    this.core?.invalidate();
+  }
+
+  /** Metres the storeys are currently pulled apart by. */
+  get explode(): number {
+    return this.config.ui?.explode ?? 0;
+  }
+
+  /** Live change, without going through a config round-trip. */
+  setExplode(metres: number): void {
+    const ui = { ...(this.config.ui ?? {}), explode: Math.max(0, metres) };
+    this.config = { ...this.config, ui };
+    const levels = this._model?.model?.levels;
+    if (levels) this.applyExplode(levels);
   }
 
   /** World bounds of the geometry currently drawn, or null when there is none. */

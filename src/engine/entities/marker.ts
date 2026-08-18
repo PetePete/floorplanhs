@@ -132,6 +132,10 @@ export class EntityMarker {
   private baseLift = DEFAULT_LIFT;
   /** World point of the room this entity names, if it names one. */
   private roomAnchor: THREE.Vector3 | null = null;
+  /** Exploded-view lift of this entity's storey; see `engine/model/explode.ts`. */
+  private levelLift = 0;
+  /** Unexploded Y, as the config states it. */
+  private configY = 0;
   /** Local-space copy of it, recomputed when the marker or the model moves. */
   private readonly roomLocal = new THREE.Vector3();
   private appliedState: MarkerVisualState = 'idle';
@@ -240,7 +244,22 @@ export class EntityMarker {
   }
 
   setPosition(position: Vec3): void {
-    this.object.position.set(position[0], position[1], position[2]);
+    this.configY = position[1];
+    this.object.position.set(position[0], position[1] + this.levelLift, position[2]);
+    this.syncRoomLeader();
+  }
+
+  /**
+   * Ride the storey up in the exploded view. Only the *drawn* position moves —
+   * `placedEntity.position` stays the real one, so nothing here can leak an
+   * exploded height back into the config.
+   */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    const level = this.placedEntity.level;
+    const lift = typeof level === 'string' ? (offsets?.get(level) ?? 0) : 0;
+    if (lift === this.levelLift) return;
+    this.levelLift = lift;
+    this.object.position.y = this.configY + lift;
     this.syncRoomLeader();
   }
 

@@ -17,6 +17,7 @@ import { icon, type IconName } from '@/ui/icons';
 export type ToolbarAction =
   | 'reset'
   | 'fit'
+  | 'explode'
   | 'projection'
   | 'section'
   | 'autorotate'
@@ -176,6 +177,9 @@ export class Fp3dToolbar extends FpBaseElement {
   /** False hides the section button entirely, so it cannot open a hidden panel. */
   @property({ type: Boolean }) canSection = true;
   @property({ type: Boolean }) sectionActive = false;
+  /** Only worth offering with more than one storey to separate. */
+  @property({ type: Boolean }) canExplode = false;
+  @property({ type: Boolean }) exploded = false;
   /** False when there is nothing to tour, or the tour controls are switched off. */
   @property({ type: Boolean }) canTour = false;
   @property({ type: Boolean }) tourPlaying = false;
@@ -210,6 +214,14 @@ export class Fp3dToolbar extends FpBaseElement {
         glyph: 'fitToScreen',
         label: this.t('ui.toolbar.fit_view', 'Fit to screen'),
         rank: 1,
+      },
+      {
+        action: 'explode',
+        glyph: 'explode',
+        label: this.t('ui.toolbar.explode', 'Separate storeys'),
+        pressed: this.exploded,
+        hidden: !this.canExplode,
+        rank: 2,
       },
       {
         action: 'section',

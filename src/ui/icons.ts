@@ -70,6 +70,9 @@ export const ICON_PATHS = {
   target:
     'M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z',
   cube: 'M12,2L2,7V17L12,22L22,17V7L12,2M12,4.24L19.06,7.76L12,11.29L4.94,7.76L12,4.24M4,9.38L11,12.88V19.62L4,16.12V9.38M13,19.62V12.88L20,9.38V16.12L13,19.62Z',
+  // Two plates parting along an axis: mdi:arrow-expand-vertical.
+  explode:
+    'M13,9V15H16L12,19L8,15H11V9H8L12,5L16,9H13M4,2H20V4H4V2M4,20H20V22H4V20Z',
   // Corner brackets closing in on a frame: mdi:fit-to-screen-outline.
   fitToScreen:
     'M2,4A2,2 0 0,1 4,2H8V4H4V8H2V4M22,4V8H20V4H16V2H20A2,2 0 0,1 22,4M2,20V16H4V20H8V22H4A2,2 0 0,1 2,20M22,20A2,2 0 0,1 20,22H16V20H20V16H22V20M6,6H18V18H6V6M8,8V16H16V8H8Z',
@@ -133,6 +136,7 @@ const MDI_ALIASES: Record<string, IconName> = {
   'axis-arrow': 'cube',
   'crop-free': 'target',
   target: 'target',
+  'arrow-expand-vertical': 'explode',
   'fit-to-screen': 'fitToScreen',
   'fit-to-screen-outline': 'fitToScreen',
   'arrow-collapse-all': 'fitToScreen',

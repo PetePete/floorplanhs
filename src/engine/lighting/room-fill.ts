@@ -156,10 +156,17 @@ attribute float fpRoom;
 flat varying float vFpRoom;
 varying vec3 vFpNormal;
 varying vec3 vFpView;
+uniform float fpRoomLift[${MAX_ROOMS}];
 void main() {
   vFpRoom = fpRoom;
   vFpNormal = normalize(normalMatrix * normal);
-  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  // The overlay is one merged mesh in world space, so the exploded view cannot
+  // move it by parenting the way it moves a storey's geometry. Each vertex
+  // already carries its room, so it carries its storey's lift with it.
+  int liftIndex = int(fpRoom + 0.5) - 1;
+  vec3 lifted = position;
+  if (liftIndex >= 0) lifted.y += fpRoomLift[liftIndex];
+  vec4 mvPosition = modelViewMatrix * vec4(lifted, 1.0);
   vFpView = -mvPosition.xyz;
   gl_Position = projectionMatrix * mvPosition;
   #include <clipping_planes_vertex>
@@ -194,6 +201,7 @@ export class RoomFill {
   private readonly uniform = { value: new Float32Array(MAX_ROOMS * 3) };
   private readonly washOpacity = { value: WASH_ON_DARK.opacity };
   private readonly washTint = { value: WASH_ON_DARK.tint };
+  private readonly roomLift = { value: new Float32Array(MAX_ROOMS) };
   private groundDark = true;
   private wash: THREE.Mesh | null = null;
   private washMaterial: THREE.ShaderMaterial | null = null;
@@ -300,6 +308,7 @@ export class RoomFill {
         fpRoomFill: this.uniform,
         fpWashOpacity: this.washOpacity,
         fpWashTint: this.washTint,
+        fpRoomLift: this.roomLift,
       },
       vertexShader: WASH_VERTEX,
       fragmentShader: WASH_FRAGMENT,
@@ -417,6 +426,14 @@ export class RoomFill {
   /** How far a lit hue is taken below white; see `setGroundDark`. */
   get litScale(): number {
     return this.washTint.value;
+  }
+
+  /** Lift each room's tint with its storey in the exploded view. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    const lift = this.roomLift.value;
+    for (let i = 0; i < this.shapes.length; i += 1) {
+      lift[i] = offsets?.get(this.shapes[i].level) ?? 0;
+    }
   }
 
   /** Hide the wash of a storey that is not on screen. */

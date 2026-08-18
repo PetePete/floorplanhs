@@ -101,6 +101,10 @@ export interface IModelManager extends Subsystem {
   /** Level visibility. Empty set / null means "all visible". */
   setVisibleLevels(levelIds: string[] | null): void;
   getVisibleLevels(): string[] | null;
+  /** Lift each storey for the exploded view; see `engine/model/explode.ts`. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void;
+  /** How far a storey is currently lifted. 0 when not exploded. */
+  levelOffset(levelId: string | null | undefined): number;
   /** Ray target list for placement + picking against the building shell. */
   getPickTargets(): THREE.Object3D[];
   /** Which level a world position falls into. */
@@ -212,6 +216,8 @@ export interface IEntityLayer extends Subsystem {
   moveEntity(entityId: string, position: Vec3): void;
   /** Hide markers whose level is hidden. */
   setVisibleLevels(levelIds: string[] | null): void;
+  /** Lift each marker with its storey; see `engine/model/explode.ts`. */
+  setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void;
   setMarkersVisible(visible: boolean): void;
   /**
    * Where each room is, in world space, so a marker placed outside one can draw
@@ -310,6 +316,9 @@ export interface IViewer {
   setEditMode(enabled: boolean): void;
   /** Frame the visible geometry without changing the viewing direction. */
   fitToView(animate?: boolean): void;
+  /** Metres the storeys are pulled apart by; see `engine/model/explode.ts`. */
+  readonly explode: number;
+  setExplode(metres: number): void;
   on<K extends ViewerEventName>(event: K, cb: (payload: ViewerEvents[K]) => void): () => void;
   resize(): void;
   dispose(): void;

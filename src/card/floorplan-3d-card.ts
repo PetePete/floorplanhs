@@ -178,6 +178,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private tourPlaying = false;
   /** Mirrors the camera's 0..1 zoom so the slider tracks orbiting and presets. */
   @state() private zoom = 0.5;
+  /** Storeys pulled apart. A view state, never written back to the config. */
+  @state() private exploded = false;
 
   @query('.canvas-host') private canvasHost?: HTMLDivElement;
   @query('.card') private cardRoot?: HTMLDivElement;
@@ -570,6 +572,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'fit':
         viewer?.fitToView(!this.prefersReducedMotion());
         break;
+      case 'explode':
+        if (!viewer) break;
+        // Toggling writes nothing: separating the storeys is a way of looking
+        // at the model, and it sticks only if a view is saved with it on.
+        viewer.setExplode(viewer.explode > 0 ? 0 : this.explodeGap());
+        this.exploded = viewer.explode > 0;
+        break;
       case 'projection':
         if (!viewer) break;
         this.orthographic = !this.orthographic;
@@ -594,6 +603,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.panel = this.panel === action ? 'none' : action;
         break;
     }
+  }
+
+  /**
+   * How far apart to pull the storeys when the toolbar turns it on. Scaled to
+   * the building so a bungalow and a four-storey house both read as separated
+   * rather than as scattered.
+   */
+  private explodeGap(): number {
+    const configured = this.config?.ui?.explode ?? 0;
+    if (configured > 0) return configured;
+    const heights = this.levels.map((level) => level.height).filter((h) => h > 0);
+    const typical = heights.length ? heights.reduce((a, b) => a + b, 0) / heights.length : 2.7;
+    return Math.round(typical * 10) / 10;
   }
 
   private resetView(): void {
@@ -1483,6 +1505,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .editing=${this.editing}
                 .canEdit=${canEdit}
                 .canSection=${canSection}
+                .canExplode=${this.levels.length > 1}
+                .exploded=${this.exploded}
                 .canTour=${this.tourAvailable}
                 .tourPlaying=${this.tourPlaying}
                 .sectionActive=${this.section.mode !== 'none'}
