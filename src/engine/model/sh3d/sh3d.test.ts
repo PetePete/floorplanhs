@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { Sh3dError, looksLikeZip, readSh3dArchive } from '@/engine/model/sh3d/sh3d-archive';
 import { parseHomeXml } from '@/engine/model/sh3d/sh3d-parse';
-import { buildFromSh3d, buildSh3dHome } from '@/engine/model/sh3d/sh3d-build';
+import { buildFromSh3d, buildSh3dHome, mitreShear } from '@/engine/model/sh3d/sh3d-build';
 import {
   TEST_HOME_XML as HOME_XML,
   TEST_HOME_TWO_ROOMS_XML as TWO_ROOMS_XML,
@@ -242,6 +242,40 @@ describe('sh3d build', () => {
       expect(v.z, 'no partition geometry inside the wall').toBeGreaterThan(-1.95);
     }
     expect(nearest).toBeCloseTo(-1.9, 2);
+  });
+
+  it('does not mitre two walls that merely run alongside each other', () => {
+    // A real plan is full of ends that are near each other without being a
+    // corner: an inner leaf and its outer skin run parallel 18 cm apart, so
+    // their ends sit within a wall thickness of one another and the join
+    // detector pairs them. Their bisector then lies almost along the wall, the
+    // mitre goes to infinity with it, and the shear drags one wall metres down
+    // its own axis — a 9.8 m house came out 36.8 m wide.
+    const home = buildSh3dHome(
+      parseHomeXml(`<?xml version='1.0'?>
+<home version='7400' name='Parallel' wallHeight='250.0'>
+  <level id='level0' name='Ground' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <wall id='inner' level='level0' xStart='13.0' yStart='490.0' xEnd='990.0' yEnd='489.0'
+        height='236.0' thickness='12.0'/>
+  <wall id='outer' level='level0' xStart='13.0' yStart='472.0' xEnd='988.0' yEnd='472.0'
+        height='236.0' thickness='25.0'/>
+</home>`),
+      { textures: false },
+    );
+    const width = home.bounds.max.x - home.bounds.min.x;
+    // The walls are 9.77 m long; anything beyond them plus a little for the
+    // thickness means a mitre ran away.
+    expect(width).toBeLessThan(10.2);
+  });
+
+  it('still mitres a corner sharp enough to be one', () => {
+    // The limit must not be so eager that ordinary corners lose their mitre.
+    expect(mitreShear([1, 0], [0, 1])).toBeCloseTo(1, 5);
+    // 45 degrees: cot(22.5) = 2.414, comfortably inside the limit.
+    const diagonal = Math.SQRT1_2;
+    expect(Math.abs(mitreShear([1, 0], [diagonal, diagonal]))).toBeCloseTo(2.414, 2);
+    // Nearly parallel: refused, and cut square instead.
+    expect(mitreShear([1, 0], [0.9998, 0.02])).toBe(0);
   });
 
   it('slopes a wall top when heightAtEnd differs', () => {

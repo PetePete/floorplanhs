@@ -100,6 +100,9 @@ interface Layout {
  * over as a blob URL. That keeps the harness working with no private file
  * present, and keeps what you see here identical to what the tests assert.
  */
+/** Picked up automatically when present; see the source selector. */
+const PRIVATE_SH3D = '/private/sample.sh3d';
+
 const TEST_HOME_URL = URL.createObjectURL(
   new Blob([TEST_HOME_TWO_ROOMS_SH3D()], { type: 'application/octet-stream' }),
 );
@@ -290,7 +293,7 @@ async function boot(): Promise<void> {
   panel.append(el('h3', {}, ['Model source']));
   const sources: Array<{ label: string; model: Floorplan3dCardConfig['model'] }> = [
     { label: 'Two-room test home', model: { url: TEST_HOME_URL } },
-    { label: 'Sweet Home 3D (private)', model: { url: '/private/sample.sh3d' } },
+    { label: 'Sweet Home 3D (private)', model: { url: PRIVATE_SH3D } },
   ];
   const sourceSelect = el('select');
   for (const s of sources) {
@@ -300,6 +303,18 @@ async function boot(): Promise<void> {
     sourceSelect.append(option);
   }
   sourceSelect.value = 'Two-room test home';
+  // A real home is far more revealing than the fixture, so use it when it is
+  // there. It is absent on every other machine — `private/` is gitignored —
+  // which is why the built-in one stays the default rather than a 404.
+  void fetch(PRIVATE_SH3D, { method: 'HEAD', cache: 'no-store' })
+    .then((response) => {
+      if (!response.ok) return;
+      sourceSelect.value = 'Sweet Home 3D (private)';
+      config = { ...config, model: { url: PRIVATE_SH3D } };
+      status.textContent = `model: ${PRIVATE_SH3D}`;
+      applyConfig();
+    })
+    .catch(() => {});
   sourceSelect.addEventListener('change', async () => {
     const chosen = sources.find((s) => s.label === sourceSelect.value);
     if (!chosen) return;

@@ -61,6 +61,8 @@ const CEILING_T = 0.02;
 const DEFAULT_STOREY = 2.5;
 /** Longest chord used when tessellating a curved wall. */
 const ARC_STEP = 0.25;
+/** How long a mitre may get before it is cut square instead; see `mitreShear`. */
+const MITRE_LIMIT = 4;
 
 /* ------------------------------------------------------------- materials */
 
@@ -262,7 +264,7 @@ interface PlacedOpening {
  */
 type WallJoins = Map<Sh3dWall, [Vec2 | null, Vec2 | null]>;
 
-type Vec2 = readonly [number, number];
+export type Vec2 = readonly [number, number];
 
 function unit(from: Vec2, to: Vec2): Vec2 | null {
   const dx = to[0] - from[0];
@@ -386,10 +388,10 @@ function detectWallTees(walls: readonly Sh3dWall[], joins: WallJoins): Map<Sh3dW
  * exactly once.
  *
  * `axis` points from the corner along this wall, `neighbour` from the same
- * corner along the other one. Returns 0 for a straight run (nothing to mitre)
- * and for the degenerate case of a wall doubling back on itself.
+ * corner along the other one. Returns 0 — a square cut — when there is nothing
+ * sensible to mitre.
  */
-function mitreShear(axis: Vec2, neighbour: Vec2): number {
+export function mitreShear(axis: Vec2, neighbour: Vec2): number {
   const bisector: Vec2 = [axis[0] + neighbour[0], axis[1] + neighbour[1]];
   const length = Math.hypot(bisector[0], bisector[1]);
   // Collinear and opposite: a straight continuation, which needs no mitre.
@@ -400,7 +402,18 @@ function mitreShear(axis: Vec2, neighbour: Vec2): number {
   const normal: Vec2 = [-axis[1], axis[0]];
   const denominator = cross2(axis, m);
   if (Math.abs(denominator) < 1e-6) return 0;
-  return -cross2(normal, m) / denominator;
+
+  const shear = -cross2(normal, m) / denominator;
+  // A mitre grows without bound as the join gets shallower, and a plan is full
+  // of ends that are near each other without being a corner at all: two
+  // parallel walls 18 cm apart — an inner leaf and its outer skin — have ends
+  // within a wall thickness of each other, and mitring *those* sheared one of
+  // them seven metres down its own axis.
+  //
+  // Same answer as SVG's `stroke-miterlimit`: past the limit, stop mitring and
+  // cut square. 4 still mitres anything down to roughly 28 degrees, which is
+  // sharper than any corner a building has.
+  return Math.abs(shear) > MITRE_LIMIT ? 0 : shear;
 }
 
 /**
