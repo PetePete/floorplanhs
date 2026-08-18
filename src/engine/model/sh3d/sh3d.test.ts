@@ -333,6 +333,26 @@ describe('sh3d build', () => {
     expect(atReveal, 'the reveal has to exist at all').toBeGreaterThan(0);
   });
 
+  it('hangs a ceiling under the floor of the storey above', () => {
+    // `level1` sits at 2.62 m and states a 0.12 m floor, so that slab occupies
+    // 2.50..2.62 and the ground floor's ceiling has to stop at 2.50. Hung level
+    // with the storey height instead, the two were coplanar — and every room
+    // outline of the lower storey was then drawn onto the floor of the upper
+    // one, which is its wall layout showing through the floor.
+    house.root.updateMatrixWorld(true);
+    const box = new THREE.Box3();
+    let top = -Infinity;
+    house.root.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData.part !== 'ceiling') return;
+      if (mesh.userData.level !== 'level0') return;
+      box.setFromObject(mesh);
+      top = Math.max(top, box.max.y);
+    });
+    expect(top, 'the ground floor has to have a ceiling at all').toBeGreaterThan(0);
+    expect(top).toBeCloseTo(2.5, 3);
+  });
+
   it('keeps two windows at the same height apart', () => {
     // Triangulating one outline with two holes bridges hole to hole, and the
     // bridge reads as a boundary: a horizontal line ran across the pier between

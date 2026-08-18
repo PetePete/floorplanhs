@@ -862,6 +862,12 @@ interface ResolvedLevel {
   source: Sh3dLevel;
   /** Storey height stretched to reach the next level up. */
   height: number;
+  /**
+   * Thickness of the floor slab the storey above lays across this one; 0 with
+   * nothing above. A level's elevation is the *top* of its floor, so that slab
+   * hangs down into this storey and the ceiling has to go under it.
+   */
+  floorAbove: number;
   rooms: Array<{ id: string; source: Sh3dRoom; points: Array<[number, number]> }>;
 }
 
@@ -872,13 +878,15 @@ function resolveLevels(home: Sh3dHome): ResolvedLevel[] {
     // Reach up to the next level that is genuinely higher; two levels may share
     // an elevation, distinguished only by `elevationIndex`.
     let height = Math.max(source.height, DEFAULT_STOREY);
+    let floorAbove = 0;
     for (let i = index + 1; i < levels.length; i++) {
       if (levels[i].elevation > source.elevation + 0.05) {
         height = levels[i].elevation - source.elevation;
+        floorAbove = Math.max(0, levels[i].floorThickness);
         break;
       }
     }
-    const entry: ResolvedLevel = { source, height, rooms: [] };
+    const entry: ResolvedLevel = { source, height, floorAbove, rooms: [] };
     byId.set(source.id, entry);
     return entry;
   });
@@ -1083,7 +1091,14 @@ export function buildSh3dHome(home: Sh3dHome, options: Sh3dHouseOptions = {}): S
     if (leaves.length) builder.mesh(id, 'structure', 'door_leaf', leaves, materials.wood);
 
     /* floors and ceilings */
-    const ceilingY = baseY + level.height - CEILING_T;
+    // Under the floor slab of the storey above, not level with its top surface.
+    // A level's elevation is the top of its floor, so that slab reaches down
+    // into this storey; hanging the ceiling at the same height made the two
+    // coplanar, and every room outline of this storey was then drawn onto the
+    // floor of the one above — the layout of the lower storey showing through
+    // the upper one's floor.
+    const ceilingTop = baseY + level.height - level.floorAbove;
+    const ceilingY = ceilingTop - CEILING_T;
     for (const room of level.rooms) {
       if (room.source.floorVisible) {
         const slab = slabFromPolygon(room.points, baseY, level.source.floorThickness);
