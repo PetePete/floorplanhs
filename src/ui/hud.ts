@@ -61,10 +61,11 @@ export class Fp3dHud extends FpBaseElement {
         align-items: center;
         gap: 6px;
         padding: 5px 11px;
-        border-radius: 999px;
-        font-size: 11.5px;
+        border-radius: var(--fp3d-chrome-radius);
+        font-size: 10.5px;
         font-weight: 600;
-        letter-spacing: 0.02em;
+        letter-spacing: var(--fp3d-label-tracking);
+        text-transform: uppercase;
         color: var(--fp3d-text-dim);
       }
 

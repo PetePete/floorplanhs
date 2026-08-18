@@ -28,7 +28,7 @@ export class Fp3dLevelSelector extends FpBaseElement {
         flex-direction: column;
         gap: 2px;
         padding: 4px;
-        border-radius: 14px;
+        border-radius: var(--fp3d-chrome-radius);
         max-height: 100%;
       }
 
@@ -39,7 +39,7 @@ export class Fp3dLevelSelector extends FpBaseElement {
         gap: 8px;
         min-height: 40px;
         padding: 0 10px 0 8px;
-        border-radius: 10px;
+        border-radius: var(--fp3d-chrome-radius);
         color: var(--fp3d-text);
         font-size: 13px;
         font-weight: 500;
@@ -112,7 +112,7 @@ export class Fp3dLevelSelector extends FpBaseElement {
         justify-content: center;
         width: 100%;
         min-height: 36px;
-        border-radius: 8px;
+        border-radius: var(--fp3d-chrome-radius);
         color: var(--fp3d-text-dim);
         transition:
           background-color var(--fp3d-fast) var(--fp3d-ease),

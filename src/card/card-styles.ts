@@ -49,6 +49,15 @@ export const themeTokens = css`
 
     --fp3d-radius: var(--ha-card-border-radius, 12px);
     --fp3d-radius-sm: 8px;
+    /*
+     * The chrome is an instrument panel over a technical drawing, so it is cut
+     * square and framed rather than rounded: pills read as phone UI and fight
+     * the line work behind them. Everything that floats over the canvas uses
+     * this radius; the card's own frame keeps the dashboard's.
+     */
+    --fp3d-chrome-radius: 3px;
+    /** Spaced capitals for machine labels — never for text the user typed. */
+    --fp3d-label-tracking: 0.14em;
     --fp3d-touch: 44px;
     --fp3d-gap: 8px;
     --fp3d-chrome-inset: 16px;
@@ -102,7 +111,7 @@ export const surfaceStyles = css`
     background: var(--fp3d-surface);
     color: var(--fp3d-text);
     border: 1px solid var(--fp3d-hairline);
-    border-radius: var(--fp3d-radius);
+    border-radius: var(--fp3d-chrome-radius);
     box-shadow: var(--fp3d-shadow);
     /* Saturation lifts the panel off a washed-out daytime render; the blur
        alone is not enough to stay legible over bright glass and sky. */
@@ -135,10 +144,21 @@ export const surfaceStyles = css`
   .section-label {
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--fp3d-label-tracking);
     text-transform: uppercase;
     color: var(--fp3d-text-dim);
     margin: 14px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* The rule that runs on from a heading, as on a drawing sheet. */
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--fp3d-divider);
   }
 
   .hint {
@@ -184,7 +204,7 @@ export const buttonStyles = css`
     justify-content: center;
     width: 40px;
     height: 40px;
-    border-radius: 10px;
+    border-radius: var(--fp3d-chrome-radius);
     color: var(--fp3d-text);
     transition:
       background-color var(--fp3d-fast) var(--fp3d-ease),
@@ -210,10 +230,18 @@ export const buttonStyles = css`
     transform: scale(0.94);
   }
 
+  /*
+   * An engaged control is *latched*: framed in the accent and lit from behind,
+   * rather than merely tinted. On a panel of identical glyphs the frame is what
+   * carries across the room; the tint alone does not.
+   */
   .icon-btn[aria-pressed='true'],
   .icon-btn.active {
     background: var(--fp3d-accent-soft);
     color: var(--fp3d-accent);
+    box-shadow:
+      inset 0 0 0 1px var(--fp3d-accent),
+      0 0 10px -2px var(--fp3d-accent);
   }
 
   .text-btn {
@@ -222,9 +250,11 @@ export const buttonStyles = css`
     gap: 8px;
     min-height: 36px;
     padding: 0 14px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 500;
+    border-radius: var(--fp3d-chrome-radius);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: var(--fp3d-label-tracking);
+    text-transform: uppercase;
     color: var(--fp3d-text);
     transition:
       background-color var(--fp3d-fast) var(--fp3d-ease),
@@ -263,12 +293,14 @@ export const controlStyles = css`
     gap: 6px;
     height: 32px;
     padding: 0 12px;
-    border-radius: 999px;
+    border-radius: var(--fp3d-chrome-radius);
     border: 1px solid var(--fp3d-divider);
     background: transparent;
     color: var(--fp3d-text);
-    font-size: 12.5px;
-    font-weight: 500;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: var(--fp3d-label-tracking);
+    text-transform: uppercase;
     white-space: nowrap;
     transition:
       background-color var(--fp3d-fast) var(--fp3d-ease),
@@ -283,8 +315,9 @@ export const controlStyles = css`
   .chip[aria-pressed='true'],
   .chip.active {
     background: var(--fp3d-accent-soft);
-    border-color: transparent;
+    border-color: var(--fp3d-accent);
     color: var(--fp3d-accent);
+    box-shadow: 0 0 10px -2px var(--fp3d-accent);
   }
 
   .chip .fp-icon {
@@ -713,10 +746,11 @@ export const cardStyles = css`
     align-items: center;
     max-width: 46vw;
     padding: 7px 14px;
-    border-radius: 999px;
-    font-size: 13px;
+    border-radius: var(--fp3d-chrome-radius);
+    font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.01em;
+    letter-spacing: var(--fp3d-label-tracking);
+    text-transform: uppercase;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

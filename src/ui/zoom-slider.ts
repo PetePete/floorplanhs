@@ -30,9 +30,20 @@ export class Fp3dZoomSlider extends FpBaseElement {
         flex-direction: column;
         align-items: center;
         gap: 2px;
-        padding: 4px;
-        border-radius: 999px;
+        padding: 5px 4px;
+        border-radius: var(--fp3d-chrome-radius);
         pointer-events: auto;
+      }
+
+      /* The value, as an instrument reads it out. */
+      .readout {
+        font-size: 9.5px;
+        font-weight: 600;
+        letter-spacing: var(--fp3d-label-tracking);
+        font-variant-numeric: tabular-nums;
+        color: var(--fp3d-text-dim);
+        padding-top: 2px;
+        user-select: none;
       }
 
       .btn {
@@ -41,7 +52,7 @@ export class Fp3dZoomSlider extends FpBaseElement {
         justify-content: center;
         width: 28px;
         height: 28px;
-        border-radius: 999px;
+        border-radius: var(--fp3d-chrome-radius);
         color: var(--fp3d-text-dim);
         transition:
           color var(--fp3d-fast) var(--fp3d-ease),
@@ -72,6 +83,34 @@ export class Fp3dZoomSlider extends FpBaseElement {
         justify-content: center;
       }
 
+      /*
+       * Graduations behind the slider, as on a gauge: eight ticks across the
+       * travel, with the axis itself running through them. Drawn on the track
+       * rather than on the input, because a range element's own track cannot
+       * carry a repeating background across browsers.
+       */
+      .track::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          repeating-linear-gradient(
+            to bottom,
+            var(--fp3d-divider) 0 1px,
+            transparent 1px calc(100% / 8)
+          ),
+          linear-gradient(var(--fp3d-divider), var(--fp3d-divider));
+        background-size:
+          9px 100%,
+          1px 100%;
+        background-position:
+          center top,
+          center top;
+        background-repeat: no-repeat;
+        opacity: 0.9;
+      }
+
       input[type='range'] {
         position: absolute;
         width: var(--fp3d-zoom-length, 112px);
@@ -84,37 +123,39 @@ export class Fp3dZoomSlider extends FpBaseElement {
         cursor: pointer;
       }
 
+      /* The graduations are the track; the input's own is only a hit area. */
       input[type='range']::-webkit-slider-runnable-track {
         height: 4px;
-        border-radius: 2px;
-        background: var(--fp3d-divider);
+        background: transparent;
       }
 
       input[type='range']::-moz-range-track {
         height: 4px;
-        border-radius: 2px;
-        background: var(--fp3d-divider);
+        background: transparent;
       }
 
+      /*
+       * A cursor rather than a bead: a flat bar lying across the graduations,
+       * which is how an instrument marks a value.
+       */
       input[type='range']::-webkit-slider-thumb {
         appearance: none;
         -webkit-appearance: none;
-        width: 14px;
-        height: 14px;
-        margin-top: -5px;
-        border-radius: 50%;
+        width: 6px;
+        height: 18px;
+        margin-top: -7px;
+        border-radius: 1px;
         background: var(--fp3d-accent);
-        border: 2px solid var(--fp3d-surface-solid, #fff);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 0 8px -1px var(--fp3d-accent);
       }
 
       input[type='range']::-moz-range-thumb {
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
+        width: 6px;
+        height: 18px;
+        border: none;
+        border-radius: 1px;
         background: var(--fp3d-accent);
-        border: 2px solid var(--fp3d-surface-solid, #fff);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 0 8px -1px var(--fp3d-accent);
       }
 
       input[type='range']:focus-visible {
@@ -179,6 +220,7 @@ export class Fp3dZoomSlider extends FpBaseElement {
         >
           ${icon('minus')}
         </button>
+        <span class="readout" aria-hidden="true">${Math.round(this.value * 100)}</span>
       </div>
       ${nothing}
     `;

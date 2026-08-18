@@ -343,13 +343,17 @@ export class SectionController implements ISectionController {
           }
           return [];
         }
-        // The *measured* height where we have it, not the storey height the
-        // file states. A top floor under a pitched roof has walls of every
-        // height between the eaves and the ridge, and cutting from the nominal
-        // figure slices through the tall half of the room instead of taking the
-        // ceiling off it.
+        // The height of the storey's *walls* where we have measured them, not
+        // the storey height the file states. A top floor under a pitched roof
+        // has walls of every height between the eaves and the ridge, and the
+        // nominal figure slices through the tall half of the room.
         const measured = this.levelTops?.get(level.id);
         const height = measured && measured > 0 ? measured : level.height > 0 ? level.height : 3;
+        // Measured, the walls' own top is already where the cut belongs: the
+        // ceiling slab is the first thing above it. Trimming a further fixed
+        // amount off that is what beheaded a pitched roof — it is only there for
+        // the declared height, which says nothing about where the ceiling is.
+        const trim = measured && measured > 0 ? 0 : null;
         // The exploded view lifts the storey's geometry, so the cut has to rise
         // with it or it slices whatever now happens to be at that height.
         const base = level.elevation + (this.levelOffsets?.get(level.id) ?? 0);
@@ -371,7 +375,7 @@ export class SectionController implements ISectionController {
             // ceiling just shows you its underside from every angle above.
             // Never take more than 40% of the storey, so a low ceiling or a
             // mis-detected level cannot collapse the view to nothing.
-            target: base + Math.max(height - ceilingCut, height * 0.6) + LEVEL_EPS,
+            target: base + Math.max(height - (trim ?? ceilingCut), height * 0.6) + LEVEL_EPS,
           },
         ];
       }

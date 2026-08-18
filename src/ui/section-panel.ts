@@ -61,7 +61,7 @@ export class Fp3dSectionPanel extends FpBaseElement {
         grid-template-columns: repeat(4, 1fr);
         gap: 4px;
         padding: 3px;
-        border-radius: 10px;
+        border-radius: var(--fp3d-chrome-radius);
         background: var(--fp3d-hover);
       }
 
@@ -71,7 +71,7 @@ export class Fp3dSectionPanel extends FpBaseElement {
         justify-content: center;
         min-height: 32px;
         padding: 0 6px;
-        border-radius: 7px;
+        border-radius: var(--fp3d-chrome-radius);
         font-size: 11.5px;
         font-weight: 600;
         color: var(--fp3d-text-dim);
@@ -100,7 +100,7 @@ export class Fp3dSectionPanel extends FpBaseElement {
         flex: none;
         width: 30px;
         height: 30px;
-        border-radius: 8px;
+        border-radius: var(--fp3d-chrome-radius);
         font-size: 12px;
         font-weight: 700;
         text-transform: uppercase;
@@ -131,7 +131,7 @@ export class Fp3dSectionPanel extends FpBaseElement {
         flex: none;
         width: 30px;
         height: 30px;
-        border-radius: 8px;
+        border-radius: var(--fp3d-chrome-radius);
       }
 
       .axis .flip .fp-icon {

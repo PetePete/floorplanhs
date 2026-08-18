@@ -66,7 +66,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
         gap: 8px;
         margin: 8px 12px 6px;
         padding: 0 10px;
-        border-radius: 999px;
+        border-radius: var(--fp3d-chrome-radius);
         background: var(--fp3d-hover);
       }
 

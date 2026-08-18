@@ -30,12 +30,8 @@ export class Fp3dPresetBar extends FpBaseElement {
         align-items: center;
         gap: 6px;
         padding: 5px;
-        border-radius: 999px;
+        border-radius: var(--fp3d-chrome-radius);
         max-width: 100%;
-      }
-
-      .bar.editing {
-        border-radius: var(--fp3d-radius);
       }
 
       .strip {
@@ -49,6 +45,12 @@ export class Fp3dPresetBar extends FpBaseElement {
         touch-action: pan-x;
       }
 
+      /*
+       * A tab on a console rather than a pill: square, with the accent riding
+       * up its leading edge when it is the view you are in. The label keeps the
+       * user's own capitalisation — spaced capitals are for machine labels, and
+       * a preset name is not one.
+       */
       .preset {
         position: relative;
         display: flex;
@@ -57,9 +59,10 @@ export class Fp3dPresetBar extends FpBaseElement {
         flex: none;
         height: 36px;
         padding: 0 12px;
-        border-radius: 999px;
-        font-size: 13px;
+        border-radius: var(--fp3d-chrome-radius);
+        font-size: 12.5px;
         font-weight: 500;
+        letter-spacing: 0.02em;
         color: var(--fp3d-text);
         white-space: nowrap;
         transition:
@@ -75,6 +78,9 @@ export class Fp3dPresetBar extends FpBaseElement {
       .preset.active {
         background: var(--fp3d-accent-soft);
         color: var(--fp3d-accent);
+        box-shadow:
+          inset 2px 0 0 var(--fp3d-accent),
+          0 0 10px -3px var(--fp3d-accent);
       }
 
       .preset.dragging {
@@ -89,10 +95,10 @@ export class Fp3dPresetBar extends FpBaseElement {
       .local-badge {
         flex: none;
         padding: 1px 6px;
-        border-radius: 999px;
+        border-radius: 1px;
         font-size: 9.5px;
         font-weight: 700;
-        letter-spacing: 0.06em;
+        letter-spacing: var(--fp3d-label-tracking);
         text-transform: uppercase;
         color: var(--fp3d-warning);
         border: 1px dashed currentColor;
@@ -150,7 +156,7 @@ export class Fp3dPresetBar extends FpBaseElement {
         justify-content: center;
         width: 28px;
         height: 28px;
-        border-radius: 999px;
+        border-radius: var(--fp3d-chrome-radius);
         color: var(--fp3d-text-dim);
         opacity: 0.75;
         transition:
@@ -209,7 +215,7 @@ export class Fp3dPresetBar extends FpBaseElement {
         flex: none;
         height: 36px;
         padding: 0 4px 0 10px;
-        border-radius: 999px;
+        border-radius: var(--fp3d-chrome-radius);
         background: var(--fp3d-hover);
       }
 

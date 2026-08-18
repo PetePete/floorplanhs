@@ -50,15 +50,25 @@ export class Fp3dToolbar extends FpBaseElement {
         display: flex;
         align-items: center;
         gap: 2px;
-        padding: 3px;
-        border-radius: 999px;
+        padding: 4px;
+        border-radius: var(--fp3d-chrome-radius);
       }
 
+      /*
+       * A rule that fades out at both ends rather than a hard tick: on a panel
+       * this narrow a full-height bar reads as a seam between two toolbars.
+       */
       .divider {
         width: 1px;
-        height: 22px;
-        margin: 0 3px;
-        background: var(--fp3d-divider);
+        height: 24px;
+        margin: 0 4px;
+        background: linear-gradient(
+          to bottom,
+          transparent,
+          var(--fp3d-divider) 20%,
+          var(--fp3d-divider) 80%,
+          transparent
+        );
         flex: none;
       }
 
@@ -89,8 +99,11 @@ export class Fp3dToolbar extends FpBaseElement {
         width: 100%;
         min-height: var(--fp3d-touch);
         padding: 0 12px;
-        border-radius: var(--fp3d-radius-sm);
-        font-size: 13.5px;
+        border-radius: var(--fp3d-chrome-radius);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: var(--fp3d-label-tracking);
+        text-transform: uppercase;
         text-align: left;
         color: var(--fp3d-text);
         box-sizing: border-box;
@@ -103,6 +116,7 @@ export class Fp3dToolbar extends FpBaseElement {
 
       .menu-item[aria-pressed='true'] {
         color: var(--fp3d-accent);
+        box-shadow: inset 2px 0 0 var(--fp3d-accent);
       }
 
       .menu-item .fp-icon {
@@ -124,16 +138,19 @@ export class Fp3dToolbar extends FpBaseElement {
       /* Tooltip: a title attribute never appears on touch and cannot be themed. */
       .tip {
         position: absolute;
-        top: calc(100% + 6px);
+        top: calc(100% + 8px);
         left: 50%;
         transform: translateX(-50%) translateY(-3px);
         padding: 4px 8px;
-        border-radius: 6px;
-        font-size: 11.5px;
-        font-weight: 500;
+        border-radius: var(--fp3d-chrome-radius);
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: var(--fp3d-label-tracking);
+        text-transform: uppercase;
         white-space: nowrap;
-        color: var(--fp3d-accent-text);
-        background: rgba(30, 30, 32, 0.92);
+        color: var(--fp3d-accent);
+        background: rgba(12, 15, 20, 0.94);
+        border: 1px solid var(--fp3d-accent);
         opacity: 0;
         pointer-events: none;
         transition:

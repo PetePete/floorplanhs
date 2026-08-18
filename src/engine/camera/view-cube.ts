@@ -97,10 +97,38 @@ const HALF = 0.5;
 /** Full turn per this many cube widths dragged. */
 const DRAG_TURNS_PER_WIDTH = Math.PI;
 
-const FACE_COLOR = 0xdfe3ea;
-const FACE_COLOR_DARK = 0xb9c0cc;
 const HIGHLIGHT_COLOR = 0x6f9fe0;
-const EDGE_LINE_COLOR = 0x8b93a1;
+
+/**
+ * The cube is drawn in the same language as the model under it: a glazed panel
+ * with a hairline frame and a spaced capital, not a solid white die. Which of
+ * the two inks it uses depends on what it is drawn *over* — the card's
+ * background — since a line drawing has no colour of its own to fall back on.
+ */
+interface CubeInk {
+  /** Frame and rules on the face. */
+  line: string;
+  /** The face label. */
+  label: string;
+  /** The glazing itself. */
+  fill: string;
+  /** The cube's silhouette and corner edges. */
+  edge: number;
+}
+
+const INK_ON_DARK: CubeInk = {
+  line: 'rgba(196, 219, 245, 0.62)',
+  label: 'rgba(233, 243, 255, 0.95)',
+  fill: 'rgba(120, 170, 225, 0.13)',
+  edge: 0xc7dbf2,
+};
+
+const INK_ON_LIGHT: CubeInk = {
+  line: 'rgba(40, 56, 78, 0.5)',
+  label: 'rgba(24, 34, 48, 0.95)',
+  fill: 'rgba(255, 255, 255, 0.5)',
+  edge: 0x33415a,
+};
 
 /** Local axis order of `BoxGeometry`'s material groups. */
 const FACE_AXES: ReadonlyArray<readonly [number, number, number]> = [
@@ -149,6 +177,8 @@ export class ViewCube {
   private hoverZone: THREE.Vector3 | null = null;
   private visible = true;
   private disposed = false;
+  /** Which ink the cube is drawn in; follows the card's background. */
+  private groundDark = true;
 
   private drag: {
     pointerId: number;
@@ -174,17 +204,17 @@ export class ViewCube {
     this.geometry = new THREE.BoxGeometry(1, 1, 1);
     remapAtlasUvs(this.geometry);
 
-    this.texture = buildLabelAtlas(this.options.labels);
+    this.texture = buildLabelAtlas(this.options.labels, this.ink);
     for (let face = 0; face < 6; face += 1) {
       this.materials.push(
         new THREE.MeshBasicMaterial({
           map: this.texture,
-          // Top/bottom a touch darker: a flat-shaded cube with six identical
-          // faces reads as a square, not as a solid.
-          color: face === 2 || face === 3 ? FACE_COLOR_DARK : FACE_COLOR,
           toneMapped: false,
+          // The glazing is in the texture's alpha, so the material carries no
+          // tint of its own. Back faces are culled, which is what keeps the far
+          // three panels from showing through the near ones.
           transparent: true,
-          opacity: 0.96,
+          depthWrite: false,
         }),
       );
     }
@@ -193,9 +223,9 @@ export class ViewCube {
 
     this.outlineGeometry = new THREE.EdgesGeometry(this.geometry);
     this.outlineMaterial = new THREE.LineBasicMaterial({
-      color: EDGE_LINE_COLOR,
+      color: this.ink.edge,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       toneMapped: false,
     });
     this.outline = new THREE.LineSegments(this.outlineGeometry, this.outlineMaterial);
@@ -230,6 +260,35 @@ export class ViewCube {
     this.host = ctx.canvas.parentElement ?? ctx.canvas;
     this.host.addEventListener('pointerdown', this.onPointerDown, { capture: true });
     this.host.addEventListener('pointermove', this.onHoverMove, { capture: true });
+  }
+
+  private get ink(): CubeInk {
+    return this.groundDark ? INK_ON_DARK : INK_ON_LIGHT;
+  }
+
+  /**
+   * Follow the card's background. The cube is glazed rather than painted, so
+   * its lines have to be the ones that read against whatever is behind it —
+   * the same decision the edge overlay makes for the model.
+   */
+  setGroundDark(dark: boolean): void {
+    if (this.groundDark === dark || this.disposed) return;
+    this.groundDark = dark;
+    this.repaint();
+  }
+
+  /** Rebuild the face atlas in the current ink and hand it to the materials. */
+  private repaint(): void {
+    const next = buildLabelAtlas(this.options.labels, this.ink);
+    if (!next) return;
+    this.texture?.dispose();
+    this.texture = next;
+    for (const material of this.materials) {
+      material.map = next;
+      material.needsUpdate = true;
+    }
+    this.outlineMaterial.color.setHex(this.ink.edge);
+    this.ctx?.invalidate();
   }
 
   setVisible(visible: boolean): void {
@@ -523,12 +582,14 @@ function zoneFromLocalPoint(point: THREE.Vector3): THREE.Vector3 {
  * into. Six separate textures would mean six uploads and six disposals for
  * what is a single 384x256 bitmap.
  */
-function buildLabelAtlas(labels: ViewCubeLabels): THREE.CanvasTexture | null {
+function buildLabelAtlas(labels: ViewCubeLabels, ink: CubeInk): THREE.CanvasTexture | null {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * ATLAS_CELL;
   canvas.height = ATLAS_ROWS * ATLAS_CELL;
   const context = canvas.getContext('2d');
   if (!context) return null;
+
+  const INSET = 8;
 
   context.clearRect(0, 0, canvas.width, canvas.height);
   FACE_LABEL_KEYS.forEach((key, face) => {
@@ -537,18 +598,29 @@ function buildLabelAtlas(labels: ViewCubeLabels): THREE.CanvasTexture | null {
     // Texture v runs bottom-up, canvas y runs top-down.
     const x = col * ATLAS_CELL;
     const y = (ATLAS_ROWS - 1 - row) * ATLAS_CELL;
+    const left = x + INSET;
+    const top = y + INSET;
+    const size = ATLAS_CELL - INSET * 2;
 
-    context.fillStyle = '#ffffff';
-    context.fillRect(x, y, ATLAS_CELL, ATLAS_CELL);
-    context.strokeStyle = 'rgba(70, 80, 96, 0.35)';
-    context.lineWidth = 4;
-    context.strokeRect(x + 2, y + 2, ATLAS_CELL - 4, ATLAS_CELL - 4);
+    context.fillStyle = ink.fill;
+    context.fillRect(left, top, size, size);
 
-    context.fillStyle = '#2b3038';
-    context.font = '600 26px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    context.strokeStyle = ink.line;
+    context.lineWidth = 2;
+    context.strokeRect(left + 1, top + 1, size - 2, size - 2);
+
+    context.fillStyle = ink.label;
+    context.font = '600 24px "Chakra Petch", system-ui, -apple-system, sans-serif';
+    // Chrome 99+/Safari 17+; assigning it elsewhere is a harmless no-op.
+    (context as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = '3px';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText(labels[key], x + ATLAS_CELL / 2, y + ATLAS_CELL / 2, ATLAS_CELL - 16);
+    context.fillText(
+      labels[key].toUpperCase(),
+      x + ATLAS_CELL / 2 + 2,
+      y + ATLAS_CELL / 2,
+      size - 12,
+    );
   });
 
   const texture = new THREE.CanvasTexture(canvas);

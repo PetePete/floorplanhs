@@ -96,6 +96,8 @@ export class CameraController implements ICameraController {
   private viewCube: ViewCube | null = null;
   private readonly viewCubeOptions: ViewCubeOptions;
   private viewCubeVisible = true;
+  /** Mirrors the card background so the cube picks the readable ink. */
+  private groundDark = true;
 
   /** Shift swaps the wheel button from pan to orbit. See `applyNavigationMode`. */
   private shiftHeld = false;
@@ -165,6 +167,7 @@ export class CameraController implements ICameraController {
     this.viewCube = new ViewCube(this.viewCubeBridge, this.viewCubeOptions);
     this.viewCube.init(ctx);
     this.viewCube.setVisible(this.viewCubeVisible);
+    this.viewCube.setGroundDark(this.groundDark);
   }
 
   update(dt: number): void {
@@ -480,6 +483,12 @@ export class CameraController implements ICameraController {
   setViewCubeVisible(visible: boolean): void {
     this.viewCubeVisible = visible;
     this.viewCube?.setVisible(visible);
+  }
+
+  /** Which ink the orientation cube is drawn in; see `ViewCube.setGroundDark`. */
+  setGroundDark(dark: boolean): void {
+    this.groundDark = dark;
+    this.viewCube?.setGroundDark(dark);
   }
 
   isViewCubeVisible(): boolean {

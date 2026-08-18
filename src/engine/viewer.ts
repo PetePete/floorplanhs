@@ -271,7 +271,14 @@ export class Viewer implements IViewer {
   private explodeOverride: number | null = null;
   /** Metres the storeys are *drawn* apart by right now; see `stepExplode`. */
   private explodeGap = 0;
-  private explodeFlight: { from: number; to: number; t: number; duration: number } | null = null;
+  private explodeFlight: {
+    from: number;
+    to: number;
+    t: number;
+    duration: number;
+    /** Reframe once the storeys have stopped; see `flyExplode`. */
+    fit: boolean;
+  } | null = null;
   private explodeLease: (() => void) | null = null;
   private readonly unwire: Array<() => void> = [];
   private handleHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -794,6 +801,11 @@ export class Viewer implements IViewer {
     this.guard('lighting', this._lighting, (l) =>
       (l as ILightingSystem & { setGroundDark?(dark: boolean): void }).setGroundDark?.(groundDark),
     );
+    // The orientation cube is glazed rather than painted, so its lines answer to
+    // the same ground as the model's.
+    this.guard('camera', this._cameraCtl, (c) =>
+      (c as ICameraController & { setGroundDark?(dark: boolean): void }).setGroundDark?.(groundDark),
+    );
     const paletteInk =
       palette === 'mono-dark'
         ? EDGE_INK_ON_DARK
@@ -945,14 +957,20 @@ export class Viewer implements IViewer {
       animate && Math.abs(this.explode - this.explodeGap) > 1e-4
         ? (this.config.ui?.explodeDuration ?? DEFAULT_UI_CONFIG.explodeDuration)
         : 0;
+    // The building is a different size once it comes apart, so the view it was
+    // framed for is no longer the right one. Refit — but only when something
+    // actually moved, or every unrelated config push would fly the camera.
+    const moved = Math.abs(this.explode - this.explodeGap) > 1e-4;
+
     if (duration <= 0) {
       this.explodeFlight = null;
       this.releaseExplodeLease();
       this.applyExplode(levels, true);
+      if (moved) this.fitToView(animate);
       return;
     }
 
-    this.explodeFlight = { from: this.explodeGap, to: this.explode, t: 0, duration };
+    this.explodeFlight = { from: this.explodeGap, to: this.explode, t: 0, duration, fit: moved };
     // The loop renders on demand, so the flight has to keep it awake for its own
     // duration — nothing else is going to invalidate on its behalf.
     this.explodeLease ??= this.core?.holdContinuous() ?? null;
@@ -973,6 +991,10 @@ export class Viewer implements IViewer {
     if (settled) {
       this.explodeFlight = null;
       this.releaseExplodeLease();
+      // Afterwards, not during: a camera flight and the storeys moving at the
+      // same time is two motions to follow, and the frame would be aiming at a
+      // building that is still changing shape under it.
+      if (flight.fit) this.fitToView(true);
     }
   }
 
@@ -1176,6 +1198,7 @@ function levelTops(
   levels: readonly LevelDefinition[],
 ): Map<string, number> {
   const highest = new Map<string, number>();
+  const anything = new Map<string, number>();
   root.updateMatrixWorld(true);
   const box = new THREE.Box3();
 
@@ -1186,12 +1209,17 @@ function levelTops(
     if (typeof level !== 'string' || !level) return;
     box.setFromObject(mesh);
     if (box.isEmpty()) return;
+    anything.set(level, Math.max(anything.get(level) ?? -Infinity, box.max.y));
+    // The walls, and nothing else. They are what a storey's height *means*: a
+    // ceiling slab sits above them, which is the thing the cut is there to take
+    // off, and a wardrobe that reaches it would otherwise raise the cut over it.
+    if (mesh.userData.part !== 'walls') return;
     highest.set(level, Math.max(highest.get(level) ?? -Infinity, box.max.y));
   });
 
   const tops = new Map<string, number>();
   for (const level of levels) {
-    const top = highest.get(level.id);
+    const top = highest.get(level.id) ?? anything.get(level.id);
     if (top !== undefined && top > level.elevation) tops.set(level.id, top - level.elevation);
   }
   return tops;

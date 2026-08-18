@@ -83,7 +83,7 @@ export class Fp3dLoadingOverlay extends FpBaseElement {
         position: relative;
         width: 100%;
         height: 4px;
-        border-radius: 999px;
+        border-radius: 1px;
         background: var(--fp3d-press);
         overflow: hidden;
       }
@@ -91,7 +91,7 @@ export class Fp3dLoadingOverlay extends FpBaseElement {
       .fill {
         position: absolute;
         inset: 0 auto 0 0;
-        border-radius: 999px;
+        border-radius: 1px;
         background: var(--fp3d-accent);
         transition: width var(--fp3d-slow) var(--fp3d-ease);
       }
