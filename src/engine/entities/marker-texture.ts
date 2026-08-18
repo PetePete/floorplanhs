@@ -476,9 +476,9 @@ export class MarkerAtlas {
 
 /**
  * A callout box, the way a dimension or a part label is drawn: hairline
- * rectangle, square corners, flat backdrop. An active entity gets corner ticks
- * rather than a heavier fill — brackets are how an instrument panel says
- * "this one", and they add no weight to an already busy drawing.
+ * rectangle, square corners, flat backdrop. An active entity says so in the
+ * colour of that one hairline and of its glyph — a second frame around the
+ * first is two rectangles where the drawing needs none.
  */
 function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number, h: number): void {
   const accent = spec.color || DEFAULT_ACCENT;
@@ -507,8 +507,6 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
   }
   c2d.stroke();
   c2d.restore();
-
-  if (spec.active && !muted) drawCornerTicks(c2d, x, y, w, h, accent);
 
   if (selected) {
     c2d.save();
@@ -590,37 +588,6 @@ function drawChip(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
     x + CHIP_PAD,
     y + h / 2 + 0.5,
   );
-}
-
-/** Brackets at the four corners: the instrument-panel idiom for "this one". */
-function drawCornerTicks(
-  c2d: Ctx2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  color: string,
-): void {
-  const len = Math.min(6, w / 3, h / 2);
-  c2d.save();
-  c2d.lineWidth = 1.5;
-  c2d.strokeStyle = color;
-  c2d.beginPath();
-  for (const [cx, sx] of [
-    [x + 0.5, 1],
-    [x + w - 0.5, -1],
-  ] as const) {
-    for (const [cy, sy] of [
-      [y + 0.5, 1],
-      [y + h - 0.5, -1],
-    ] as const) {
-      c2d.moveTo(cx + sx * len, cy);
-      c2d.lineTo(cx, cy);
-      c2d.lineTo(cx, cy + sy * len);
-    }
-  }
-  c2d.stroke();
-  c2d.restore();
 }
 
 /**

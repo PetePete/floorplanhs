@@ -154,6 +154,60 @@ describe('placing while the storeys are pulled apart', () => {
   });
 });
 
+describe('placing through a hidden-line drawing', () => {
+  /** The house, with a storey's wall standing between the camera and the floor. */
+  function withWallInTheWay() {
+    const built = house();
+    const above = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 4));
+    above.position.set(0, 3, 0);
+    above.userData = { level: 'upper', room: 'structure', part: 'walls' };
+    built.root.add(above);
+    built.root.updateMatrixWorld(true);
+
+    const base = stubModel(built);
+    const targets = [built.floor, built.wall, above];
+    return {
+      model: { ...base, getPickTargets: () => targets } as IModelManager,
+      above,
+    };
+  }
+
+  it('drops onto the floor, not onto whatever stands in front of it', () => {
+    // In `wireframe` no surface is visible, so the nearest one is not what the
+    // user is aiming at — it is whatever happens to stand between the camera and
+    // the room. On the real house that was the outer wall of the storey above,
+    // 1.1 m before the floor the drop was meant for, and the marker went there.
+    const { model } = withWallInTheWay();
+    const placement = new PlacementController(model, noopEntities, noopCamera);
+    placement.init(stubContext());
+
+    placement.beginPlacement('sensor.a');
+    const result = placement.commitPlacement(...screen(0, 0));
+    expect(result).not.toBeNull();
+    expect(result!.position[1], 'the floor is at y = 0, the wall in the way at 3.1').toBeCloseTo(
+      0,
+      1,
+    );
+    expect(result!.levelId).toBe('ground');
+    placement.dispose();
+  });
+
+  it('takes the nearest surface again once the surfaces are visible', () => {
+    // `style: solid` paints them, so the nearest one *is* the one under the
+    // pointer and picking anything else would be the surprise.
+    const { model } = withWallInTheWay();
+    const placement = new PlacementController(model, noopEntities, noopCamera);
+    placement.init(stubContext());
+    placement.setHiddenLine(false);
+
+    placement.beginPlacement('sensor.a');
+    const result = placement.commitPlacement(...screen(0, 0));
+    expect(result).not.toBeNull();
+    expect(result!.position[1]).toBeCloseTo(3.1, 1);
+    placement.dispose();
+  });
+});
+
 describe('placing outside the building', () => {
   it('drops onto the floor when there is one under the pointer', () => {
     const placement = controller();

@@ -831,11 +831,14 @@ export class Viewer implements IViewer {
       (e as IEntityLayer & { setDepthTested?(v: boolean): void }).setDepthTested?.(depthTested),
     );
 
-    this.guard('placement', this._placement, (p) =>
-      (p as Subsystem & { setSnapPlacement?(v: boolean): void }).setSnapPlacement?.(
-        this.config.ui?.snapPlacement === true,
-      ),
-    );
+    this.guard('placement', this._placement, (p) => {
+      const target = p as Subsystem & {
+        setSnapPlacement?(v: boolean): void;
+        setHiddenLine?(v: boolean): void;
+      };
+      target.setSnapPlacement?.(this.config.ui?.snapPlacement === true);
+      target.setHiddenLine?.(wire);
+    });
 
     // Whether ghosted storeys appear at all is a decision about the card, not
     // about one viewpoint, so it overrides every preset's own section state.

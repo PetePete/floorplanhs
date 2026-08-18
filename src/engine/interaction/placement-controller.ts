@@ -139,6 +139,8 @@ export class PlacementController implements IPlacementController {
   private role: EntityRole = 'marker';
   /** `ui.snapPlacement`; see the offset table above. */
   private snapPlacement = false;
+  /** Set while `render.style` is `wireframe`; see `setHiddenLine`. */
+  private hiddenLine = true;
   private originalPosition: Vec3 | null = null;
   /** Latched once a drag leaves the building. See `resolve`. */
   private freePlacement = false;
@@ -415,7 +417,9 @@ export class PlacementController implements IPlacementController {
       this.raycaster.intersectObjects(targets, true, this.hits);
     }
 
-    const hit = this.firstUnclippedHit();
+    // Hidden-line drawings have no visible surface to aim at, so a floor the
+    // ray meets outranks whatever stands in front of it; see `firstFloorHit`.
+    const hit = (this.hiddenLine ? this.firstFloorHit() : null) ?? this.firstUnclippedHit();
 
     // A drag that leaves the building latches into free placement for the rest
     // of the gesture. Without the latch, dragging a marker out and along the
@@ -551,6 +555,29 @@ export class PlacementController implements IPlacementController {
     return null;
   }
 
+  /**
+   * The first floor the ray meets, or null if it meets none.
+   *
+   * In a hidden-line drawing there is no such thing as the surface under the
+   * pointer: every surface is invisible, and the nearest one is whatever
+   * happens to stand between the camera and what you are looking at. Measured
+   * on a real house from a three-quarter view, a drop aimed into a room met the
+   * outer wall of the storey above 1.1 m before the floor it was aimed at, and
+   * the marker went onto that wall.
+   *
+   * A floor is what a drop into a room means, and where it goes from there is
+   * the role's business — a light rises to the ceiling of that room, a switch to
+   * 1.10 m. Walls and roofs still catch a drop when the ray meets no floor at
+   * all, which is what keeps a facade placeable.
+   */
+  private firstFloorHit(): THREE.Intersection | null {
+    for (const hit of this.hits) {
+      if (hit.object.userData.part !== 'floor') continue;
+      if (!this.isClipped(hit.point, hit.object)) return hit;
+    }
+    return null;
+  }
+
   private isClipped(point: THREE.Vector3, object: THREE.Object3D): boolean {
     const ctx = this.ctx;
     if (!ctx) return false;
@@ -664,6 +691,15 @@ export class PlacementController implements IPlacementController {
   /** Opt into fixture-aware drop heights instead of what-you-see placement. */
   setSnapPlacement(value: boolean): void {
     this.snapPlacement = value;
+  }
+
+  /**
+   * Whether the model is being drawn as a hidden-line wireframe, where no
+   * surface is visible and picking the nearest one is meaningless; see
+   * `firstFloorHit`.
+   */
+  setHiddenLine(value: boolean): void {
+    this.hiddenLine = value;
   }
 
   /* ------------------------------------------------------------- internals */
