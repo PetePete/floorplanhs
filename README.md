@@ -554,7 +554,6 @@ tour:
 | `explodeDuration` | number | `0.7` | Seconds the storeys take to travel when the exploded view is switched on or off. `0` puts them straight there. |
 | `ghostAbove` | boolean | *(unset)* | Master switch for the translucent storeys above an isolated level. `true` always, `false` never — it outranks every preset's own `section.ghostAbove`. Leave it out and each preset decides for itself. |
 | `showToolbar` | boolean | `true` | Top toolbar. |
-| `showToolbarInPanel` | boolean | `false` | Panel views are the wall-tablet case, where the saved views and the cube are the whole interface. Set `true` to keep the toolbar there. |
 | `showPresetBar` | boolean | `true` | The saved-views strip — the primary navigation. |
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |
 | `showZoomSlider` | boolean | `true` | Vertical zoom control under the cube. |

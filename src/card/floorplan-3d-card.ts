@@ -1503,15 +1503,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   /**
-   * A panel view is the wall-tablet case: the saved views along the bottom and
-   * the orientation cube are the whole interface, and a floating button cluster
-   * is just clutter over the render. Set `ui.showToolbar: true` explicitly to
-   * keep it there.
+   * One switch decides it, everywhere.
+   *
+   * A panel view used to hide the toolbar unless a second flag opted back in —
+   * on the theory that a wall tablet wants only the saved views and the cube.
+   * That made `showToolbar: true` a lie in exactly the layout a floorplan is
+   * most likely to be given, and the flag that was supposed to fix it was never
+   * read by the config schema, so setting it did nothing at all.
    */
   private toolbarVisible(ui: NonNullable<Floorplan3dCardConfig['ui']>): boolean {
-    if (ui.showToolbar === false) return false;
-    if (this.isPanel) return ui.showToolbarInPanel === true;
-    return true;
+    return ui.showToolbar !== false;
   }
 
   /**

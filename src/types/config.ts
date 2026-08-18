@@ -388,12 +388,6 @@ export interface UiConfig {
    */
   ghostAbove?: boolean | null;
   showToolbar?: boolean;
-  /**
-   * A panel view is the wall-tablet case, where the saved views and the
-   * orientation cube are the whole interface and a floating button cluster is
-   * clutter. Opt back in with `true`.
-   */
-  showToolbarInPanel?: boolean;
   showPresetBar?: boolean;
   showLevelSelector?: boolean;
   showSectionControls?: boolean;
@@ -536,7 +530,6 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   explodeDuration: 0.7,
   snapPlacement: false,
   showToolbar: true,
-  showToolbarInPanel: false,
   showPresetBar: true,
   // Off by default. Isolating a storey and dragging cut planes is how you
   // *author* a view; day to day you just want to jump between the views you
