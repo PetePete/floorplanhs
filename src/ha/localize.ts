@@ -48,6 +48,8 @@ const EN = {
 
   /* -------------------------------------------------------- preset dialog */
   'ui.preset.overview': 'Overview',
+  'ui.preset.whole_house': 'Building',
+  'ui.preset.saved_group': 'Saved views',
   'ui.preset.title': 'Camera views',
   'ui.preset.save_current': 'Save current view',
   'ui.preset.name': 'Name',

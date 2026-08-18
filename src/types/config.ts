@@ -530,11 +530,11 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   explodeDuration: 0.7,
   snapPlacement: false,
   showToolbar: true,
-  showPresetBar: true,
+  showPresetBar: false,
   // Off by default. Isolating a storey and dragging cut planes is how you
   // *author* a view; day to day you just want to jump between the views you
   // saved. Both reappear automatically in edit mode, so nothing is lost.
-  showLevelSelector: false,
+  showLevelSelector: true,
   showSectionControls: false,
   showLegend: false,
   showFps: false,

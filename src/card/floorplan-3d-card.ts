@@ -1248,12 +1248,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   /* --------------------------------------------------------- chrome events */
 
-  private onLevelSelect(levelId: string | null): void {
-    const next = levelId && this.visibleLevels?.[0] !== levelId ? [levelId] : null;
-    this.visibleLevels = next;
-    this.viewer?.setVisibleLevels(next);
-  }
-
   private onSectionChange(section: SectionState, live: boolean): void {
     this.section = section;
     if (live) {
@@ -1558,9 +1552,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // Opt-in only, and it does *not* return in edit mode: the preset bar is how
     // you reach a storey, and a second navigator beside it reads as exactly the
     // hierarchy the user asked us to remove.
-    const showLevels = mode !== 'never' && ui.showLevelSelector === true;
+    // On unless switched off: this panel *is* the card's navigation now — the
+    // building, its storeys and your own saved views, in one list.
+    const showLevels = ui.showLevelSelector !== false;
     const canSection = mode !== 'never' && (ui.showSectionControls === true || author);
-    const activeLevel = this.visibleLevels?.length === 1 ? this.visibleLevels[0] : null;
 
     return html`
       <div class=${classMap({ chrome: true, 'no-toolbar': !showToolbar })}>
@@ -1605,15 +1600,34 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
               `
             : nothing}
         </div>
-        ${showLevels && this.levels.length > 1 && this.panel !== 'palette'
+        ${showLevels && this.panel !== 'palette'
           ? html`<div class="at-left">
               <fp3d-level-selector
                 data-hass
                 .dark=${this.dark}
-                .levels=${this.levels}
-                .activeLevelId=${activeLevel}
-                @fp3d-level-select=${(event: CustomEvent<{ levelId: string | null }>) =>
-                  this.onLevelSelect(event.detail.levelId)}
+                .size=${this.layout}
+                .overview=${this.overviewPreset()}
+                .levelViews=${this.levelPresets()}
+                .presets=${[...(config?.presets ?? []), ...this.localPresets]}
+                .activePresetId=${this.activePreset}
+                .editMode=${this.editing}
+                .canSave=${author}
+                @fp3d-preset-select=${(event: CustomEvent<{ presetId: string }>) =>
+                  this.onPresetSelect(event.detail.presetId)}
+                @fp3d-preset-save=${(event: CustomEvent<{ name: string }>) =>
+                  this.onPresetSave(event.detail.name)}
+                @fp3d-preset-patch=${(event: CustomEvent<{ presetId: string; patch: Partial<CameraPreset> }>) =>
+                  this.applyIntent(
+                    { kind: 'update-preset', presetId: event.detail.presetId, patch: event.detail.patch },
+                    false,
+                  )}
+                @fp3d-preset-remove=${(event: CustomEvent<{ presetId: string }>) =>
+                  this.isLocalPreset(event.detail.presetId)
+                    ? this.removeLocalPreset(event.detail.presetId)
+                    : this.applyIntent(
+                        { kind: 'remove-preset', presetId: event.detail.presetId },
+                        false,
+                      )}
               ></fp3d-level-selector>
             </div>`
           : nothing}
@@ -1646,7 +1660,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
               ></fp3d-entity-palette>
             </div>`
           : nothing}
-        ${ui.showPresetBar !== false && (presets.length > 0 || author)
+        ${ui.showPresetBar === true && (presets.length > 0 || author)
           ? html`<div class="at-bottom">
               <fp3d-preset-bar
                 data-hass
