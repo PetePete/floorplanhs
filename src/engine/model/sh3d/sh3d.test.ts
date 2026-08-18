@@ -278,6 +278,43 @@ describe('sh3d build', () => {
     expect(mitreShear([1, 0], [0.9998, 0.02])).toBe(0);
   });
 
+  it('gives a window reveal only the height of the window', () => {
+    // The wall used to be a row of separate boxes: a pier, then a sill and a
+    // lintel across the opening, then the next pier. The pier's end face is full
+    // height, so each side of a window came out as a floor-to-ceiling line
+    // instead of a line the height of the window. Built as one outline with a
+    // hole, the only vertical lines at the reveal are the window's own.
+    const home = buildSh3dHome(
+      parseHomeXml(`<?xml version='1.0'?>
+<home version='7400' name='Window' wallHeight='250.0'>
+  <level id='level0' name='Ground' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <wall id='w0' level='level0' xStart='0.0' yStart='0.0' xEnd='600.0' yEnd='0.0'
+        height='250.0' thickness='20.0'/>
+  <doorOrWindow id='d0' level='level0' name='Window' x='300.0' y='0.0' elevation='90.0'
+                width='100.0' depth='20.0' height='120.0' angle='0.0'/>
+</home>`),
+      { textures: false },
+    );
+    const mesh = home.nodes.get('level0/structure/walls') as THREE.Mesh;
+    mesh.updateWorldMatrix(true, false);
+    const position = mesh.geometry.getAttribute('position');
+    const v = new THREE.Vector3();
+
+    // The reveal sits at x = ±0.5 m from the wall's centre, and the window runs
+    // from 0.90 to 2.10 m. Wall geometry at those two x values must exist only
+    // between those heights — anything at the floor or the wall top there is the
+    // old full-height pier face.
+    let atReveal = 0;
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      if (Math.abs(Math.abs(v.x) - 0.5) > 0.02) continue;
+      atReveal += 1;
+      expect(v.y, `reveal vertex at y=${v.y.toFixed(2)}`).toBeGreaterThan(0.85);
+      expect(v.y).toBeLessThan(2.15);
+    }
+    expect(atReveal, 'the reveal has to exist at all').toBeGreaterThan(0);
+  });
+
   it('slopes a wall top when heightAtEnd differs', () => {
     // One wall on its own. With the other three present their corner geometry
     // reaches the same x as this wall's ends — they are joined, so every wall

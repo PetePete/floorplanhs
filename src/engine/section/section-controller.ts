@@ -84,6 +84,8 @@ export class SectionController implements ISectionController {
   /** `ui.ghostAbove`; null means "whatever the state says". See setGhostOverride. */
   private ghostOverride: boolean | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
+  /** Measured height of each storey's geometry above its own floor. */
+  private levelTops: ReadonlyMap<string, number> | null = null;
 
   private readonly changeCallbacks = new Set<(state: SectionState) => void>();
 
@@ -168,6 +170,16 @@ export class SectionController implements ISectionController {
     this.ghostOverride = value;
     this.updateGhost(true);
     this.ctx?.invalidate();
+  }
+
+  /**
+   * How tall each storey's geometry actually is, above its own elevation. The
+   * isolate-level cut works from this rather than from the declared storey
+   * height; see `desiredClips`.
+   */
+  setLevelTops(tops: ReadonlyMap<string, number> | null): void {
+    this.levelTops = tops;
+    this.rebuild(false);
   }
 
   /** Lift the level cut with its storey; see `engine/model/explode.ts`. */
@@ -313,7 +325,13 @@ export class SectionController implements ISectionController {
           }
           return [];
         }
-        const height = level.height > 0 ? level.height : 3;
+        // The *measured* height where we have it, not the storey height the
+        // file states. A top floor under a pitched roof has walls of every
+        // height between the eaves and the ridge, and cutting from the nominal
+        // figure slices through the tall half of the room instead of taking the
+        // ceiling off it.
+        const measured = this.levelTops?.get(level.id);
+        const height = measured && measured > 0 ? measured : level.height > 0 ? level.height : 3;
         // The exploded view lifts the storey's geometry, so the cut has to rise
         // with it or it slices whatever now happens to be at that height.
         const base = level.elevation + (this.levelOffsets?.get(level.id) ?? 0);

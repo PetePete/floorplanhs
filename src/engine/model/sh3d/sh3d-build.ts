@@ -106,36 +106,6 @@ function scaleUv(geometry: THREE.BufferGeometry, scale: number): void {
 }
 
 /**
- * A quadrilateral panel in a wall's local (u, y) frame, extruded across the
- * wall's thickness. Independent corner heights are what lets one code path
- * cover a plain pier, the sill under a window, the lintel over a door and a
- * wall whose top slopes from `height` to `heightAtEnd`.
- */
-function panel(
-  u0: number,
-  u1: number,
-  bottom0: number,
-  bottom1: number,
-  top0: number,
-  top1: number,
-  thickness: number,
-): THREE.BufferGeometry | null {
-  if (u1 - u0 <= EPS) return null;
-  if (top0 - bottom0 <= EPS && top1 - bottom1 <= EPS) return null;
-
-  const shape = new THREE.Shape();
-  shape.moveTo(u0, bottom0);
-  shape.lineTo(u1, bottom1);
-  shape.lineTo(u1, Math.max(top1, bottom1));
-  shape.lineTo(u0, Math.max(top0, bottom0));
-  shape.closePath();
-
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
-  geometry.translate(0, 0, -thickness / 2);
-  return geometry;
-}
-
-/**
  * Maps a wall's local frame onto the world: local +X runs from `from` to `to`,
  * local +Z is the wall's thickness, local Y is height above `baseY`.
  */
@@ -560,46 +530,148 @@ interface WallBuild {
  * Everything comes out in the segment's local frame; the caller applies
  * `segmentMatrix` to put it in the world.
  */
+/**
+ * One wall segment as a single extruded outline, plus the glass and door leaves
+ * that sit in its openings.
+ *
+ * The wall used to be a row of separate boxes — a pier, then a sill and a lintel
+ * around each opening, then the next pier. That draws correctly but *edges*
+ * wrongly: the pier's end face is full height, so a window got a floor-to-
+ * ceiling line down each side of it instead of a line the height of the window.
+ * The boxes were also coplanar with each other along every one of those faces.
+ *
+ * Built as one outline, the only lines are the ones the wall actually has: its
+ * own silhouette, and the opening's own rectangle.
+ */
 function buildSegment(segment: WallSegment, out: WallBuild): void {
   const { length, thickness } = segment;
   const heightAt = (u: number): number =>
     segment.height0 + ((segment.height1 - segment.height0) * u) / (length || 1);
 
-  const push = (geometry: THREE.BufferGeometry | null): void => {
-    if (geometry) out.solid.push(geometry);
-  };
-
   const openings = segment.openings
     .filter((o) => o.at + o.width / 2 > 0 && o.at - o.width / 2 < length)
-    .sort((a, b) => a.at - b.at);
+    .sort((a, b) => a.at - b.at)
+    .map((o) => {
+      const a = Math.max(0, o.at - o.width / 2);
+      const b = Math.min(length, o.at + o.width / 2);
+      const sill = Math.max(0, o.sill);
+      const head = Math.min(Math.min(heightAt(a), heightAt(b)), sill + o.height);
+      return { ...o, a, b, sill, head };
+    })
+    .filter((o) => o.b - o.a > EPS && o.head - o.sill > EPS);
 
-  let cursor = 0;
+  for (const geometry of wallOutlines(length, heightAt, openings, thickness)) {
+    out.solid.push(geometry);
+  }
+
   for (const opening of openings) {
-    const a = Math.max(0, opening.at - opening.width / 2);
-    const b = Math.min(length, opening.at + opening.width / 2);
-    if (b - a <= EPS) continue;
+    const clear = opening.head - opening.sill;
+    if (clear <= 0.1) continue;
+    const cy = opening.sill + clear / 2;
+    const geometry = opening.window
+      ? new THREE.BoxGeometry(opening.b - opening.a - 0.06, clear - 0.06, 0.02)
+      : new THREE.BoxGeometry(opening.b - opening.a - 0.04, clear - 0.03, 0.045);
+    geometry.translate((opening.a + opening.b) / 2, cy, 0);
+    (opening.window ? out.glass : out.leaves).push(geometry);
+  }
+}
 
-    push(panel(cursor, a, 0, 0, heightAt(cursor), heightAt(a), thickness));
+interface PlacedSpan {
+  a: number;
+  b: number;
+  sill: number;
+  head: number;
+}
 
-    const sill = Math.max(0, opening.sill);
-    const head = Math.min(Math.min(heightAt(a), heightAt(b)), sill + opening.height);
-    if (sill > EPS) push(panel(a, b, 0, 0, sill, sill, thickness));
-    if (head < Math.max(heightAt(a), heightAt(b)) - EPS) {
-      push(panel(a, b, head, head, heightAt(a), heightAt(b), thickness));
+/**
+ * The wall's cross-section in its own (u, height) frame, extruded across the
+ * thickness.
+ *
+ * An opening is a *hole* only while solid wall remains on all four sides. A door
+ * runs to the floor, so it is a notch in the bottom edge instead — a hole that
+ * touches the outline cannot be triangulated. One that reaches the top notches
+ * the top edge, and one doing both splits the wall in two, which is why this
+ * returns a list.
+ */
+function wallOutlines(
+  length: number,
+  heightAt: (u: number) => number,
+  openings: readonly PlacedSpan[],
+  thickness: number,
+): THREE.BufferGeometry[] {
+  if (length <= EPS) return [];
+
+  const splits = openings.filter((o) => o.sill <= EPS && o.head >= heightAt(o.a) - EPS);
+  if (splits.length > 0) {
+    // Full-height gap: build the stretches either side of it independently.
+    const pieces: THREE.BufferGeometry[] = [];
+    let cursor = 0;
+    for (const gap of splits) {
+      pieces.push(...slice(cursor, gap.a));
+      cursor = Math.max(cursor, gap.b);
     }
-    cursor = Math.max(cursor, b);
+    pieces.push(...slice(cursor, length));
+    return pieces;
 
-    const clear = head - sill;
-    if (clear > 0.1) {
-      const cy = sill + clear / 2;
-      const geometry = opening.window
-        ? new THREE.BoxGeometry(b - a - 0.06, clear - 0.06, 0.02)
-        : new THREE.BoxGeometry(b - a - 0.04, clear - 0.03, 0.045);
-      geometry.translate((a + b) / 2, cy, 0);
-      (opening.window ? out.glass : out.leaves).push(geometry);
+    function slice(from: number, to: number): THREE.BufferGeometry[] {
+      if (to - from <= EPS) return [];
+      const within = openings
+        .filter((o) => o.a >= from - EPS && o.b <= to + EPS && !splits.includes(o))
+        .map((o) => ({ ...o, a: o.a - from, b: o.b - from }));
+      return wallOutlines(to - from, (u) => heightAt(u + from), within, thickness).map((g) => {
+        g.translate(from, 0, 0);
+        return g;
+      });
     }
   }
-  push(panel(cursor, length, 0, 0, heightAt(cursor), heightAt(length), thickness));
+
+  const shape = new THREE.Shape();
+  const doors = openings.filter((o) => o.sill <= EPS);
+  const skylights = openings.filter((o) => o.sill > EPS && o.head >= heightAt(o.a) - EPS);
+  const holes = openings.filter((o) => o.sill > EPS && o.head < heightAt(o.a) - EPS);
+
+  // Bottom edge, stepping up and over every door.
+  shape.moveTo(0, 0);
+  for (const door of doors) {
+    shape.lineTo(door.a, 0);
+    shape.lineTo(door.a, door.head);
+    shape.lineTo(door.b, door.head);
+    shape.lineTo(door.b, 0);
+  }
+  shape.lineTo(length, 0);
+
+  // Up the far end, back along the top stepping *down* around anything that
+  // breaks it, and down the near end.
+  shape.lineTo(length, heightAt(length));
+  for (const gap of [...skylights].reverse()) {
+    shape.lineTo(gap.b, heightAt(gap.b));
+    shape.lineTo(gap.b, gap.sill);
+    shape.lineTo(gap.a, gap.sill);
+    shape.lineTo(gap.a, heightAt(gap.a));
+  }
+  shape.lineTo(0, heightAt(0));
+  shape.closePath();
+
+  for (const hole of holes) {
+    const path = new THREE.Path();
+    path.moveTo(hole.a, hole.sill);
+    path.lineTo(hole.b, hole.sill);
+    path.lineTo(hole.b, hole.head);
+    path.lineTo(hole.a, hole.head);
+    path.closePath();
+    shape.holes.push(path);
+  }
+
+  let geometry: THREE.ExtrudeGeometry;
+  try {
+    geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+  } catch {
+    // A self-intersecting outline can defeat the triangulator; one bad wall is
+    // not a reason to fail the import.
+    return [];
+  }
+  geometry.translate(0, 0, -thickness / 2);
+  return [geometry];
 }
 
 /* ---------------------------------------------------------------- builder */

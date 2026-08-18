@@ -835,6 +835,7 @@ const UI_ALIASES: Record<string, string> = {
   show_legend: 'showLegend',
   show_fps: 'showFps',
   show_view_cube: 'showViewCube',
+  show_ceilings: 'showCeilings',
   show_zoom_slider: 'showZoomSlider',
   level_presets: 'levelPresets',
   ghost_above: 'ghostAbove',
@@ -852,6 +853,7 @@ function readUi(raw: unknown, path: string): UiConfig {
     if (value !== undefined) ui[key] = value;
   };
 
+  assign('showCeilings', readBoolean(obj, 'showCeilings', path));
   assign('explode', readNumber(obj, 'explode', path, { min: 0, max: 20 }));
   assign('ghostAbove', readBoolean(obj, 'ghostAbove', path));
   assign('snapPlacement', readBoolean(obj, 'snapPlacement', path));

@@ -331,6 +331,16 @@ export class Viewer implements IViewer {
       });
       this.guard('camera', this._cameraCtl, (c) => c.setBounds(loaded.bounds));
 
+      // Measured before anything is lifted, so these are heights above each
+      // storey's own floor rather than positions in the exploded view.
+      this.guard('section', this._section, (sc) =>
+        (
+          sc as ISectionController & {
+            setLevelTops?(t: ReadonlyMap<string, number> | null): void;
+          }
+        ).setLevelTops?.(levelTops(loaded.root, loaded.levels)),
+      );
+
       // Before the room anchors: those are read off the geometry, so the
       // storeys have to be where they are going to be drawn first.
       // Markers that name a room draw a leader back to it, so they need to know
@@ -372,6 +382,7 @@ export class Viewer implements IViewer {
         lighting.setFillListener?.(() => this.edges.refreshRoomColors());
       });
 
+      this.edges.setHideCeilings(this.config.ui?.showCeilings === false);
       this.edges.build(loaded.root, core.clippingPlanes);
       if (!this.edges.object.parent) core.modelRoot.add(this.edges.object);
       this.applyRenderStyle();
@@ -814,6 +825,19 @@ export class Viewer implements IViewer {
       ),
     );
 
+    const hideCeilings = this.config.ui?.showCeilings === false;
+    this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings));
+    // The line work is merged per storey, so dropping the ceilings from it means
+    // rebuilding — cheap enough for something that changes on a click.
+    if (this.edges.setHideCeilings(hideCeilings)) {
+      const root = this._model?.model?.root;
+      if (root && this.core) {
+        this.edges.build(root, this.core.clippingPlanes);
+        const levels = this._model?.model?.levels;
+        if (levels) this.applyExplode(levels);
+      }
+    }
+
     // Recognising a double tap costs every tap 300 ms of latency, so it stays
     // off unless some placed entity actually configures one.
     const wantsDoubleTap = (this.config.entities ?? []).some((e) => e.double_tap_action);
@@ -1067,6 +1091,39 @@ function numberAttr(value: unknown, fallback: number): number {
  * Floors rather than the room's whole geometry, because furniture and ceilings
  * would drag the centre off the part of the room a reader is looking at.
  */
+/**
+ * How tall each storey's geometry is above its own elevation.
+ *
+ * The declared storey height is a nominal figure; a top floor under a pitched
+ * roof has walls of every height between eaves and ridge. Measuring gives the
+ * cross-section something true to cut from.
+ */
+function levelTops(
+  root: THREE.Object3D,
+  levels: readonly LevelDefinition[],
+): Map<string, number> {
+  const highest = new Map<string, number>();
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || mesh.userData.fp3dInternal === true) return;
+    const level = mesh.userData.level;
+    if (typeof level !== 'string' || !level) return;
+    box.setFromObject(mesh);
+    if (box.isEmpty()) return;
+    highest.set(level, Math.max(highest.get(level) ?? -Infinity, box.max.y));
+  });
+
+  const tops = new Map<string, number>();
+  for (const level of levels) {
+    const top = highest.get(level.id);
+    if (top !== undefined && top > level.elevation) tops.set(level.id, top - level.elevation);
+  }
+  return tops;
+}
+
 function roomAnchors(root: THREE.Object3D): Map<string, Vec3> {
   const boxes = new Map<string, THREE.Box3>();
   root.updateMatrixWorld(true);

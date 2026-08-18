@@ -59,6 +59,7 @@ export class ModelManager implements IModelManager {
   /** Unexploded local Y of every node the exploded view moves. */
   private readonly restingY = new WeakMap<THREE.Object3D, number>();
   private levelOffsets: ReadonlyMap<string, number> | null = null;
+  private ceilingsVisible = true;
   private visibleLevels: string[] | null = null;
   private pickTargets: THREE.Object3D[] = [];
   private pickDirty = true;
@@ -211,6 +212,11 @@ export class ModelManager implements IModelManager {
     this.loaded = { root, bounds, levels, nodes, receivers, isDemo: false };
     this.visibleLevels = null;
     this.pickDirty = true;
+    if (!this.ceilingsVisible) {
+      root.traverse((object) => {
+        if (object.userData.part === 'ceiling') object.visible = false;
+      });
+    }
 
     if (this.ctx) this.ctx.modelRoot.add(root);
 
@@ -243,6 +249,20 @@ export class ModelManager implements IModelManager {
   /** How far a storey is currently lifted; 0 when not exploded. */
   levelOffset(levelId: string | null | undefined): number {
     return typeof levelId === 'string' ? (this.levelOffsets?.get(levelId) ?? 0) : 0;
+  }
+
+  /**
+   * Show or hide every ceiling slab. Pick targets go with them: a hidden ceiling
+   * must not catch a drop, or entities land on a surface nobody can see.
+   */
+  setCeilingsVisible(visible: boolean): void {
+    if (this.ceilingsVisible === visible) return;
+    this.ceilingsVisible = visible;
+    this.root?.traverse((object) => {
+      if (object.userData.part === 'ceiling') object.visible = visible;
+    });
+    this.pickDirty = true;
+    this.ctx?.invalidate();
   }
 
   setVisibleLevels(levelIds: string[] | null): void {

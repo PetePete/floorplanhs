@@ -72,7 +72,6 @@ const DEV_ENTITIES: DevEntity[] = [
  */
 interface Layout {
   model: ModelConfig;
-  title: string;
   /** Level ids, bottom-up. */
   levelIds: string[];
   /** Finished floor level of the top storey, for framing the isometric view. */
@@ -88,7 +87,6 @@ const PRIVATE_SH3D = '/private/sample.sh3d';
 
 const DEMO_LAYOUT: Layout = {
   model: { url: PRIVATE_SH3D },
-  title: 'Home',
   levelIds: [],
   topElevation: 0,
 };
@@ -106,7 +104,6 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
 
   return {
     type: 'custom:floorplan-3d-card',
-    title: layout.title,
     model: layout.model,
     camera: { fov: 45, transitionDuration: 1.1 },
     // Opaque, and deliberately so: the drawing reads best on a ground darker
@@ -129,18 +126,6 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
         position: [15, 12, 17],
         target: [0, 1.6, 0],
         default: true,
-        inTour: true,
-      },
-      {
-        id: 'iso',
-        name: 'Isometric',
-        icon: 'mdi:cube-outline',
-        // Looking along (1, 1, 1) with an orthographic projection: all three
-        // axes foreshorten equally, so a storey reads as a room you can see
-        // into rather than as a flat plan.
-        position: [16, 16, 16],
-        target: [0, 2.5, 0],
-        orthographic: true,
         inTour: true,
       },
     ],
@@ -289,6 +274,15 @@ async function boot(): Promise<void> {
   renderSelect('Palette', 'palette', ['model', 'mono-light', 'mono-dark'] as const);
   renderSelect('Background', 'background', ['transparent', 'system', 'light', 'dark'] as const);
   renderSelect('Lighting', 'lightMode', ['room', 'realistic'] as const);
+
+  const ceilingBtn = el('button', { className: 'chip on' }, ['Ceilings']);
+  ceilingBtn.addEventListener('click', () => {
+    const next = config.ui?.showCeilings === false;
+    config = { ...config, ui: { ...config.ui, showCeilings: next } };
+    ceilingBtn.classList.toggle('on', next);
+    applyConfig();
+  });
+  addRow('Ceilings', ceilingBtn);
 
   // Tri-state on purpose: the config option is a master switch that can also
   // stand aside, and the harness has to be able to reach all three.

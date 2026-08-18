@@ -240,6 +240,9 @@ section:
 - `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
+- `showCeilings: false` drops the ceiling slabs, line work included. Worth it in
+  a plan or exploded view, where the ceiling is all you can see of the storey
+  under it.
 - `explode` pulls the storeys apart along Y, an assembly drawing rather than a
   house:
 

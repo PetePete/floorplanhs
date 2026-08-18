@@ -105,6 +105,8 @@ export interface IModelManager extends Subsystem {
   setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void;
   /** How far a storey is currently lifted. 0 when not exploded. */
   levelOffset(levelId: string | null | undefined): number;
+  /** Show or hide every ceiling slab. */
+  setCeilingsVisible(visible: boolean): void;
   /** Ray target list for placement + picking against the building shell. */
   getPickTargets(): THREE.Object3D[];
   /** Which level a world position falls into. */

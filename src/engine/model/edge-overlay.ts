@@ -44,6 +44,7 @@ export class EdgeOverlay {
   /** Base ink, as written into the vertex colours of every unlit line. */
   private readonly ink = new THREE.Color('#d6dbe2');
   private rooms: RoomFillSource | null = null;
+  private hideCeilings = false;
   private readonly scratchColor = new THREE.Color();
   /** One merged LineSegments per level id; `''` collects unassigned meshes. */
   private readonly byLevel = new Map<string, THREE.LineSegments>();
@@ -117,6 +118,10 @@ export class EdgeOverlay {
       const mesh = node as THREE.Mesh;
       if (mesh.userData.helper || mesh.userData.noEdges) return;
       if (mesh.userData.fp3dInternal === true) return;
+      // Asked for explicitly rather than read off `visible`, which also carries
+      // level isolation: rebuilding while a storey is hidden would drop its
+      // lines for good.
+      if (this.hideCeilings && mesh.userData.part === 'ceiling') return;
       if (!mesh.geometry?.attributes?.position) return;
 
       this.surfaces.push(mesh);
@@ -286,6 +291,17 @@ export class EdgeOverlay {
     if (opacity !== undefined) this.material.opacity = opacity;
     this.material.needsUpdate = true;
     this.refreshRoomColors();
+  }
+
+  /**
+   * Leave the ceilings out of the line work. Needs a rebuild, because the lines
+   * are merged into one geometry per storey and cannot be filtered afterwards —
+   * which is fine, since this changes on a click and not per frame.
+   */
+  setHideCeilings(hide: boolean): boolean {
+    if (this.hideCeilings === hide) return false;
+    this.hideCeilings = hide;
+    return true;
   }
 
   /** Where lit-room colours come from. Null restores plain ink everywhere. */

@@ -363,6 +363,12 @@ export interface RenderConfig {
 
 export interface UiConfig {
   /**
+   * Draw the ceilings. Off is often the more useful floorplan: a ceiling is the
+   * one surface you are never looking at, and in an exploded or a plan view it
+   * is all you can see of the storey underneath it.
+   */
+  showCeilings?: boolean;
+  /**
    * Pull the storeys apart along Y by this many metres per step, so you can see
    * into all of them at once — an assembly drawing rather than a house. 0 is
    * off. Everything moves together: geometry, room tints, markers and their
@@ -526,6 +532,7 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   // Not a boolean default: absent means "no opinion", which is what leaves the
   // per-preset setting in charge.
   ghostAbove: null,
+  showCeilings: true,
   explode: 0,
   snapPlacement: false,
   showToolbar: true,
