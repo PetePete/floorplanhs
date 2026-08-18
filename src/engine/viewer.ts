@@ -852,14 +852,7 @@ export class Viewer implements IViewer {
     this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings));
     // The line work is merged per storey, so dropping the ceilings from it means
     // rebuilding — cheap enough for something that changes on a click.
-    if (this.edges.setHideCeilings(hideCeilings)) {
-      const root = this._model?.model?.root;
-      if (root && this.core) {
-        this.edges.build(root, this.core.clippingPlanes);
-        const levels = this._model?.model?.levels;
-        if (levels) this.applyExplode(levels);
-      }
-    }
+    if (this.edges.setHideCeilings(hideCeilings)) this.rebuildEdges();
 
     // Recognising a double tap costs every tap 300 ms of latency, so it stays
     // off unless some placed entity actually configures one.
@@ -924,6 +917,24 @@ export class Viewer implements IViewer {
       if (root) this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(root)));
     }
     this.core?.invalidate();
+  }
+
+  /**
+   * Rebuild the line work from the model as it now stands, exploded or not.
+   *
+   * The overlay takes the storey lift back out of what it bakes, so this is
+   * safe at any point; see `EdgeOverlay.build`. What still has to happen here
+   * is the room anchors, which are measured off geometry the rebuild does not
+   * move but whose lines have just been replaced.
+   */
+  private rebuildEdges(): void {
+    const root = this._model?.model?.root;
+    const core = this.core;
+    if (!root || !core) return;
+
+    this.edges.build(root, core.clippingPlanes);
+    const levels = this._model?.model?.levels;
+    if (levels) this.applyExplode(levels, this.explodeFlight === null);
   }
 
   /** Metres the storeys are currently pulled apart by. */

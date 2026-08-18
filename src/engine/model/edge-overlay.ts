@@ -45,6 +45,8 @@ export class EdgeOverlay {
   private readonly ink = new THREE.Color('#d6dbe2');
   private rooms: RoomFillSource | null = null;
   private hideCeilings = false;
+  /** The exploded-view lift currently applied to the line groups. */
+  private levelOffsets: ReadonlyMap<string, number> | null = null;
   private readonly scratchColor = new THREE.Color();
   /** One merged LineSegments per level id; `''` collects unassigned meshes. */
   private readonly byLevel = new Map<string, THREE.LineSegments>();
@@ -151,9 +153,19 @@ export class EdgeOverlay {
         return;
       }
 
+      const level = typeof mesh.userData.level === 'string' ? mesh.userData.level : '';
+
       // Bake the mesh transform in, since the merged result is parented to the
       // model root rather than to the mesh.
       edges.applyMatrix4(mesh.matrixWorld);
+      // ...but *not* the exploded-view lift, which the group carries. Baking it
+      // too would apply it twice — the lines end up a storey above the walls
+      // they belong to, and every one of them is attributed to the rooms of the
+      // storey above. Rebuilding while the storeys are apart is an ordinary
+      // thing to do (hiding the ceilings does it), so the correction lives here
+      // rather than in a rule about who may call this and when.
+      const lift = level ? (this.levelOffsets?.get(level) ?? 0) : 0;
+      if (lift !== 0) edges.translate(0, -lift, 0);
 
       // A room-owned mesh answers for all of its lines at once. Walls do not —
       // their two faces belong to two rooms — so those are resolved per vertex
@@ -173,7 +185,6 @@ export class EdgeOverlay {
       edges.setAttribute(ROOM_ATTRIBUTE, new THREE.BufferAttribute(slots, 1));
       edges.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
 
-      const level = typeof mesh.userData.level === 'string' ? mesh.userData.level : '';
       const bucket = perLevel.get(level);
       if (bucket) bucket.push(edges);
       else perLevel.set(level, [edges]);
@@ -199,6 +210,9 @@ export class EdgeOverlay {
     }
 
     this.built = true;
+    // The groups are new, so they start at rest however far apart the storeys
+    // currently are.
+    this.applyLevelOffsets();
     this.refreshRoomColors();
     // A reload brings new material objects, so the old backup is meaningless.
     this.paletteBackup.clear();
@@ -275,8 +289,13 @@ export class EdgeOverlay {
 
   /** Mirrors the model's exploded-view lift so the lines stay on their walls. */
   setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    this.levelOffsets = offsets;
+    this.applyLevelOffsets();
+  }
+
+  private applyLevelOffsets(): void {
     for (const [level, lines] of this.byLevel) {
-      lines.position.y = level ? (offsets?.get(level) ?? 0) : 0;
+      lines.position.y = level ? (this.levelOffsets?.get(level) ?? 0) : 0;
       // The lines are built with `matrixAutoUpdate` off, since they never move
       // in the ordinary case; moving one means updating its matrix by hand.
       lines.updateMatrix();

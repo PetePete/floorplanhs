@@ -20,7 +20,49 @@ function lineCount(overlay: EdgeOverlay): number {
   return segments;
 }
 
+/** Highest point of the line work, in world space. */
+function drawnTop(overlay: EdgeOverlay): number {
+  overlay.object.updateMatrixWorld(true);
+  const box = new THREE.Box3();
+  box.setFromObject(overlay.object);
+  return box.max.y;
+}
+
 describe('edge overlay', () => {
+  it('rebuilds correctly while the storeys are apart', () => {
+    // The overlay bakes world matrices, and the exploded view lifts the very
+    // meshes it bakes. Rebuilding mid-explosion — hiding the ceilings does
+    // exactly that — used to bake the lift *and* keep it on the group: the
+    // lines ended up a storey above their walls, so the walls read as
+    // see-through, and every line was attributed to the rooms of the storey
+    // above, which put the lit room in the wrong place.
+    const root = new THREE.Group();
+    const wall = slab('walls');
+    root.add(wall);
+
+    const overlay = new EdgeOverlay();
+    overlay.setStyle('wireframe');
+    overlay.build(root, []);
+    const atRest = drawnTop(overlay);
+
+    // Explode: the model lifts its meshes, the overlay lifts its groups.
+    wall.position.y = 3;
+    root.updateMatrixWorld(true);
+    overlay.setLevelOffsets(new Map([['level0', 3]]));
+    expect(drawnTop(overlay)).toBeCloseTo(atRest + 3, 6);
+
+    // Now rebuild in that state. The lines must not move.
+    overlay.build(root, []);
+    expect(drawnTop(overlay)).toBeCloseTo(atRest + 3, 6);
+
+    // And putting the storeys back must land them where they started.
+    wall.position.y = 0;
+    root.updateMatrixWorld(true);
+    overlay.setLevelOffsets(null);
+    expect(drawnTop(overlay)).toBeCloseTo(atRest, 6);
+    overlay.dispose();
+  });
+
   it('draws no lines for a floor slab', () => {
     // A storey's floor is one slab per room, and the rooms neither meet each
     // other nor cover the storey: on a real house, two thirds of the outline
