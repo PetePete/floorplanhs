@@ -123,11 +123,9 @@ export class EdgeOverlay {
       this.surfaces.push(mesh);
       // Glass already reads as an outline; edging it doubles every window.
       if (mesh.userData.glass) return;
-      // A hidden ceiling stays a surface — it keeps writing depth, which is what
-      // stops the storey reading as an open box with see-through walls. It just
-      // stops being drawn. Asked for explicitly rather than read off `visible`,
-      // which also carries level isolation: rebuilding while a storey is hidden
-      // would drop its lines for good.
+      // Asked for explicitly rather than read off `visible`, which also carries
+      // level isolation: rebuilding while a storey is hidden would drop its
+      // lines for good.
       if (this.hideCeilings && mesh.userData.part === 'ceiling') return;
 
       box.setFromObject(mesh);
@@ -370,7 +368,7 @@ export class EdgeOverlay {
       // Glass must not occlude — you are supposed to see through a window.
       const isGlass = mesh.userData.glass === true;
       // Whether a ceiling is in the scene at all is the model manager's call
-      // (`ui.showCeilings`); in a hidden-line drawing it stays as a depth mask.
+      // (`ui.showCeilings`), so a hidden one is not woken up here.
       if (mesh.userData.part !== 'ceiling') mesh.visible = !(wire && isGlass);
 
       for (const material of materials) {

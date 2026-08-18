@@ -834,11 +834,10 @@ export class Viewer implements IViewer {
     );
 
     const hideCeilings = this.config.ui?.showCeilings === false;
-    // A hidden-line drawing keeps the slab and only stops drawing it: it paints
-    // nothing anyway, and taking it out of the scene opens the storey like a box
-    // with the lid off, which reads as walls you can see straight through. In
-    // `solid` the surface is the drawing, so there it really does have to go.
-    this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings || wire));
+    // Out of the scene entirely, not kept as an invisible depth mask: a mask
+    // would go on hiding the storey it belongs to, which is the one thing
+    // hiding the ceiling is for.
+    this.guard('model', this._model, (m) => m.setCeilingsVisible(!hideCeilings));
     // The line work is merged per storey, so dropping the ceilings from it means
     // rebuilding — cheap enough for something that changes on a click.
     if (this.edges.setHideCeilings(hideCeilings)) {

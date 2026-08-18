@@ -240,13 +240,9 @@ section:
 - `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
   This uses a stencil pass; if the WebGL context has no stencil buffer, the card
   degrades gracefully to hollow shells instead of failing.
-- `showCeilings: false` stops the ceilings being drawn, line work included.
-  Worth it in a plan or exploded view, where the ceiling is all you can see of
-  the storey under it. In `style: wireframe` the slab stays in the scene and
-  keeps writing depth — it paints nothing there anyway, and taking it out would
-  open every storey like a box with the lid off, which reads as walls you can
-  see straight through. In `style: solid` the surface *is* the drawing, so there
-  it is removed and you look into the rooms.
+- `showCeilings: false` drops the ceiling slabs, line work included. Worth it in
+  a plan or exploded view, where the ceiling is all you can see of the storey
+  under it — and it opens each storey from above, so you look into the rooms.
 - `explode` pulls the storeys apart along Y, an assembly drawing rather than a
   house:
 
