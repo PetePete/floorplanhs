@@ -172,7 +172,13 @@ export class SectionController implements ISectionController {
 
   /** Lift the level cut with its storey; see `engine/model/explode.ts`. */
   setLevelOffsets(offsets: ReadonlyMap<string, number> | null): void {
+    if (this.levelOffsets === offsets) return;
     this.levelOffsets = offsets;
+    // The ghost is a *clone*, so it holds the transforms the model had when it
+    // was taken. Leave it standing after the storeys move and it hangs in the
+    // gap they opened — a solid grey copy of the building where the building no
+    // longer is.
+    this.destroyGhost();
     this.rebuild(false);
   }
 

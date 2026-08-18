@@ -9,16 +9,10 @@
 import '@/main';
 import { createMockHass, type MockHass } from '@/dev/mock-hass';
 import { ensureChakraPetch } from '@/ui/fonts/chakra-petch';
-import {
-  TEST_HOME_TWO_ROOMS_SH3D,
-  TWO_ROOMS,
-  TWO_ROOM_CENTRES,
-} from '@/engine/model/sh3d/test-home';
 import type {
   Floorplan3dCardConfig,
   LightVisualConfig,
   ModelConfig,
-  SectionState,
   Vec3,
 } from '@/types/config';
 
@@ -47,38 +41,29 @@ interface DevEntity {
 }
 
 /**
- * Two lamps, one per room of the built-in two-room home, at the room centres the
- * fixture documents. Placed rather than scattered on purpose: `lightMode: room`
- * only lights a lamp's room, so a harness whose lamps land in no room at all
- * looks exactly like a broken feature.
+ * A couple of lamps and a sensor, dropped roughly in the middle of the ground
+ * floor. The harness reviews whatever `.sh3d` is in `private/`, so it cannot
+ * know that home's rooms or level ids — drag them where they belong, which is
+ * the gesture the card is meant to support anyway.
  */
 const DEV_ENTITIES: DevEntity[] = [
   {
     entity: 'light.living_room_ceiling',
-    position: [TWO_ROOM_CENTRES.west[0], 2.3, TWO_ROOM_CENTRES.west[2]],
+    position: [-2.5, 4.9, -1.5],
     storey: 'main',
     light: { kind: 'point', distance: 8 },
   },
   {
     entity: 'light.kitchen_counter',
-    position: [TWO_ROOM_CENTRES.east[0], 2.3, TWO_ROOM_CENTRES.east[2]],
+    position: [2.5, 4.9, 1.5],
     storey: 'main',
     light: { kind: 'point', distance: 8 },
   },
-  // Parked well clear of the plan, on the north side. The `room` is what makes
-  // it draw a leader across to the kitchen instead of sitting there unexplained.
   {
     entity: 'sensor.living_room_temperature',
-    position: [TWO_ROOM_CENTRES.east[0], 0.1, TWO_ROOM_CENTRES.east[2] - 3.4],
+    position: [0, 3.0, 0],
     storey: 'main',
-    room: TWO_ROOMS.east,
   },
-];
-
-const NO_PLANES: SectionState['planes'] = [
-  { axis: 'x', position: 0, enabled: false, invert: false },
-  { axis: 'y', position: 0, enabled: false, invert: false },
-  { axis: 'z', position: 0, enabled: false, invert: false },
 ];
 
 /**
@@ -95,34 +80,29 @@ interface Layout {
 }
 
 /**
- * The card ships no house of its own, so the harness makes one: the same
- * synthetic two-room `.sh3d` the tests use, zipped in the browser and handed
- * over as a blob URL. That keeps the harness working with no private file
- * present, and keeps what you see here identical to what the tests assert.
+ * The card ships no house of its own, and this harness reviews exactly one: the
+ * `.sh3d` in `private/`, which is gitignored and absent on every other machine.
+ * Without it the card loads nothing and says so, which is worth seeing too.
  */
-/** Picked up automatically when present; see the source selector. */
 const PRIVATE_SH3D = '/private/sample.sh3d';
 
-const TEST_HOME_URL = URL.createObjectURL(
-  new Blob([TEST_HOME_TWO_ROOMS_SH3D()], { type: 'application/octet-stream' }),
-);
-
 const DEMO_LAYOUT: Layout = {
-  model: { url: TEST_HOME_URL },
-  title: 'Two-room test home',
-  levelIds: ['level0'],
+  model: { url: PRIVATE_SH3D },
+  title: 'Home',
+  levelIds: [],
   topElevation: 0,
 };
 
 function buildConfig(layout: Layout): Floorplan3dCardConfig {
   const ids = layout.levelIds;
-  const levelId = (storey: Storey): string => {
+  // Null when the harness has no level list, which is the honest answer for a
+  // home it did not author: the card assigns a level when the entity is dropped.
+  const levelId = (storey: Storey): string | null => {
+    if (ids.length === 0) return null;
     if (storey === 'lower') return ids[0];
     if (storey === 'top') return ids[ids.length - 1];
     return ids[Math.min(1, ids.length - 1)];
   };
-  const topId = levelId('top');
-  const mainId = levelId('main');
 
   return {
     type: 'custom:floorplan-3d-card',
@@ -138,6 +118,9 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
       showPresetBar: true,
       showFps: true,
     },
+    // Plain viewpoints only. Pinning a section to a level id the harness
+    // invented is how a cut ends up referring to a storey that does not exist;
+    // the card generates a view per *detected* storey by itself.
     presets: [
       {
         id: 'overview',
@@ -145,45 +128,20 @@ function buildConfig(layout: Layout): Floorplan3dCardConfig {
         icon: 'mdi:home',
         position: [15, 12, 17],
         target: [0, 1.6, 0],
-        inTour: true,
-      },
-      {
-        id: 'main',
-        name: 'Main floor',
-        icon: 'mdi:home-floor-g',
-        position: [11, 9, 12],
-        target: [0, 1.2, 0],
-        section: {
-          mode: 'level',
-          levelId: mainId,
-          planes: structuredClone(NO_PLANES),
-          caps: true,
-          ghostAbove: true,
-        },
-        inTour: true,
-      },
-      {
-        id: 'top',
-        name: 'Living floor',
-        icon: 'mdi:home-floor-1',
-        // Looking along (1, 1, 1) with an orthographic projection: all three
-        // axes foreshorten equally, so the storey reads as a room you can see
-        // into rather than as a flat plan. The living floor is the interesting
-        // one in this house, so the harness opens here.
-        position: [16, 16 + layout.topElevation, 16],
-        target: [0, layout.topElevation + 1.2, 0],
-        orthographic: true,
-        // The cut still matters: without it you would be looking at the roof
-        // from an angle instead of into the storey.
-        section: {
-          mode: 'level',
-          levelId: topId,
-          planes: structuredClone(NO_PLANES),
-          caps: true,
-          ghostAbove: false,
-        },
-        visibleLevels: [topId],
         default: true,
+        inTour: true,
+      },
+      {
+        id: 'iso',
+        name: 'Isometric',
+        icon: 'mdi:cube-outline',
+        // Looking along (1, 1, 1) with an orthographic projection: all three
+        // axes foreshorten equally, so a storey reads as a room you can see
+        // into rather than as a flat plan.
+        position: [16, 16, 16],
+        target: [0, 2.5, 0],
+        orthographic: true,
+        inTour: true,
       },
     ],
     entities: DEV_ENTITIES.map(({ storey, ...placed }) => ({
@@ -282,47 +240,6 @@ async function boot(): Promise<void> {
     lightBox.append(btn);
   }
   panel.append(el('h3', {}, ['Lights']), lightBox);
-
-  /*
-   * Model source. All three inputs have to produce the same downstream
-   * behaviour — levels, rooms, entity placement — so being able to flip
-   * between them in one click is the fastest way to spot when one of them
-   * drifts. The two private files are absent on any other machine; the select
-   * still lists them and the card reports the 404 rather than failing silently.
-   */
-  panel.append(el('h3', {}, ['Model source']));
-  const sources: Array<{ label: string; model: Floorplan3dCardConfig['model'] }> = [
-    { label: 'Two-room test home', model: { url: TEST_HOME_URL } },
-    { label: 'Sweet Home 3D (private)', model: { url: PRIVATE_SH3D } },
-  ];
-  const sourceSelect = el('select');
-  for (const s of sources) {
-    const option = document.createElement('option');
-    option.value = s.label;
-    option.textContent = s.label;
-    sourceSelect.append(option);
-  }
-  sourceSelect.value = 'Two-room test home';
-  // A real home is far more revealing than the fixture, so use it when it is
-  // there. It is absent on every other machine — `private/` is gitignored —
-  // which is why the built-in one stays the default rather than a 404.
-  void fetch(PRIVATE_SH3D, { method: 'HEAD', cache: 'no-store' })
-    .then((response) => {
-      if (!response.ok) return;
-      sourceSelect.value = 'Sweet Home 3D (private)';
-      config = { ...config, model: { url: PRIVATE_SH3D } };
-      status.textContent = `model: ${PRIVATE_SH3D}`;
-      applyConfig();
-    })
-    .catch(() => {});
-  sourceSelect.addEventListener('change', async () => {
-    const chosen = sources.find((s) => s.label === sourceSelect.value);
-    if (!chosen) return;
-    config = { ...config, model: structuredClone(chosen.model) };
-    status.textContent = `model: ${chosen.label}`;
-    applyConfig();
-  });
-  addRow('Source', sourceSelect);
 
   panel.append(el('h3', {}, ['Scene']));
 

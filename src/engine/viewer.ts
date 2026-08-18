@@ -264,6 +264,8 @@ export class Viewer implements IViewer {
 
   /** Cross-subsystem subscriptions are set up once, on the first model load. */
   private wired = false;
+  /** Serialises overlapping model loads; see `loadModel`. */
+  private loadToken = 0;
   private readonly unwire: Array<() => void> = [];
   private handleHideTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly edges = new EdgeOverlay();
@@ -300,17 +302,25 @@ export class Viewer implements IViewer {
     const core = this.core;
     if (!manager || !core || this.failed.has('model')) return;
 
-    const previousRoot = manager.model?.root ?? null;
+    // Loading is asynchronous and can be asked for again before it finishes —
+    // two edits to `model.url` in quick succession, or a harness that swaps the
+    // source on startup. Whoever asked last wins; anything else is stale by
+    // definition and its result is dropped.
+    const token = (this.loadToken += 1);
     try {
       const loaded = await manager.load(this.config.model ?? {}, (progress) =>
         this.emit('load-progress', progress),
       );
-      if (this.disposed) return;
+      if (this.disposed || token !== this.loadToken) return;
 
-      // The ModelManager may already have parented the result; only adopt it
-      // when it did not, so we never end up with two houses in the scene.
-      if (previousRoot && previousRoot !== loaded.root && previousRoot.parent === core.modelRoot) {
-        previousRoot.removeFromParent();
+      // Adopt the result and evict anything else. Comparing against the root
+      // captured *before* the await is not enough: two loads that overlap both
+      // see the same "previous" and neither removes the other, which is how a
+      // second house ends up standing inside the first.
+      for (const child of [...core.modelRoot.children]) {
+        if (child !== loaded.root && child.userData.fp3dInternal !== true) {
+          child.removeFromParent();
+        }
       }
       if (!loaded.root.parent) core.modelRoot.add(loaded.root);
 
@@ -323,8 +333,6 @@ export class Viewer implements IViewer {
 
       // Before the room anchors: those are read off the geometry, so the
       // storeys have to be where they are going to be drawn first.
-      this.applyExplode(loaded.levels);
-
       // Markers that name a room draw a leader back to it, so they need to know
       // where the rooms are before the first frame.
       this.guard('entities', this._entities, (e) => e.setRoomAnchors(roomAnchors(loaded.root)));
@@ -367,6 +375,13 @@ export class Viewer implements IViewer {
       this.edges.build(loaded.root, core.clippingPlanes);
       if (!this.edges.object.parent) core.modelRoot.add(this.edges.object);
       this.applyRenderStyle();
+
+      // Last, and that ordering is the whole of it. The room index has to exist
+      // before the tint can be told which storey each room is on, and the edge
+      // lines bake the model's world matrices into one merged geometry per
+      // storey — bake them while the storeys are already lifted and the lift
+      // gets applied twice, once in the geometry and once in the group.
+      this.applyExplode(loaded.levels);
 
       this.wireSubsystems();
       this.emit('model-loaded', loaded);
