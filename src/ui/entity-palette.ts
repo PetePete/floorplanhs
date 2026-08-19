@@ -46,6 +46,17 @@ type Row =
   | { kind: "header"; key: string; label: string; height: number }
   | { kind: "entity"; key: string; option: EntityOption; height: number };
 
+/**
+ * The filter and search the palette was last used with.
+ *
+ * Home Assistant rebuilds a card whenever the dashboard config changes, and in
+ * edit mode this card changes it on every placement — so the palette was torn
+ * down and rebuilt after each drop, throwing you back to `light` and an empty
+ * search box while you were half way through placing switches. Module scope
+ * outlives the element, which is exactly the lifetime this needs.
+ */
+const LAST_FILTER: { domain: string | null; query: string } = { domain: "light", query: "" };
+
 @defineFp("fp3d-entity-palette")
 export class Fp3dEntityPalette extends FpBaseElement {
   static override styles = [
@@ -62,6 +73,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
       }
 
       .panel {
+        container: palette / size;
         display: flex;
         flex-direction: column;
         width: 300px;
@@ -79,7 +91,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
        * rather than a fixed-height header, so this holds whichever box ends up
        * being the one that scrolls.
        */
-      .head {
+      .panel-head {
         position: sticky;
         top: 0;
         z-index: 1;
@@ -113,14 +125,67 @@ export class Fp3dEntityPalette extends FpBaseElement {
 
       .filters {
         display: flex;
+        flex: none;
+        flex-wrap: nowrap;
         gap: 5px;
         padding: 2px 12px 8px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+      }
+
+      .filters::-webkit-scrollbar {
+        display: none;
+      }
+
+      .filters .chip {
+        flex: none;
       }
 
       .filters .chip {
         height: 28px;
         padding: 0 10px;
         font-size: 11.5px;
+      }
+
+      /*
+       * Queried against the panel, not the window: a card can be short on a tall
+       * screen (a masonry view) or tall on a short one, and it is the panel's own
+       * height that decides whether the header is affordable.
+       */
+      @container palette (max-height: 560px) {
+        .search {
+          margin: 6px 10px 4px;
+        }
+
+        .search input {
+          min-height: 32px;
+        }
+
+        .filters {
+          padding: 0 10px 6px;
+        }
+
+        .filters .chip {
+          height: 26px;
+        }
+      }
+
+      /* Shorter still: the title is the first thing to go. The icon and the
+         close button carry it, and what the panel is for is not in doubt while
+         you are dragging things out of it. */
+      @container palette (max-height: 420px) {
+        .sheet-title span:not(.spacer) {
+          display: none;
+        }
+
+        .search {
+          margin: 4px 10px 4px;
+        }
+
+        .filters {
+          padding: 0 10px 4px;
+        }
       }
 
       .list {
@@ -269,8 +334,8 @@ export class Fp3dEntityPalette extends FpBaseElement {
   /** False on a live dashboard, where Lovelace ignores a card's config change. */
   @property({ type: Boolean }) canPersist = false;
 
-  @state() private query = "";
-  @state() private domain: string | null = "light";
+  @state() private query = LAST_FILTER.query;
+  @state() private domain: string | null = LAST_FILTER.domain;
   @state() private scrollOffset = 0;
   @state() private viewportHeight = 320;
   @state() private pressingId: string | null = null;
@@ -305,6 +370,8 @@ export class Fp3dEntityPalette extends FpBaseElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    LAST_FILTER.domain = this.domain;
+    LAST_FILTER.query = this.query;
     this.refresh.cancel();
     this.listObserver?.disconnect();
     this.listObserver = null;
@@ -632,7 +699,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
         role="region"
         aria-label=${this.t("ui.placement.title", "Place entities")}
       >
-        <div class="head">
+        <div class="panel-head">
           <div class="sheet-title">
             ${icon("list")}
             <span>${this.t("ui.placement.title", "Place entities")}</span>
@@ -655,6 +722,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
               aria-label=${this.t("ui.placement.search", "Search entities")}
               @input=${(event: Event) => {
               this.query = (event.target as HTMLInputElement).value;
+              LAST_FILTER.query = this.query;
               this.scrollOffset = 0;
               if (this.listEl) this.listEl.scrollTop = 0;
             }}
@@ -673,6 +741,9 @@ export class Fp3dEntityPalette extends FpBaseElement {
                 aria-pressed=${this.domain === domain ? "true" : "false"}
                 @click=${() => {
                   this.domain = this.domain === domain ? null : domain;
+                  // Written now, not on teardown: a rebuild can arrive before
+                  // this element is told it is going away.
+                  LAST_FILTER.domain = this.domain;
                 }}
               >
                 ${domain}
