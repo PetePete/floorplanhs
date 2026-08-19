@@ -24,6 +24,10 @@ import { css } from 'lit';
  */
 export const themeTokens = css`
   :host {
+    /* Native controls — a select's popup, a scrollbar, a date picker — are
+       painted by the browser, not by us. This is the only thing that tells it
+       which way round we are. */
+    color-scheme: light;
     --fp3d-accent: var(--primary-color, #03a9f4);
     --fp3d-accent-text: var(--text-primary-color, #fff);
     --fp3d-text: var(--primary-text-color, #212121);
@@ -78,6 +82,7 @@ export const themeTokens = css`
   }
 
   :host([dark]) {
+    color-scheme: dark;
     --fp3d-surface: rgba(32, 33, 36, 0.7);
     --fp3d-surface-strong: rgba(32, 33, 36, 0.92);
     --fp3d-hairline: rgba(255, 255, 255, 0.12);
@@ -824,6 +829,10 @@ export const cardStyles = css`
   /* Sheets: side panels on a roomy card, bottom sheets on a phone-sized one. */
   .sheet {
     display: flex;
+    /* Explicit, not left to flex stretch: everything inside sizes itself in
+       percentages, and a percentage against an indefinite height is how a list
+       ends up pushing the panel past the bottom of the card. */
+    height: 100%;
     max-height: 100%;
     min-height: 0;
     animation: fp3d-slide-right var(--fp3d-normal) var(--fp3d-ease);

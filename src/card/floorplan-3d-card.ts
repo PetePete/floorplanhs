@@ -199,6 +199,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private dragEntityId: string | null = null;
   private dragFrame = 0;
   private dragPoint: { x: number; y: number } | null = null;
+  /** Said once: a change on a live dashboard cannot be kept. See `commitConfig`. */
+  private warnedVolatile = false;
   /** Guards against the engine and the card both persisting the same drop. */
   private recentAdds = new Map<string, number>();
   private localViewsKey: string | null = null;
@@ -869,6 +871,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // slider drag would do once per frame.
     if (this.canPersistConfig()) {
       fireEvent(this, 'config-changed', { config: normalised });
+    } else if (!this.warnedVolatile) {
+      // Lovelace only listens for `config-changed` from the card editor. On a
+      // live dashboard the change applies to what is on screen and is gone on
+      // the next reload — saying so once beats letting someone place a houseful
+      // of lamps and lose them.
+      this.warnedVolatile = true;
+      this.hud?.toast({
+        message: this.t(
+          'ui.placement.hint_volatile',
+          'Placements made here are not saved. Open the card with ⋮ → Edit and place them in its preview, then Save.',
+        ),
+      });
     }
     if (options.reload) void this.viewer?.updateConfig(normalised);
   }
@@ -1669,6 +1683,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .dark=${this.dark}
                 .size=${this.layout}
                 .placed=${config?.entities ?? []}
+                .canPersist=${this.canPersistConfig()}
                 @fp3d-palette-close=${() => {
                   this.panel = 'none';
                 }}

@@ -65,6 +65,8 @@ const EN = {
 
   /* ------------------------------------------------------------ placement */
   'ui.placement.hint_drag': 'Drag an entity onto the model to place it.',
+  'ui.placement.hint_volatile':
+    'Placements made here are not saved. Open the card with ⋮ → Edit and place them in its preview, then Save.',
   'ui.placement.hint_drop': 'Release to place {name} here.',
   'ui.placement.hint_invalid': 'Drop on a surface of the house.',
   'ui.placement.hint_move': 'Drag the marker to move it, Esc to cancel.',
@@ -146,6 +148,8 @@ const DE: Table = {
   'ui.preset.saved': 'Ansicht "{name}" gespeichert',
 
   'ui.placement.hint_drag': 'Entität auf das Modell ziehen, um sie zu platzieren.',
+  'ui.placement.hint_volatile':
+    'Platzierungen von hier werden nicht gespeichert. Karte über ⋮ → Bearbeiten öffnen, dort platzieren und speichern.',
   'ui.placement.hint_drop': 'Loslassen, um {name} hier zu platzieren.',
   'ui.placement.hint_invalid': 'Auf einer Fläche des Hauses ablegen.',
   'ui.placement.hint_move': 'Marker ziehen zum Verschieben, Esc zum Abbrechen.',

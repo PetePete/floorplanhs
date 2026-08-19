@@ -12,19 +12,19 @@
  *     DOM, which keeps typing in the search box instant.
  */
 
-import { css, html, type TemplateResult } from 'lit';
-import { property, query, state } from 'lit/decorators.js';
-import { classMap } from 'lit/directives/class-map.js';
-import { repeat } from 'lit/directives/repeat.js';
-import { defineFp, FpBaseElement } from '@/ui/base-element';
-import { icon, iconForDomain } from '@/ui/icons';
-import { domainOf, searchEntities, type EntityOption } from '@/ha/registry';
-import type { HomeAssistant } from '@/types/hass';
-import type { PlacedEntity } from '@/types/config';
-import { debounce } from '@/util/events';
+import { css, html, type TemplateResult } from "lit";
+import { property, query, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
+import { repeat } from "lit/directives/repeat.js";
+import { defineFp, FpBaseElement } from "@/ui/base-element";
+import { icon, iconForDomain } from "@/ui/icons";
+import { domainOf, searchEntities, type EntityOption } from "@/ha/registry";
+import type { HomeAssistant } from "@/types/hass";
+import type { PlacedEntity } from "@/types/config";
+import { debounce } from "@/util/events";
 
 /** Kept in sync with the card; re-declared to avoid a card -> ui import cycle. */
-const ENTITY_DRAG_MIME = 'application/x-ha-entity';
+const ENTITY_DRAG_MIME = "application/x-ha-entity";
 
 const HEADER_HEIGHT = 26;
 const ROW_HEIGHT = 48;
@@ -33,13 +33,20 @@ const LONG_PRESS_MS = 420;
 const LONG_PRESS_SLOP_PX = 10;
 
 /** Lights first: putting a lamp in a room is what this card is for. */
-const DOMAIN_FILTERS = ['light', 'switch', 'sensor', 'binary_sensor', 'cover', 'media_player'];
+const DOMAIN_FILTERS = [
+  "light",
+  "switch",
+  "sensor",
+  "binary_sensor",
+  "cover",
+  "media_player",
+];
 
 type Row =
-  | { kind: 'header'; key: string; label: string; height: number }
-  | { kind: 'entity'; key: string; option: EntityOption; height: number };
+  | { kind: "header"; key: string; label: string; height: number }
+  | { kind: "entity"; key: string; option: EntityOption; height: number };
 
-@defineFp('fp3d-entity-palette')
+@defineFp("fp3d-entity-palette")
 export class Fp3dEntityPalette extends FpBaseElement {
   static override styles = [
     FpBaseElement.styles,
@@ -62,6 +69,22 @@ export class Fp3dEntityPalette extends FpBaseElement {
         height: 100%;
         max-height: 100%;
         min-height: 0;
+      }
+
+      /*
+       * Title, search and filters stay put; only the list moves. Switching the
+       * filter from lights to switches changes the length of the list, and a
+       * header that scrolls away with it takes the filter you were using out of
+       * sight — you are then looking for the control you just pressed. Sticky
+       * rather than a fixed-height header, so this holds whichever box ends up
+       * being the one that scrolls.
+       */
+      .head {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        flex: none;
+        background: var(--fp3d-surface-strong);
       }
 
       .search {
@@ -243,18 +266,25 @@ export class Fp3dEntityPalette extends FpBaseElement {
   ];
 
   @property({ attribute: false }) placed: PlacedEntity[] = [];
+  /** False on a live dashboard, where Lovelace ignores a card's config change. */
+  @property({ type: Boolean }) canPersist = false;
 
-  @state() private query = '';
-  @state() private domain: string | null = 'light';
+  @state() private query = "";
+  @state() private domain: string | null = "light";
   @state() private scrollOffset = 0;
   @state() private viewportHeight = 320;
   @state() private pressingId: string | null = null;
 
-  @query('.list') private listEl?: HTMLDivElement;
+  @query(".list") private listEl?: HTMLDivElement;
 
   private listObserver: ResizeObserver | null = null;
   private pressTimer: ReturnType<typeof setTimeout> | null = null;
-  private pressOrigin: { x: number; y: number; id: string; pointerId: number } | null = null;
+  private pressOrigin: {
+    x: number;
+    y: number;
+    id: string;
+    pointerId: number;
+  } | null = null;
   private dragging = false;
   private cachedRows: Row[] | null = null;
 
@@ -284,15 +314,20 @@ export class Fp3dEntityPalette extends FpBaseElement {
 
   protected override firstUpdated(): void {
     const list = this.listEl;
-    if (!list || typeof ResizeObserver === 'undefined') return;
+    if (!list || typeof ResizeObserver === "undefined") return;
     this.listObserver = new ResizeObserver((entries) => {
-      this.viewportHeight = entries[0]?.contentRect.height ?? this.viewportHeight;
+      this.viewportHeight =
+        entries[0]?.contentRect.height ?? this.viewportHeight;
     });
     this.listObserver.observe(list);
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has('query') || changed.has('domain') || changed.has('placed')) {
+    if (
+      changed.has("query") ||
+      changed.has("domain") ||
+      changed.has("placed")
+    ) {
       this.cachedRows = null;
     }
   }
@@ -317,18 +352,23 @@ export class Fp3dEntityPalette extends FpBaseElement {
     let currentArea: string | null = null;
     let first = true;
     for (const option of options) {
-      const area = option.area ?? this.t('ui.placement.no_area', 'Unassigned');
+      const area = option.area ?? this.t("ui.placement.no_area", "Unassigned");
       if (first || area !== currentArea) {
         currentArea = area;
         first = false;
         rows.push({
-          kind: 'header',
+          kind: "header",
           key: `head:${area}`,
           label: area,
           height: HEADER_HEIGHT,
         });
       }
-      rows.push({ kind: 'entity', key: option.entity_id, option, height: ROW_HEIGHT });
+      rows.push({
+        kind: "entity",
+        key: option.entity_id,
+        option,
+        height: ROW_HEIGHT,
+      });
     }
 
     this.cachedRows = rows;
@@ -336,7 +376,10 @@ export class Fp3dEntityPalette extends FpBaseElement {
   }
 
   /** Prefix-sum offsets: rows are two different heights, so no flat multiply. */
-  private windowed(rows: Row[]): { items: Array<{ row: Row; top: number }>; total: number } {
+  private windowed(rows: Row[]): {
+    items: Array<{ row: Row; top: number }>;
+    total: number;
+  } {
     const items: Array<{ row: Row; top: number }> = [];
     const start = this.scrollOffset - OVERSCAN * ROW_HEIGHT;
     const end = this.scrollOffset + this.viewportHeight + OVERSCAN * ROW_HEIGHT;
@@ -355,14 +398,14 @@ export class Fp3dEntityPalette extends FpBaseElement {
     if (!transfer) return;
     transfer.setData(ENTITY_DRAG_MIME, option.entity_id);
     // Plain text is the fallback for anything that cannot read a custom type.
-    transfer.setData('text/plain', option.entity_id);
-    transfer.effectAllowed = 'copy';
+    transfer.setData("text/plain", option.entity_id);
+    transfer.effectAllowed = "copy";
     transfer.setDragImage(this.buildDragImage(option), 20, 20);
-    this.emit('fp3d-placement-begin', { entityId: option.entity_id });
+    this.emit("fp3d-placement-begin", { entityId: option.entity_id });
   }
 
   private onDragEnd(): void {
-    this.emit('fp3d-placement-cancel', {});
+    this.emit("fp3d-placement-cancel", {});
   }
 
   /**
@@ -370,20 +413,20 @@ export class Fp3dEntityPalette extends FpBaseElement {
    * broken over a 3D scene. A compact chip reads as "carrying something".
    */
   private buildDragImage(option: EntityOption): HTMLElement {
-    const chip = document.createElement('div');
+    const chip = document.createElement("div");
     chip.textContent = option.name;
     chip.style.cssText = [
-      'position:fixed',
-      'top:-1000px',
-      'left:-1000px',
-      'padding:8px 14px',
-      'border-radius:999px',
-      'font:500 13px/1 system-ui,sans-serif',
-      'color:#fff',
-      'background:#03a9f4',
-      'box-shadow:0 6px 18px rgba(0,0,0,.35)',
-      'white-space:nowrap',
-    ].join(';');
+      "position:fixed",
+      "top:-1000px",
+      "left:-1000px",
+      "padding:8px 14px",
+      "border-radius:999px",
+      "font:500 13px/1 system-ui,sans-serif",
+      "color:#fff",
+      "background:#03a9f4",
+      "box-shadow:0 6px 18px rgba(0,0,0,.35)",
+      "white-space:nowrap",
+    ].join(";");
     document.body.appendChild(chip);
     setTimeout(() => chip.remove(), 0);
     return chip;
@@ -392,7 +435,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
   /* --------------------------------------------------- touch drag & drop */
 
   private onPointerDown(event: PointerEvent, option: EntityOption): void {
-    if (event.pointerType === 'mouse') return;
+    if (event.pointerType === "mouse") return;
     this.pressOrigin = {
       x: event.clientX,
       y: event.clientY,
@@ -415,30 +458,39 @@ export class Fp3dEntityPalette extends FpBaseElement {
       /* capture is best-effort */
     }
     // A short buzz is the only feedback a finger gets that the drag started.
-    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.vibrate === "function"
+    ) {
       navigator.vibrate(12);
     }
-    this.emit('fp3d-placement-begin', { entityId: option.entity_id });
-    this.emit('fp3d-placement-move', { x: event.clientX, y: event.clientY });
+    this.emit("fp3d-placement-begin", { entityId: option.entity_id });
+    this.emit("fp3d-placement-move", { x: event.clientX, y: event.clientY });
   }
 
   private onPointerMove(event: PointerEvent): void {
     if (this.dragging) {
       event.preventDefault();
-      this.emit('fp3d-placement-move', { x: event.clientX, y: event.clientY });
+      this.emit("fp3d-placement-move", { x: event.clientX, y: event.clientY });
       return;
     }
     const origin = this.pressOrigin;
     if (!origin || origin.pointerId !== event.pointerId) return;
     // Moving before the timer fires means the user is scrolling the list.
-    if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > LONG_PRESS_SLOP_PX) {
+    if (
+      Math.hypot(event.clientX - origin.x, event.clientY - origin.y) >
+      LONG_PRESS_SLOP_PX
+    ) {
       this.clearPress();
     }
   }
 
   private onPointerUp(event: PointerEvent): void {
     if (this.dragging) {
-      this.emit('fp3d-placement-commit', { x: event.clientX, y: event.clientY });
+      this.emit("fp3d-placement-commit", {
+        x: event.clientX,
+        y: event.clientY,
+      });
       this.endTouchDrag(event);
       return;
     }
@@ -447,7 +499,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
 
   private onPointerCancel(event: PointerEvent): void {
     if (this.dragging) {
-      this.emit('fp3d-placement-cancel', {});
+      this.emit("fp3d-placement-cancel", {});
       this.endTouchDrag(event);
     }
     this.clearPress();
@@ -462,7 +514,9 @@ export class Fp3dEntityPalette extends FpBaseElement {
   private endTouchDrag(event: PointerEvent | null): void {
     if (event) {
       try {
-        (event.target as HTMLElement | null)?.releasePointerCapture(event.pointerId);
+        (event.target as HTMLElement | null)?.releasePointerCapture(
+          event.pointerId,
+        );
       } catch {
         /* already released */
       }
@@ -475,7 +529,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
   /* -------------------------------------------------------------- render */
 
   private renderRow(row: Row, top: number): TemplateResult {
-    if (row.kind === 'header') {
+    if (row.kind === "header") {
       return html`<div
         class="row head"
         style="top:${top}px;height:${row.height}px"
@@ -488,7 +542,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
     const option = row.option;
     const isPlaced = this.placedIds().has(option.entity_id);
     const state = this.hass?.states[option.entity_id]?.state;
-    const on = state === 'on' || state === 'open' || state === 'playing';
+    const on = state === "on" || state === "open" || state === "playing";
 
     return html`
       <div class="row" style="top:${top}px;height:${row.height}px">
@@ -498,7 +552,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
           tabindex="0"
           draggable="true"
           aria-label=${`${option.name} (${option.entity_id})`}
-          aria-grabbed=${this.pressingId === option.entity_id ? 'true' : 'false'}
+          aria-grabbed=${this.pressingId === option.entity_id ? "true" : "false"}
           @dragstart=${(event: DragEvent) => this.onDragStart(event, option)}
           @dragend=${() => this.onDragEnd()}
           @pointerdown=${(event: PointerEvent) => this.onPointerDown(event, option)}
@@ -506,56 +560,63 @@ export class Fp3dEntityPalette extends FpBaseElement {
           @pointerup=${(event: PointerEvent) => this.onPointerUp(event)}
           @pointercancel=${(event: PointerEvent) => this.onPointerCancel(event)}
           @keydown=${(event: KeyboardEvent) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
+            if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
-            if (isPlaced) this.emit('fp3d-entity-focus', { entityId: option.entity_id });
-            else this.emit('fp3d-quick-add', { entityId: option.entity_id });
+            if (isPlaced)
+              this.emit("fp3d-entity-focus", { entityId: option.entity_id });
+            else this.emit("fp3d-quick-add", { entityId: option.entity_id });
           }}
         >
-          <span class="glyph">${icon(iconForDomain(domainOf(option.entity_id)))}</span>
+          <span class="glyph"
+            >${icon(iconForDomain(domainOf(option.entity_id)))}</span
+          >
           <span class="texts">
             <span class="name">${option.name}</span>
             <span class="id">${option.entity_id}</span>
           </span>
-          ${isPlaced
-            ? html`
-                <span
-                  class="placed-dot"
-                  title=${this.t('ui.placement.already_placed', 'Already placed')}
-                ></span>
-                <span class="row-actions">
-                  <button
-                    class="icon-btn"
-                    aria-label=${this.t('ui.placement.highlight', 'Show in the model')}
-                    @click=${() => this.emit('fp3d-entity-focus', { entityId: option.entity_id })}
-                  >
-                    ${icon('target')}
-                  </button>
-                  <button
-                    class="icon-btn"
-                    aria-label=${this.t('ui.placement.remove', 'Remove from the model')}
-                    @click=${() => this.emit('fp3d-entity-remove', { entityId: option.entity_id })}
-                  >
-                    ${icon('trash')}
-                  </button>
-                </span>
-              `
-            : html`
-                <span class="row-actions">
-                  <button
-                    class="icon-btn"
-                    aria-label=${this.t('ui.placement.quick_add', 'Place in the centre of the view')}
-                    title=${this.t('ui.placement.quick_add', 'Place in the centre of the view')}
-                    @pointerdown=${(event: PointerEvent) => event.stopPropagation()}
-                    @click=${(event: Event) => {
+          ${
+            isPlaced
+              ? html`
+                  <span
+                    class="placed-dot"
+                    title=${this.t("ui.placement.already_placed", "Already placed")}
+                  ></span>
+                  <span class="row-actions">
+                    <button
+                      class="icon-btn"
+                      aria-label=${this.t("ui.placement.highlight", "Show in the model")}
+                      @click=${() => this.emit("fp3d-entity-focus", { entityId: option.entity_id })}
+                    >
+                      ${icon("target")}
+                    </button>
+                    <button
+                      class="icon-btn"
+                      aria-label=${this.t("ui.placement.remove", "Remove from the model")}
+                      @click=${() => this.emit("fp3d-entity-remove", { entityId: option.entity_id })}
+                    >
+                      ${icon("trash")}
+                    </button>
+                  </span>
+                `
+              : html`
+                  <span class="row-actions">
+                    <button
+                      class="icon-btn"
+                      aria-label=${this.t("ui.placement.quick_add", "Place in the centre of the view")}
+                      title=${this.t("ui.placement.quick_add", "Place in the centre of the view")}
+                      @pointerdown=${(event: PointerEvent) => event.stopPropagation()}
+                      @click=${(event: Event) => {
                       event.stopPropagation();
-                      this.emit('fp3d-quick-add', { entityId: option.entity_id });
+                      this.emit("fp3d-quick-add", {
+                        entityId: option.entity_id,
+                      });
                     }}
-                  >
-                    ${icon('plus')}
-                  </button>
-                </span>
-              `}
+                    >
+                      ${icon("plus")}
+                    </button>
+                  </span>
+                `
+          }
         </div>
       </div>
     `;
@@ -569,42 +630,47 @@ export class Fp3dEntityPalette extends FpBaseElement {
       <div
         class="panel surface solid"
         role="region"
-        aria-label=${this.t('ui.placement.title', 'Place entities')}
+        aria-label=${this.t("ui.placement.title", "Place entities")}
       >
-        <div class="sheet-title">
-          ${icon('list')}
-          <span>${this.t('ui.placement.title', 'Place entities')}</span>
-          <span class="spacer"></span>
-          <button
-            class="icon-btn"
-            aria-label=${this.t('ui.action.close', 'Close')}
-            @click=${() => this.emit('fp3d-palette-close', {})}
-          >
-            ${icon('close')}
-          </button>
-        </div>
+        <div class="head">
+          <div class="sheet-title">
+            ${icon("list")}
+            <span>${this.t("ui.placement.title", "Place entities")}</span>
+            <span class="spacer"></span>
+            <button
+              class="icon-btn"
+              aria-label=${this.t("ui.action.close", "Close")}
+              @click=${() => this.emit("fp3d-palette-close", {})}
+            >
+              ${icon("close")}
+            </button>
+          </div>
 
-        <div class="search">
-          ${icon('search')}
-          <input
-            type="text"
-            .value=${this.query}
-            placeholder=${this.t('ui.placement.search', 'Search entities')}
-            aria-label=${this.t('ui.placement.search', 'Search entities')}
-            @input=${(event: Event) => {
+          <div class="search">
+            ${icon("search")}
+            <input
+              type="text"
+              .value=${this.query}
+              placeholder=${this.t("ui.placement.search", "Search entities")}
+              aria-label=${this.t("ui.placement.search", "Search entities")}
+              @input=${(event: Event) => {
               this.query = (event.target as HTMLInputElement).value;
               this.scrollOffset = 0;
               if (this.listEl) this.listEl.scrollTop = 0;
             }}
-          />
-        </div>
+            />
+          </div>
 
-        <div class="filters scroll-x" role="group" aria-label=${this.t('ui.placement.filter', 'Filter')}>
-          ${DOMAIN_FILTERS.map(
+          <div
+            class="filters scroll-x"
+            role="group"
+            aria-label=${this.t("ui.placement.filter", "Filter")}
+          >
+            ${DOMAIN_FILTERS.map(
             (domain) => html`
               <button
                 class="chip"
-                aria-pressed=${this.domain === domain ? 'true' : 'false'}
+                aria-pressed=${this.domain === domain ? "true" : "false"}
                 @click=${() => {
                   this.domain = this.domain === domain ? null : domain;
                 }}
@@ -613,6 +679,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
               </button>
             `,
           )}
+          </div>
         </div>
 
         <div
@@ -621,24 +688,35 @@ export class Fp3dEntityPalette extends FpBaseElement {
             this.scrollOffset = (event.target as HTMLElement).scrollTop;
           }}
         >
-          ${rows.length === 0
-            ? html`<p class="empty hint">
-                ${this.t('ui.placement.no_results', 'No entities match "{query}"', {
-                  query: this.query,
-                })}
-              </p>`
-            : html`<div class="spacer" style="height:${total}px">
-                ${repeat(
+          ${
+            rows.length === 0
+              ? html`<p class="empty hint">
+                  ${this.t(
+                  "ui.placement.no_results",
+                  'No entities match "{query}"',
+                  {
+                    query: this.query,
+                  },
+                )}
+                </p>`
+              : html`<div class="spacer" style="height:${total}px">
+                  ${repeat(
                   items,
                   (entry) => entry.row.key,
                   (entry) => this.renderRow(entry.row, entry.top),
                 )}
-              </div>`}
+                </div>`
+          }
         </div>
 
         <div class="foot">
           <p class="hint">
-            ${this.t('ui.placement.hint_drag', 'Drag an entity onto the model to place it.')}
+            ${this.canPersist
+              ? this.t("ui.placement.hint_drag", "Drag an entity onto the model to place it.")
+              : this.t(
+                  "ui.placement.hint_volatile",
+                  "Placements made here are not saved. Open the card with ⋮ → Edit and place them in its preview, then Save.",
+                )}
           </p>
         </div>
       </div>
@@ -648,6 +726,6 @@ export class Fp3dEntityPalette extends FpBaseElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'fp3d-entity-palette': Fp3dEntityPalette;
+    "fp3d-entity-palette": Fp3dEntityPalette;
   }
 }
