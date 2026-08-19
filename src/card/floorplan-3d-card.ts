@@ -58,6 +58,8 @@ import { fireEvent } from '@/util/events';
 import { vRound } from '@/util/math';
 
 import type { CardError } from '@/ui/error-panel';
+import { recallView, rememberView } from '@/card/view-memory';
+import { configKey } from '@/util/config-key';
 import type { Fp3dHud } from '@/ui/hud';
 import type { UiSize } from '@/ui/base-element';
 import type { ToolbarAction } from '@/ui/toolbar';
@@ -248,7 +250,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       throw new Error(`${CARD_TYPE}: ${message}`);
     }
 
-    const serialised = JSON.stringify(next);
+    const serialised = configKey(next);
     if (serialised === this.lastEmitted && this.config) return;
     this.lastEmitted = serialised;
 
@@ -503,7 +505,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       if (box.height > 0) bottom = Math.min(bottom, box.bottom - pad);
     }
 
-    const avail = Math.round(bottom - top);
+    const avail = Math.round(bottom - top - this.spaceBelow(container));
     // Not laid out yet, or scrolled out of view: no number here is worth having,
     // and the next pass will have a better one.
     if (!Number.isFinite(avail) || avail < 240) return;
@@ -513,6 +515,43 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     this.pinnedHeight = avail;
     this.style.height = `${avail}px`;
+  }
+
+  /**
+   * What sits between our bottom edge and the view box's, and is not ours.
+   *
+   * Edit mode is the case that matters: Home Assistant wraps every card in its
+   * own toolbar — the row with the edit and delete buttons — and that row is a
+   * sibling *below* the card. Taking the whole view for ourselves pushed it off
+   * the bottom of the screen, so editing a card meant scrolling to find the way
+   * in. Everything after us on the way up is counted, plus each wrapper's own
+   * bottom padding and border, so this holds for whatever the dashboard adds
+   * next without knowing what it is.
+   */
+  private spaceBelow(container: HTMLElement | null): number {
+    let extra = 0;
+    let node: Node | null = this;
+
+    for (let hops = 0; node && hops < 14; hops += 1) {
+      const el: Node = node instanceof ShadowRoot ? node.host : node;
+      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
+      if (el instanceof HTMLElement) {
+        if (el === container) break;
+        for (let sibling = el.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
+          const box = sibling.getBoundingClientRect();
+          if (box.height > 0) extra += box.height;
+        }
+        const parent = el.parentElement;
+        if (parent && parent !== container) {
+          const style = getComputedStyle(parent);
+          extra +=
+            (Number.parseFloat(style.paddingBottom) || 0) +
+            (Number.parseFloat(style.borderBottomWidth) || 0);
+        }
+      }
+      node = next === node ? null : next;
+    }
+    return extra;
   }
 
   private unpinHeight(): void {
@@ -546,8 +585,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private observeSize(): void {
     if (typeof ResizeObserver === 'undefined') return;
     this.resizeObserver = new ResizeObserver((entries) => {
-      const box = entries[0]?.contentRect;
-      const width = box?.width ?? 0;
+      // Several elements are watched, so the card's own entry has to be picked
+      // out — an ancestor's width would put the chrome in the wrong layout.
+      const own = entries.find((entry) => entry.target === this)?.contentRect;
+      const width = own?.width ?? this.clientWidth;
       if (width <= 0) return;
       this.layout = width < NARROW_PX ? 'narrow' : width < MEDIUM_PX ? 'medium' : 'wide';
       // The card may have moved as well as changed size — a sidebar folding
@@ -561,13 +602,23 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.viewer?.resize();
     });
     this.resizeObserver.observe(this);
-    // The card's top edge moves, and the box it fills changes size, when the
-    // *view* changes even though the card does not — a sidebar folding away, a
-    // header appearing. `parentElement` is null across a shadow boundary, which
-    // is exactly where Home Assistant puts us, so watch the view box instead.
+    // Everything between us and the view box, and the box itself. The card's own
+    // size is not enough to go on: entering edit mode adds a toolbar *below* the
+    // card, which changes a wrapper's height and nothing else — and that is
+    // exactly the moment the height has to be recomputed. `parentElement` is
+    // null across a shadow boundary, which is where Home Assistant puts us, so
+    // the walk crosses those.
     const { container } = this.findViewBox();
-    if (container) this.resizeObserver.observe(container);
-    else if (this.parentElement) this.resizeObserver.observe(this.parentElement);
+    let node: Node | null = this.parentNode;
+    for (let hops = 0; node && hops < 14; hops += 1) {
+      const el: Node = node instanceof ShadowRoot ? node.host : node;
+      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
+      if (el instanceof HTMLElement) {
+        this.resizeObserver.observe(el);
+        if (el === container) break;
+      }
+      node = next === node ? null : next;
+    }
   }
 
   /* ---------------------------------------------------------- author mode */
@@ -618,6 +669,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.setThemeDark(this.dark);
       await viewer.mount(host, this.config);
       if (!this.isConnected || this.viewer !== viewer) return;
+      this.restoreView(viewer);
       // Mounting is asynchronous, so the card may have been moved into its
       // final place while the model was loading.
       this.scheduleSizing();
@@ -643,6 +695,67 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
             };
     } finally {
       this.mounting = false;
+    }
+  }
+
+  /**
+   * Identifies this card's view across a remount: the model it shows and the
+   * name it goes by. Two cards showing different houses keep their own camera;
+   * two showing the same one may share it, which is the harmless case.
+   */
+  private viewMemoryKey(): string | null {
+    const config = this.config;
+    if (!config) return null;
+    return `${config.model?.url ?? ''}|${config.title ?? ''}`;
+  }
+
+  /**
+   * Keep the view for the card that replaces us.
+   *
+   * Editing rebuilds the card — Home Assistant re-creates a view's cards when
+   * the dashboard config changes, and in edit mode this card changes it on every
+   * placement. Framing the house from scratch each time made the one mode where
+   * you work closely with the model the one where it kept jumping away.
+   */
+  private rememberView(): void {
+    const key = this.viewMemoryKey();
+    const viewer = this.viewer;
+    if (!key || !viewer?.isMounted) return;
+    try {
+      rememberView(key, {
+        camera: viewer.cameraCtl.capture('resume'),
+        section: JSON.parse(JSON.stringify(this.section)) as SectionState,
+        visibleLevels: this.visibleLevels,
+        explode: viewer.explode,
+        activePreset: this.activePreset,
+      });
+    } catch {
+      // Camera subsystem already gone; nothing worth keeping.
+    }
+  }
+
+  /** Storeys first, then the camera: pulling them apart refits the view. */
+  private restoreView(viewer: Viewer): void {
+    const key = this.viewMemoryKey();
+    const memory = key ? recallView(key) : null;
+    if (!memory) return;
+
+    if (memory.section) {
+      this.section = memory.section;
+      viewer.setSection(memory.section, false);
+    }
+    this.visibleLevels = memory.visibleLevels;
+    viewer.setVisibleLevels(memory.visibleLevels);
+    if (memory.explode > 0) {
+      viewer.setExplode(memory.explode, false);
+      this.exploded = true;
+    }
+    try {
+      void viewer.cameraCtl.applyPreset(memory.camera, false);
+      this.activePreset = memory.activePreset;
+    } catch {
+      // Without a camera there is nothing to restore it to; the default framing
+      // from mount stands.
     }
   }
 
@@ -716,6 +829,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   private teardownViewer(): void {
+    this.rememberView();
     for (const off of this.unsubscribers.splice(0)) off();
     this.unbindDropTarget();
     this.viewer?.dispose();
@@ -989,7 +1103,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private commitConfig(next: Floorplan3dCardConfig, options: { reload: boolean }): void {
     const normalised = normalizeConfig(next);
     this.config = normalised;
-    const serialised = JSON.stringify(normalised);
+    const serialised = configKey(normalised);
     // Nothing changed — a section state re-applied on mount, or the echo of a
     // preset that carries the state it just restored. Emitting anyway marks
     // the config dirty in the editor and rewrites the user's YAML for nothing.
@@ -1573,11 +1687,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     if (this.tourMoving) return;
     const cfg = this.tourCfg;
     if (!cfg.pauseOnInteraction) return;
+    const wasPlaying = this.tourPlaying;
     if (this.tourPlaying) {
       this.clearTourTimers();
       this.tourPlaying = false;
     }
-    if (cfg.resumeAfter > 0) {
+    // Resume what was interrupted — nothing else. Scheduled unconditionally,
+    // this started a tour on a card whose tour had never run: touch the camera
+    // once, and a minute later the house began flying through its views on its
+    // own, with `autoplay` off.
+    if (wasPlaying && cfg.resumeAfter > 0) {
       if (this.tourResumeTimer) clearTimeout(this.tourResumeTimer);
       this.tourResumeTimer = setTimeout(() => {
         this.tourResumeTimer = null;
