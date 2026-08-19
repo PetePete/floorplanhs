@@ -12,6 +12,7 @@ import {
   toLightSample,
   xyToRgb255,
 } from '@/ha/state-mapper';
+import { FALLBACK_THEME_DARK } from '@/ha/theme';
 
 /* --------------------------------------------------------------- fixtures */
 
@@ -499,5 +500,40 @@ describe('diffStates', () => {
     expect(off.on).toBe(false);
     expect(off.brightness).toBe(0);
     expectFinite(off.color);
+  });
+});
+
+/**
+ * Amber means "a lamp is lit". A switch that is on is a switch that is on —
+ * borrowing the lamp colour made a plan of a house look like every socket in
+ * it was glowing.
+ */
+describe('what "on" looks like per role', () => {
+  const hass = createMockHass();
+
+  it('gives an active switch a colour of its own', () => {
+    const on = entity('switch.kettle', 'on');
+    const visual = toEntityVisual(on, placed('switch.kettle'), hass, FALLBACK_THEME_DARK);
+    expect(visual.active).toBe(true);
+    expect(visual.color).toBe(FALLBACK_THEME_DARK.success);
+    expect(visual.color).not.toBe(FALLBACK_THEME_DARK.stateActive);
+  });
+
+  it('keeps a lit lamp warm, whatever the switch does', () => {
+    const on = entity('light.hall', 'on');
+    const visual = toEntityVisual(on, placed('light.hall'), hass, FALLBACK_THEME_DARK);
+    // An on/off light reports no colour of its own, so it gets the warm white a
+    // bulb actually is — warm meaning more red in it than blue.
+    const red = parseInt(visual.color.slice(1, 3), 16);
+    const blue = parseInt(visual.color.slice(5, 7), 16);
+    expect(red).toBeGreaterThan(blue);
+    expect(visual.color).not.toBe(FALLBACK_THEME_DARK.success);
+  });
+
+  it('leaves an off switch in the inactive grey', () => {
+    const off = entity('switch.kettle', 'off');
+    const visual = toEntityVisual(off, placed('switch.kettle'), hass, FALLBACK_THEME_DARK);
+    expect(visual.active).toBe(false);
+    expect(visual.color).not.toBe(FALLBACK_THEME_DARK.success);
   });
 });

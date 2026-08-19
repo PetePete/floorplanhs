@@ -133,6 +133,8 @@ All three update live in the editor's Model tab.
 Work down this list:
 
 1. **Is it in the `light` domain?** Only `light.*` entities become real lights.
+   A marker that turns **green** when it is on is a switch, not a light — that
+   is the card telling you the role it settled on.
    A `switch.*` controlling a lamp gets a marker; set `role: light` and give it a
    `light:` block if you want illumination from it.
 2. **Is the entity on?** An off light emits nothing, by design.

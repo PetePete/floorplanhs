@@ -663,9 +663,13 @@ function accentFor(
   theme: ThemeColors,
 ): string {
   switch (role) {
+    // The amber HA uses for "on" belongs to light alone. A switch that is on is
+    // a switch that is on — reading it as a lamp made a plan of a house look
+    // like every socket was glowing.
     case 'light':
-    case 'switch':
       return theme.stateActive;
+    case 'switch':
+      return theme.success;
     case 'binary_sensor': {
       const deviceClass = stringAttr(attrs, 'device_class');
       return deviceClass && ALARM_CLASSES.has(deviceClass) ? theme.error : theme.accent;

@@ -28,6 +28,11 @@ export const themeTokens = css`
        painted by the browser, not by us. This is the only thing that tells it
        which way round we are. */
     color-scheme: light;
+    /* A select's popup is painted by the browser in its own window, so it
+       cannot use a translucent surface — it has nothing to be translucent
+       over. Opaque, and separate from the panel tokens for that reason. */
+    --fp3d-popup-bg: #ffffff;
+    --fp3d-popup-text: #212121;
     --fp3d-accent: var(--primary-color, #03a9f4);
     --fp3d-accent-text: var(--text-primary-color, #fff);
     --fp3d-text: var(--primary-text-color, #212121);
@@ -83,6 +88,8 @@ export const themeTokens = css`
 
   :host([dark]) {
     color-scheme: dark;
+    --fp3d-popup-bg: #202124;
+    --fp3d-popup-text: #e8eaed;
     --fp3d-surface: rgba(32, 33, 36, 0.7);
     --fp3d-surface-strong: rgba(32, 33, 36, 0.92);
     --fp3d-hairline: rgba(255, 255, 255, 0.12);
@@ -358,6 +365,22 @@ export const controlStyles = css`
     border: 1px solid transparent;
     border-radius: var(--fp3d-radius-sm);
     transition: border-color var(--fp3d-fast) var(--fp3d-ease);
+  }
+
+  /*
+   * Chrome on Windows paints a select's dropdown with the page's colour scheme
+   * and not the element's, so color-scheme: dark on the panel is not enough:
+   * the list came up white while its text kept the dark theme's pale grey, and
+   * the options were unreadable. Stating both colours is what actually lands.
+   */
+  option {
+    background-color: var(--fp3d-popup-bg);
+    color: var(--fp3d-popup-text);
+  }
+
+  option:checked {
+    background-color: var(--fp3d-accent);
+    color: var(--fp3d-accent-text);
   }
 
   input[type='text']:focus,
