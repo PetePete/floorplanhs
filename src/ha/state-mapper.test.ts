@@ -548,8 +548,19 @@ describe('icon for an overridden role', () => {
   const attrs = { icon: 'mdi:coffee-maker' };
 
   it('follows the role that was assigned', () => {
-    expect(iconFor('switch.kettle', attrs, placed('switch.kettle', { role: 'light' }))).toBe(
-      'mdi:lightbulb',
+    const lamp = placed('switch.kettle', { role: 'light' });
+    expect(iconFor('switch.kettle', attrs, lamp, undefined, 'on')).toBe('mdi:lightbulb');
+  });
+
+  /**
+   * Picking the role by hand must not cost the difference between on and off:
+   * a bulb that stays lit while the lamp is out says the wrong thing.
+   */
+  it('still shows the state within that role', () => {
+    const lamp = placed('switch.kettle', { role: 'light' });
+    expect(iconFor('switch.kettle', attrs, lamp, undefined, 'off')).toBe('mdi:lightbulb-off');
+    expect(iconFor('cover.hatch', {}, placed('cover.hatch', { role: 'cover' }), undefined, 'open')).toBe(
+      'mdi:blinds-open',
     );
   });
 

@@ -44,6 +44,7 @@
 
 import * as THREE from 'three';
 import type { LevelDefinition } from '@/types/config';
+import { pointInTriangles } from '@/util/math';
 
 /**
  * Rooms per model. Sized to cover a large house; the uniform array costs
@@ -537,7 +538,7 @@ export class RoomFill {
       if (x < s.minX - EDGE_TOLERANCE_M || x > s.maxX + EDGE_TOLERANCE_M) continue;
       if (z < s.minZ - EDGE_TOLERANCE_M || z > s.maxZ + EDGE_TOLERANCE_M) continue;
       if (y < s.minY || y > s.maxY) continue;
-      if (!pointInTriangles(s.triangles, x, z)) continue;
+      if (!pointInTriangles(s.triangles, x, z, EDGE_TOLERANCE_M)) continue;
 
       // Floors at or below the point win over floors above it, and among those
       // the highest one — the storey you would be standing on.
@@ -675,46 +676,3 @@ function triangleArea2D(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): n
  */
 const EDGE_TOLERANCE_M = 0.03;
 
-/**
- * Point-in-polygon against a flat [ax,az,bx,bz,cx,cz, …] triangle list, with a
- * real distance tolerance.
- *
- * The cross products below are twice the triangle area, so dividing by the edge
- * length turns each into a signed distance from that edge — which is what lets
- * the tolerance be expressed in metres rather than in area units that would
- * mean something different for every triangle.
- */
-function pointInTriangles(tri: Float32Array, x: number, z: number): boolean {
-  for (let i = 0; i < tri.length; i += 6) {
-    const ax = tri[i];
-    const az = tri[i + 1];
-    const bx = tri[i + 2];
-    const bz = tri[i + 3];
-    const cx = tri[i + 4];
-    const cz = tri[i + 5];
-
-    const d1 = edgeDistance(x, z, bx, bz, ax, az);
-    const d2 = edgeDistance(x, z, cx, cz, bx, bz);
-    const d3 = edgeDistance(x, z, ax, az, cx, cz);
-    const hasNeg = d1 < -EDGE_TOLERANCE_M || d2 < -EDGE_TOLERANCE_M || d3 < -EDGE_TOLERANCE_M;
-    const hasPos = d1 > EDGE_TOLERANCE_M || d2 > EDGE_TOLERANCE_M || d3 > EDGE_TOLERANCE_M;
-    if (!(hasNeg && hasPos)) return true;
-  }
-  return false;
-}
-
-/** Signed distance from (x, z) to the line through (px, pz) and (qx, qz). */
-function edgeDistance(
-  x: number,
-  z: number,
-  px: number,
-  pz: number,
-  qx: number,
-  qz: number,
-): number {
-  const ex = qx - px;
-  const ez = qz - pz;
-  const length = Math.hypot(ex, ez);
-  if (length < 1e-9) return 0;
-  return ((x - px) * ez - ex * (z - pz)) / length;
-}

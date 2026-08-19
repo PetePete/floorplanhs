@@ -43,6 +43,7 @@ import { Emitter } from '@/util/events';
 import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
+import { roomAnchors } from '@/engine/model/room-anchors';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -1305,28 +1306,6 @@ function levelTops(
   return tops;
 }
 
-function roomAnchors(root: THREE.Object3D): Map<string, Vec3> {
-  const boxes = new Map<string, THREE.Box3>();
-  root.updateMatrixWorld(true);
-  root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || mesh.userData.part !== 'floor') return;
-    const room = mesh.userData.room;
-    if (typeof room !== 'string' || !room) return;
-    const box = boxes.get(room) ?? new THREE.Box3().makeEmpty();
-    box.expandByObject(mesh);
-    boxes.set(room, box);
-  });
-
-  const anchors = new Map<string, Vec3>();
-  const centre = new THREE.Vector3();
-  for (const [room, box] of boxes) {
-    if (box.isEmpty()) continue;
-    box.getCenter(centre);
-    anchors.set(room, [centre.x, box.max.y + 0.02, centre.z]);
-  }
-  return anchors;
-}
 
 function cloneConfig(config: Floorplan3dCardConfig): Floorplan3dCardConfig {
   return JSON.parse(JSON.stringify(config)) as Floorplan3dCardConfig;

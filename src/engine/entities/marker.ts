@@ -26,6 +26,7 @@ import type { EntityVisualState, RenderContext } from '@/engine/contracts';
 import type { EntityRole, MarkerConfig, PlacedEntity, Vec3 } from '@/types/config';
 import { clamp, damp, easeOutBack } from '@/util/math';
 import { resolveIcon, roleForEntityId } from '@/engine/entities/icons';
+import { anchorKey } from '@/engine/model/room-anchors';
 import {
   CELL_PADDING,
   type AtlasCell,
@@ -308,7 +309,14 @@ export class EntityMarker {
    */
   setRoomAnchors(anchors: ReadonlyMap<string, Vec3> | null): void {
     const room = this.placedEntity.room;
-    const point = room && anchors ? anchors.get(room) : undefined;
+    // Level first: room ids are unique per storey, not across the building, so
+    // a house with a hallway on every floor has three rooms called `flur`, and
+    // the bare name then answers a different question than the one asked.
+    const level = this.placedEntity.level;
+    const point =
+      room && anchors
+        ? ((level ? anchors.get(anchorKey(level, room)) : undefined) ?? anchors.get(room))
+        : undefined;
     this.roomAnchor = point ? new THREE.Vector3(point[0], point[1], point[2]) : null;
     this.syncRoomLeader();
   }

@@ -519,21 +519,26 @@ const DEVICE_CLASS_ICONS: Record<string, Record<string, string>> = {
 };
 
 /**
- * What each role looks like. Roles are named after the domains they stand for,
- * so these are the domain icons — spelled out rather than derived, because a
- * role is a decision and a domain is a fact, and the two are free to drift.
+ * What each role looks like, off and on.
+ *
+ * Roles are named after the domains they stand for, so these are the domain
+ * icons — spelled out rather than derived, because a role is a decision and a
+ * domain is a fact, and the two are free to drift.
+ *
+ * Two icons, not one: a bulb that stays lit while the lamp is off says the
+ * wrong thing, and picking the role by hand must not cost you the difference.
  */
-const ROLE_ICONS: Record<EntityRole, string> = {
-  light: 'mdi:lightbulb',
-  switch: 'mdi:toggle-switch-variant',
-  sensor: 'mdi:eye',
-  binary_sensor: 'mdi:checkbox-marked-circle',
-  cover: 'mdi:window-shutter',
-  climate: 'mdi:thermostat',
-  media_player: 'mdi:speaker',
-  camera: 'mdi:video',
-  person: 'mdi:account',
-  marker: 'mdi:map-marker',
+const ROLE_ICONS: Record<EntityRole, readonly [off: string, on: string]> = {
+  light: ['mdi:lightbulb-off', 'mdi:lightbulb'],
+  switch: ['mdi:toggle-switch-off', 'mdi:toggle-switch'],
+  sensor: ['mdi:eye', 'mdi:eye'],
+  binary_sensor: ['mdi:checkbox-blank-circle-outline', 'mdi:checkbox-marked-circle'],
+  cover: ['mdi:blinds-closed', 'mdi:blinds-open'],
+  climate: ['mdi:thermostat', 'mdi:thermostat'],
+  media_player: ['mdi:speaker', 'mdi:speaker'],
+  camera: ['mdi:video', 'mdi:video'],
+  person: ['mdi:account', 'mdi:account'],
+  marker: ['mdi:map-marker', 'mdi:map-marker'],
 };
 
 export function iconFor(
@@ -541,6 +546,7 @@ export function iconFor(
   attrs: HassEntityAttributeBase,
   placed?: PlacedEntity,
   registryIcon?: string,
+  state?: string,
 ): string {
   if (placed?.marker?.icon) return placed.marker.icon;
   // A role set by hand outranks the entity's own icon. Overriding the role is
@@ -548,7 +554,10 @@ export function iconFor(
   // sensor you want read as a marker — and a marker that kept the old symbol
   // gave no sign the override had taken. An explicit `marker.icon` above still
   // wins, because that is the more specific statement of the two.
-  if (placed?.role) return ROLE_ICONS[placed.role] ?? 'mdi:map-marker';
+  if (placed?.role) {
+    const pair = ROLE_ICONS[placed.role];
+    if (pair) return isActiveState(entityId, state ?? '', attrs) ? pair[1] : pair[0];
+  }
   const own = stringAttr(attrs, 'icon');
   if (own) return own;
   if (registryIcon) return registryIcon;
@@ -740,7 +749,7 @@ export function toEntityVisual(
     (entity || hass?.entities?.[entityId] ? getEntityName(hass, entityId) : prettifyEntityId(entityId));
 
   const registryIcon = (hass?.entities?.[entityId] as { icon?: string | null } | undefined)?.icon;
-  const icon = iconFor(entityId, attrs, placed, registryIcon ?? undefined);
+  const icon = iconFor(entityId, attrs, placed, registryIcon ?? undefined, state);
 
   let secondary: string | undefined;
   if (entity) {

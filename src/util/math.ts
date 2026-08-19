@@ -105,3 +105,47 @@ export function slugify(input: string): string {
       .slice(0, 48) || 'item'
   );
 }
+
+/**
+ * Is (x, z) inside a flat `[ax, az, bx, bz, cx, cz, …]` triangle list?
+ *
+ * `tolerance` is a real distance in metres, not an epsilon: a wall's inner face
+ * is meant to land exactly on the room polygon it faces, but the two numbers
+ * come from different places — a wall thickness and a traced outline — and
+ * float arithmetic finishes the job. Pass 0 to ask the strict question.
+ */
+export function pointInTriangles(tri: Float32Array, x: number, z: number, tolerance = 0): boolean {
+  for (let i = 0; i + 5 < tri.length; i += 6) {
+    const ax = tri[i];
+    const az = tri[i + 1];
+    const bx = tri[i + 2];
+    const bz = tri[i + 3];
+    const cx = tri[i + 4];
+    const cz = tri[i + 5];
+
+    const d1 = edgeDistance(x, z, bx, bz, ax, az);
+    const d2 = edgeDistance(x, z, cx, cz, bx, bz);
+    const d3 = edgeDistance(x, z, ax, az, cx, cz);
+    const hasNeg = d1 < -tolerance || d2 < -tolerance || d3 < -tolerance;
+    const hasPos = d1 > tolerance || d2 > tolerance || d3 > tolerance;
+    if (!(hasNeg && hasPos)) return true;
+  }
+  return false;
+}
+
+/** Signed distance from (x, z) to the line through (px, pz) and (qx, qz). */
+function edgeDistance(
+  x: number,
+  z: number,
+  px: number,
+  pz: number,
+  qx: number,
+  qz: number,
+): number {
+  const dx = qx - px;
+  const dz = qz - pz;
+  const length = Math.hypot(dx, dz);
+  const cross = (x - px) * dz - (z - pz) * dx;
+  return length > EPS ? cross / length : cross;
+}
+
