@@ -14,7 +14,13 @@ import { LitElement, css, html, unsafeCSS } from 'lit';
 import type { CSSResultGroup, TemplateResult } from 'lit';
 import { state } from 'lit/decorators.js';
 
-import { CARD_TYPE, EDITOR_TAG, type Floorplan3dCardConfig } from '@/types/config';
+import {
+  CARD_EDIT_EVENT,
+  CARD_TYPE,
+  type CardEditDetail,
+  EDITOR_TAG,
+  type Floorplan3dCardConfig,
+} from '@/types/config';
 import type { HomeAssistant, LovelaceCardEditor } from '@/types/hass';
 import { debounce, fireEvent } from '@/util/events';
 import { migrateConfig, normalizeConfig, validateConfig } from '@/ha/config-schema';
@@ -162,7 +168,30 @@ export class Floorplan3dCardEditor extends LitElement implements LovelaceCardEdi
     this._pending = null;
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Placements happen in the card, in the preview beside us; Lovelace does not
+    // listen to a card, only to its editor. This is how what you dragged becomes
+    // something the dialog can save.
+    document.addEventListener(CARD_EDIT_EVENT, this._onCardEdit as EventListener);
+  }
+
+  private readonly _onCardEdit = (event: CustomEvent<CardEditDetail>): void => {
+    const config = event.detail?.config;
+    if (!config) return;
+    event.detail.adopted = true;
+    this._config = prune(config) as Floorplan3dCardConfig;
+    this._errors = [];
+    // The card built its config from the last one we emitted, so a still-pending
+    // keystroke is not in it — and letting the debounce fire afterwards would
+    // write that older config back over the placement.
+    this._scheduleFlush.cancel();
+    this._pending = null;
+    fireEvent(this, 'config-changed', { config: this._config });
+  };
+
   override disconnectedCallback(): void {
+    document.removeEventListener(CARD_EDIT_EVENT, this._onCardEdit as EventListener);
     // Do not silently drop an in-flight edit when the dialog closes.
     this._scheduleFlush.cancel();
     this._flush();

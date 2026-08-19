@@ -32,7 +32,9 @@ import { domainOf, getEntityName, suggestPlacementLevel } from '@/ha/registry';
 import { readTheme } from '@/ha/theme';
 import { toYaml } from '@/editor/yaml-preview';
 import {
+  CARD_EDIT_EVENT,
   CARD_TYPE,
+  type CardEditDetail,
   DEFAULT_SECTION_STATE,
   EDITOR_TAG,
   type CameraPreset,
@@ -190,6 +192,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private resizeObserver: ResizeObserver | null = null;
   /** Pending re-measure of the card's box; see `scheduleSizing`. */
   private sizingFrame: number | null = null;
+  /** Pixel height we took for ourselves in a panel view; see `pinPanelHeight`. */
+  private pinnedHeight: number | null = null;
   /** Wrappers we gave a height to, and what they had before; see `stretchAncestors`. */
   private readonly stretched: Array<{ el: HTMLElement; height: string; align: string }> = [];
   private disposeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -327,6 +331,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.tourPlaying = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.unpinHeight();
     this.releaseAncestors();
     if (this.sizingFrame !== null) {
       cancelAnimationFrame(this.sizingFrame);
@@ -401,9 +406,54 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     if (!full) {
       this.releaseAncestors();
+      this.unpinHeight();
       return;
     }
     this.stretchAncestors();
+    this.pinPanelHeight();
+  }
+
+  /**
+   * The safety net under `stretchAncestors`, for a panel view only.
+   *
+   * A definite chain is the right fix, but it is only as good as the boxes it
+   * finds: if the dashboard sizes the view with `min-height` rather than
+   * `height`, our `100%` resolves against nothing and the card ends up
+   * content-tall — the half-height card, again. So after stretching, check
+   * whether it actually worked, and if it plainly did not, take the rest of the
+   * viewport in pixels, which no ancestor can refuse.
+   *
+   * This is measurement, which failed on its own before, for one reason: a wrong
+   * reading stuck. Here it cannot. Nothing is pinned until the card is laid out
+   * and demonstrably too short, and once pinned the number is re-checked on
+   * every resize and every re-parenting, so a bad frame is corrected by the next
+   * one instead of becoming the card's height forever.
+   */
+  private pinPanelHeight(): void {
+    if (!this.isPanel || typeof window === 'undefined') return;
+    const rect = this.getBoundingClientRect();
+    const avail = Math.round(window.innerHeight - rect.top);
+    // Not laid out yet, scrolled out of view, or plain absurd: no reading here
+    // is worth having.
+    if (rect.top < 0 || avail < 240) return;
+
+    if (this.pinnedHeight !== null) {
+      if (Math.abs(avail - this.pinnedHeight) > 8) {
+        this.pinnedHeight = avail;
+        this.style.height = `${avail}px`;
+      }
+      return;
+    }
+    if (avail - Math.round(rect.height) > 24) {
+      this.pinnedHeight = avail;
+      this.style.height = `${avail}px`;
+    }
+  }
+
+  private unpinHeight(): void {
+    if (this.pinnedHeight === null) return;
+    this.pinnedHeight = null;
+    this.style.removeProperty('height');
   }
 
   /**
@@ -476,7 +526,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.sizingFrame = null;
         // Re-parented since last time? Then those wrappers are somebody else's
         // problem now and the new ones need the same treatment.
-        if (this.stretched.some((entry) => !entry.el.contains(this))) this.releaseAncestors();
+        if (this.stretched.some((entry) => !entry.el.contains(this))) {
+          this.releaseAncestors();
+          this.unpinHeight();
+        }
         this.applyHostSizing();
         this.viewer?.resize();
       });
@@ -877,18 +930,30 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // Outside the card editor the event is dropped on the floor anyway, and
     // firing it still costs a full normalise plus a chrome re-render — which a
     // slider drag would do once per frame.
+    // A host that declares itself persistent (the dev harness) listens to the
+    // card directly and needs no bridge.
+    let adopted = this.configPersistence === 'available';
     if (this.canPersistConfig()) {
       fireEvent(this, 'config-changed', { config: normalised });
-    } else if (!this.warnedVolatile) {
-      // Lovelace only listens for `config-changed` from the card editor. On a
-      // live dashboard the change applies to what is on screen and is gone on
-      // the next reload — saying so once beats letting someone place a houseful
-      // of lamps and lose them.
+      // The real channel. Lovelace's edit dialog listens to the *editor element*
+      // for `config-changed` and ignores the card in its preview entirely, so the
+      // event above reached nobody. Our editor hears this one, adopts the config
+      // and re-emits it as its own — which the dialog does act on. Listeners run
+      // synchronously, so `detail.adopted` tells us whether anyone was there.
+      const detail: CardEditDetail = { config: normalised, adopted: false };
+      document.dispatchEvent(new CustomEvent(CARD_EDIT_EVENT, { detail, composed: true }));
+      adopted = adopted || detail.adopted;
+    }
+    if (!adopted && !this.warnedVolatile) {
+      // On a live dashboard, or with the dialog switched to its YAML editor, the
+      // change applies to what is on screen and is gone on the next reload —
+      // saying so once beats letting someone place a houseful of lamps and lose
+      // them.
       this.warnedVolatile = true;
       this.hud?.toast({
         message: this.t(
           'ui.placement.hint_volatile',
-          'Placements made here are not saved. Open the card with ⋮ → Edit and place them in its preview, then Save.',
+          'Placements made here are not saved. Open the card with ⋮ → Edit, place them in its preview with the visual editor open, then Save.',
         ),
       });
     }

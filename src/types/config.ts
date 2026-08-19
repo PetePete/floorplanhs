@@ -5,9 +5,24 @@
  */
 
 export const CARD_TYPE = 'floorplan-3d-card';
+/**
+ * How a placement made in the card reaches the card *editor*.
+ *
+ * Lovelace's edit dialog listens to the editor element for `config-changed` and
+ * ignores the card in its preview, so the card cannot save anything by itself.
+ * It announces the new config on the document instead; the editor, open in the
+ * same dialog, adopts it and emits its own `config-changed`.
+ */
+export const CARD_EDIT_EVENT = 'fp3d-card-config';
+
+/** Payload of {@link CARD_EDIT_EVENT}; the editor sets `adopted` when it took it. */
+export interface CardEditDetail {
+  config: Floorplan3dCardConfig;
+  adopted: boolean;
+}
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.2.7';
+export const CARD_VERSION = '0.2.8';
 
 export type Vec3 = [number, number, number];
 

@@ -225,6 +225,24 @@ pseudo-room (`site/roof/...`) so isolating a level handles it specially.
 
 ---
 
+## Placed entities are gone after a reload
+
+A card cannot save its own configuration — Lovelace takes that only from a
+card's **editor**. So placements have to be made where the editor is listening:
+**⋮ → Edit**, then drag in the live preview **with the visual editor open**, and
+**Save**. Watch the `entities:` list in the YAML preview grow as you drop; if it
+does not, nothing is being saved.
+
+Two ways to end up with nothing saved:
+
+- Placing on the dashboard itself, in edit mode. The card shows the position on
+  screen and warns once that it is not saved.
+- Placing in the edit dialog while it is switched to the **code editor**. The
+  visual editor is not in the DOM then, so there is nothing to hand the drop to;
+  the same warning appears.
+
+---
+
 ## My config is lost after editing
 
 **Cause A — a validation error.** The editor never emits a configuration that
