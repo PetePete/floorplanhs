@@ -407,6 +407,17 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.scheduleSizing();
       return;
     }
+    // A card that fills the view starts near the top of it. Measured further
+    // down than halfway, the dashboard is still moving things around — the card
+    // is under an error card that is about to be replaced, or below a view that
+    // has not collapsed yet. Believing that number is what produced a card half
+    // the height of the window, and it stuck, because a wrong height is still a
+    // height and nothing measures again on its own.
+    const viewport = typeof window === 'undefined' ? 0 : window.innerHeight;
+    if (viewport > 0 && box.top > viewport / 2) {
+      this.scheduleSizing();
+      return;
+    }
     const top = `${Math.max(0, Math.round(box.top))}px`;
     if (this.style.getPropertyValue('--fp3d-card-top') !== top) {
       this.style.setProperty('--fp3d-card-top', top);
@@ -509,6 +520,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.setThemeDark(this.dark);
       await viewer.mount(host, this.config);
       if (!this.isConnected || this.viewer !== viewer) return;
+      // Mounting is asynchronous, so the card may have been moved into its
+      // final place while the model was loading.
+      this.scheduleSizing();
       viewer.setEditMode(this.editing);
       if (this.autoRotate) viewer.cameraCtl.setAutoRotate(true);
     } catch (err) {
