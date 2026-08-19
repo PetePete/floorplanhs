@@ -499,7 +499,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       if (box.height > 0) bottom = Math.min(bottom, box.bottom - pad);
     }
 
-    const avail = Math.round(bottom - top - this.spaceBelow(container));
+    const span = bottom - top;
+    // Whatever the dashboard puts under a card, it is chrome — a row of buttons,
+    // not half the screen. Capping it keeps a mismeasurement from collapsing the
+    // card to a strip, which is a failure you cannot see your way out of.
+    const chrome = Math.min(this.spaceBelow(container), span * 0.4);
+    const avail = Math.round(span - chrome);
     // Not laid out yet, or scrolled out of view: no number here is worth having,
     // and the next pass will have a better one.
     if (!Number.isFinite(avail) || avail < 240) return;
@@ -519,7 +524,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         container ? container.localName : 'viewport',
         Math.round(bottom),
         Math.round(top),
-        Math.round(this.spaceBelow(container)),
+        Math.round(chrome),
       );
     }
   }
@@ -536,21 +541,37 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * next without knowing what it is.
    */
   private spaceBelow(container: HTMLElement | null): number {
-    // How far each wrapper reaches past our own bottom edge, rather than a sum of
-    // what we can see: edit mode's toolbar is inside `hui-card-options`' shadow
-    // root, so it is not a sibling of the card and no walk of the light DOM finds
-    // it. A wrapper that is taller than its card, though, is taller by exactly
-    // that much — and this holds for whatever the dashboard adds next.
+    // Everything on the way up that sits *below* the card and is not the card:
+    // the row with the edit and delete buttons that edit mode puts under every
+    // card. It is not a sibling — it lives in `hui-card-options`' shadow root —
+    // so both the light-DOM siblings and each wrapper's shadow children are
+    // considered, and the deciding test is geometric rather than structural.
     //
-    // Stable to measure while our own height is applied: these wrappers are
-    // content-sized, so the overhang is the chrome's height either way.
+    // Measuring a wrapper's own box instead does not work, however tempting: a
+    // wrapper stretched to the view is as tall as the view whether it holds a
+    // toolbar or not, and subtracting that from the view leaves the card exactly
+    // the height it already had. It froze at whatever it happened to be.
     const own = this.getBoundingClientRect().bottom;
-    let overhang = 0;
+    let extra = 0;
+
+    const consider = (el: Element): void => {
+      const box = el.getBoundingClientRect();
+      if (box.height <= 0) return;
+      // Starts above our bottom edge, so it wraps us rather than following us.
+      if (box.top < own - 1) return;
+      // Overlays are drawn on top of the card and take no room from it.
+      if (getComputedStyle(el).position === 'absolute') return;
+      extra += box.height;
+    };
+
     for (const el of ancestorsAcrossShadow(this)) {
       if (el === container) break;
-      overhang = Math.max(overhang, el.getBoundingClientRect().bottom - own);
+      for (let sibling = el.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
+        consider(sibling);
+      }
+      for (const child of el.shadowRoot?.children ?? []) consider(child);
     }
-    return overhang;
+    return extra;
   }
 
   private unpinHeight(): void {
