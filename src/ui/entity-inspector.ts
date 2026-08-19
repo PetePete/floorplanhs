@@ -162,6 +162,15 @@ export class Fp3dEntityInspector extends FpBaseElement {
   @state() private draft: Partial<PlacedEntity> = {};
 
   private pendingPatch: Partial<PlacedEntity> = {};
+  /**
+   * Typed but not yet handed over; `null` when the field is not being edited.
+   *
+   * A name is written a letter at a time, and every letter used to be an edit:
+   * the marker was relabelled per keystroke and — since the card writes to the
+   * dashboard — Home Assistant rebuilt it under the cursor. Free text waits for
+   * the end of the sentence, which is a blur, an Enter, or the panel closing.
+   */
+  @state() private nameDraft: string | null = null;
 
   private readonly flush = debounce(() => {
     const entityId = this.entity?.entity;
@@ -176,6 +185,20 @@ export class Fp3dEntityInspector extends FpBaseElement {
     const previous = changed.get('entity') as PlacedEntity | null | undefined;
     // A different entity means the draft belongs to the old one.
     if (previous?.entity !== this.entity?.entity) {
+      // The draft belongs to the entity we are leaving, and `this.entity` is
+      // already the new one — so it is addressed by hand rather than through
+      // `commitName`, which would rename whatever was just selected.
+      if (this.nameDraft !== null && previous?.entity) {
+        const name = this.nameDraft.trim();
+        this.nameDraft = null;
+        if ((previous.name ?? '') !== name) {
+          this.emit('fp3d-entity-patch', {
+            entityId: previous.entity,
+            patch: { name: name || undefined },
+          });
+        }
+      }
+      this.flush.flush();
       this.draft = {};
       this.pendingPatch = {};
       this.flush.cancel();
@@ -184,7 +207,22 @@ export class Fp3dEntityInspector extends FpBaseElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    // Closing the panel is the end of the sentence, so the name goes with it
+    // rather than being thrown away.
+    this.commitName();
+    this.flush.flush();
     this.flush.cancel();
+  }
+
+  /** Hand over a typed name, once. */
+  private commitName(): void {
+    const draft = this.nameDraft;
+    if (draft === null) return;
+    this.nameDraft = null;
+    const name = draft.trim();
+    if ((this.entity?.name ?? '') === name) return;
+    this.queuePatch({ name: name || undefined });
+    this.flush.flush();
   }
 
   /** Current value = persisted config with the not-yet-committed draft on top. */
@@ -420,10 +458,16 @@ export class Fp3dEntityInspector extends FpBaseElement {
             <input
               id="fp3d-name"
               type="text"
-              .value=${placed.name ?? ''}
+              .value=${this.nameDraft ?? placed.name ?? ''}
               placeholder=${getEntityName(this.hass, placed.entity)}
-              @input=${(event: Event) =>
-                this.queuePatch({ name: (event.target as HTMLInputElement).value || undefined })}
+              @input=${(event: Event) => {
+                this.nameDraft = (event.target as HTMLInputElement).value;
+              }}
+              @change=${() => this.commitName()}
+              @keydown=${(event: KeyboardEvent) => {
+                if (event.key !== 'Enter') return;
+                (event.target as HTMLInputElement).blur();
+              }}
             />
           </div>
 
@@ -471,13 +515,15 @@ export class Fp3dEntityInspector extends FpBaseElement {
               (axis) => html`
                 <label>
                   ${axis.label}
+                  <!-- change, not input: typing "2.45" passes through 2, 2., 2.4,
+                       and each of those was a config write and a card rebuild. -->
                   <input
                     type="number"
                     step="0.05"
                     .value=${String(placed.position[axis.index] ?? 0)}
                     aria-label=${`${this.t('ui.inspector.position', 'Position')} ${axis.label}`}
                     @keydown=${(event: KeyboardEvent) => this.onPositionKey(event, axis.index)}
-                    @input=${(event: Event) =>
+                    @change=${(event: Event) =>
                       this.setPosition(axis.index, Number((event.target as HTMLInputElement).value))}
                   />
                 </label>

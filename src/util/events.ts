@@ -126,18 +126,31 @@ export function throttle<A extends unknown[]>(
 export function debounce<A extends unknown[]>(
   fn: (...args: A) => void,
   ms: number,
-): ((...args: A) => void) & { cancel(): void } {
+): ((...args: A) => void) & { cancel(): void; flush(): void } {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let last: A | null = null;
   const wrapped = (...args: A) => {
+    last = args;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
+      last = null;
       fn(...args);
     }, ms);
   };
   wrapped.cancel = () => {
     if (timer) clearTimeout(timer);
     timer = null;
+    last = null;
+  };
+  /** Run a pending call now — for "the panel is closing, say it before it goes". */
+  wrapped.flush = () => {
+    if (!timer || !last) return;
+    clearTimeout(timer);
+    timer = null;
+    const args = last;
+    last = null;
+    fn(...args);
   };
   return wrapped;
 }
