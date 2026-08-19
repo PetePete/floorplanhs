@@ -206,6 +206,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private resizeObserver: ResizeObserver | null = null;
   /** Pending re-measure of the card's box; see `scheduleSizing`. */
   private sizingFrame: number | null = null;
+  /** Last line printed by `explainChrome`, so it prints on change only. */
+  private chromeExplained = '';
   /** The config object Lovelace handed us, verbatim; see `saveToDashboard`. */
   private rawConfig: unknown = null;
   /** The dashboard config we last submitted, while the save is in flight. */
@@ -1905,6 +1907,29 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     camera.setViewCubeTopMargin(this.toolbarVisible(this.config?.ui ?? {}) ? 88 : 16);
   }
 
+  /**
+   * Why a control is on screen, on the debug channel.
+   *
+   * "The scissors are back" is a report nobody can act on: three settings and
+   * three sources of edit mode feed that one boolean, and a screenshot shows
+   * none of them. Printed once per change rather than per frame.
+   */
+  private explainChrome(
+    ui: NonNullable<Floorplan3dCardConfig['ui']>,
+    mode: 'auto' | 'never' | 'always',
+    canSection: boolean,
+  ): void {
+    const line =
+      `section=${canSection} authorTools=${mode} ` +
+      `showSectionControls=${ui.showSectionControls ?? '(unset)'} ` +
+      `editing=${this.editing} editMode=${this.editMode} ` +
+      `inCardEditor=${this.inCardEditor()} ` +
+      `dashboardEditMode=${findLovelaceHost(this)?.editMode ?? '(no dashboard)'}`;
+    if (line === this.chromeExplained) return;
+    this.chromeExplained = line;
+    console.info('[floorplan-3d] %s', line);
+  }
+
   private renderChrome(showToolbar: boolean, selected: PlacedEntity | null): TemplateResult {
     const config = this.config;
     const ui = config?.ui ?? {};
@@ -1921,6 +1946,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const showLevels = levelSelectorVisible(ui);
     const showPalette = this.editing && this.panel === 'palette';
     const canSection = sectionButtonVisible(ui, mode, this.editing);
+    if (ui.showFps === true) this.explainChrome(ui, mode, canSection);
 
     return html`
       <div

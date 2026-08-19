@@ -433,11 +433,16 @@ export class Viewer implements IViewer {
     this.unwire.push(
       section.onHandleDragStart(() => camera.setEnabled(false)),
       section.onHandleDragEnd(() => camera.setEnabled(true)),
-      section.onChange((state) => {
+      section.onChange((state, origin) => {
         this.flashSectionHandles();
         this.config = { ...this.config, section: state };
         this.emit('section-changed', state);
-        this.emit('edit-intent', { kind: 'set-section', section: state });
+        // Only a hand on a cut handle is an edit. Applying a view also lands
+        // here, and writing *that* down means every click on a storey rewrites
+        // the card's stored `section:` — which is the state the card opens
+        // with, so the card would then start on whichever storey was last
+        // looked at instead of the view its config asks for.
+        if (origin === 'user') this.emit('edit-intent', { kind: 'set-section', section: state });
       }),
     );
 

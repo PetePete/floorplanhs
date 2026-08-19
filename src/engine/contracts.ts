@@ -129,7 +129,8 @@ export interface ISectionController extends Subsystem {
   setLevels(levels: LevelDefinition[]): void;
   /** Re-collect model materials after a reload that kept the same bounds. */
   refreshMaterials(): void;
-  onChange(cb: (state: SectionState) => void): () => void;
+  /** `user` is a hand on a cut handle; `apply` is a view or config being restored. */
+  onChange(cb: (state: SectionState, origin: SectionChangeOrigin) => void): () => void;
   /** Let the camera park OrbitControls while a cut handle is being dragged. */
   onHandleDragStart(cb: () => void): () => void;
   onHandleDragEnd(cb: () => void): () => void;
@@ -282,6 +283,9 @@ export interface IPlacementController extends Subsystem {
 }
 
 /* ------------------------------------------------------------------ store */
+
+/** Who moved the cut: see `ISectionController.onChange`. */
+export type SectionChangeOrigin = 'user' | 'apply';
 
 export type EditIntent =
   | { kind: 'add-entity'; entity: PlacedEntity }

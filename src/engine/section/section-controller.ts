@@ -17,7 +17,8 @@
 import * as THREE from 'three';
 import type { Axis, ClipPlaneState, LevelDefinition, SectionState } from '@/types/config';
 import { DEFAULT_SECTION_STATE } from '@/types/config';
-import type { ISectionController, RenderContext } from '@/engine/contracts';
+import type {
+  SectionChangeOrigin, ISectionController, RenderContext } from '@/engine/contracts';
 import { easeInOutCubic } from '@/util/math';
 import { Tween, TweenRunner, tweenValue } from '@/engine/camera/tween';
 import { CapRenderer } from '@/engine/section/cap-renderer';
@@ -78,7 +79,9 @@ export class SectionController implements ISectionController {
   /** Measured height of each storey's geometry above its own floor. */
   private levelTops: ReadonlyMap<string, number> | null = null;
 
-  private readonly changeCallbacks = new Set<(state: SectionState) => void>();
+  private readonly changeCallbacks = new Set<
+    (state: SectionState, origin: SectionChangeOrigin) => void
+  >();
 
   constructor(initial?: SectionState) {
     this.state = sanitize(initial ?? DEFAULT_SECTION_STATE);
@@ -101,7 +104,7 @@ export class SectionController implements ISectionController {
     this.handles.init(ctx);
     // The live drag path stays silent; one change event when the user lets go
     // is what the card should persist.
-    this.detachDragEnd = this.handles.onDragEnd(() => this.emitChange());
+    this.detachDragEnd = this.handles.onDragEnd(() => this.emitChange('user'));
 
     this.scan();
     this.caps.setSources(this.meshes);
@@ -187,7 +190,7 @@ export class SectionController implements ISectionController {
     this.caps.setColor(this.state.capColor);
     this.caps.setEnabled(this.state.caps !== false);
     this.rebuild(animate);
-    this.emitChange();
+    this.emitChange('apply');
   }
 
   getState(): SectionState {
@@ -253,7 +256,15 @@ export class SectionController implements ISectionController {
     this.ctx.invalidate();
   }
 
-  onChange(cb: (state: SectionState) => void): () => void {
+  /**
+   * `origin` says whether a person did this.
+   *
+   * `user` is a hand on a cut handle; `apply` is the card putting a saved view
+   * or a config back in place. Only the first is an edit worth writing down —
+   * persisting the second means clicking a storey rewrites the card's stored
+   * section, and the card then opens on that storey ever after.
+   */
+  onChange(cb: (state: SectionState, origin: SectionChangeOrigin) => void): () => void {
     this.changeCallbacks.add(cb);
     return () => {
       this.changeCallbacks.delete(cb);
@@ -544,10 +555,10 @@ export class SectionController implements ISectionController {
     this.release = null;
   }
 
-  private emitChange(): void {
+  private emitChange(origin: SectionChangeOrigin): void {
     if (this.changeCallbacks.size === 0) return;
     const state = this.getState();
-    for (const cb of [...this.changeCallbacks]) cb(state);
+    for (const cb of [...this.changeCallbacks]) cb(state, origin);
   }
 }
 
