@@ -660,6 +660,16 @@ keep the codebase coherent. Pull requests are welcome at
 `https://github.com/PetePete/floorplanhs`; please keep `npm run build`
 clean and add a vitest case for anything with logic in it.
 
+## Coffee
+
+This card is free, ad-free, and staying that way. Nothing phones home, there is
+no account and no upsell. If it earns a place on your dashboard and you feel
+like it, buy me a coffee:
+
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-FFDD00?style=for-the-badge)](https://buymeacoffee.com/petepete)
+
+<https://buymeacoffee.com/petepete>
+
 ## Licence
 
 MIT — see [`LICENSE`](LICENSE).
