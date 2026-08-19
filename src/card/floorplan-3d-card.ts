@@ -188,6 +188,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private viewer: Viewer | null = null;
   private mounting = false;
   private resizeObserver: ResizeObserver | null = null;
+  /** Pending re-measure of the card's box; see `scheduleSizing`. */
+  private sizingFrame: number | null = null;
   private disposeTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribers: Array<() => void> = [];
   /** Serialised form of the config we last emitted, to ignore our own echo. */
@@ -300,6 +302,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.disposeTimer = null;
     }
     window.addEventListener('fullscreenchange', this.onFullscreenChange);
+    // A window resize moves the card's top edge without resizing the card
+    // itself whenever the dashboard reflows around it.
+    window.addEventListener('resize', this.onWindowResize);
     this.addEventListener(PRESET_EVENT, this.onPresetEvent as EventListener);
     // hasUpdated => firstUpdated already ran and will not run again.
     if (this.hasUpdated && !this.viewer) void this.mountViewer();
@@ -312,11 +317,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener('fullscreenchange', this.onFullscreenChange);
+    window.removeEventListener('resize', this.onWindowResize);
     this.removeEventListener(PRESET_EVENT, this.onPresetEvent as EventListener);
     this.clearTourTimers();
     this.tourPlaying = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    if (this.sizingFrame !== null) {
+      cancelAnimationFrame(this.sizingFrame);
+      this.sizingFrame = null;
+    }
 
     // HA re-parents cards on layout changes: tearing a WebGL context down and
     // building it again inside the same tick is both slow and visible. Wait to
@@ -330,6 +340,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   protected override firstUpdated(): void {
     this.observeSize();
+    this.scheduleSizing();
     void this.mountViewer();
   }
 
@@ -360,6 +371,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // stays at its configured height in a view meant to be filled. Writing four
     // style properties is not worth the bookkeeping to avoid.
     this.applyHostSizing();
+    // …and again once the dashboard has settled. A measurement taken mid-layout
+    // is not wrong so much as premature, and nothing else would revisit it.
+    this.scheduleSizing();
     this.placeViewCube();
     // setConfig can arrive after the first render (HA does this when a card is
     // created empty and configured afterwards); firstUpdated has been and gone.
@@ -385,11 +399,43 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // Where the card starts in the viewport; the stylesheet takes the rest.
     // Written only when it moves, because this runs from a ResizeObserver and
     // writing it is what makes the box change size.
-    const top = `${Math.max(0, Math.round(this.getBoundingClientRect().top))}px`;
+    const box = this.getBoundingClientRect();
+    // Nothing to measure yet: the card is in a view that has not been laid out,
+    // or in a hidden tab. Measuring anyway records a zero and nothing would ever
+    // correct it, since our own box does not change when the dashboard settles.
+    if (box.width <= 0) {
+      this.scheduleSizing();
+      return;
+    }
+    const top = `${Math.max(0, Math.round(box.top))}px`;
     if (this.style.getPropertyValue('--fp3d-card-top') !== top) {
       this.style.setProperty('--fp3d-card-top', top);
     }
   }
+
+  /**
+   * Measure again once the dashboard has finished moving things around.
+   *
+   * Home Assistant lays a view out over several frames — the card is inserted,
+   * then the view decides it is a panel, then the sidebar settles. A single
+   * measurement taken during that lands on a position the card is about to
+   * leave, and nothing afterwards corrects it: our own box stops changing, so
+   * the ResizeObserver goes quiet. Two frames later is after the layout.
+   */
+  private scheduleSizing(): void {
+    if (this.sizingFrame !== null || typeof requestAnimationFrame !== 'function') return;
+    this.sizingFrame = requestAnimationFrame(() => {
+      this.sizingFrame = requestAnimationFrame(() => {
+        this.sizingFrame = null;
+        this.applyHostSizing();
+        this.viewer?.resize();
+      });
+    });
+  }
+
+  private readonly onWindowResize = (): void => {
+    this.scheduleSizing();
+  };
 
   private observeSize(): void {
     if (typeof ResizeObserver === 'undefined') return;
@@ -409,6 +455,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.viewer?.resize();
     });
     this.resizeObserver.observe(this);
+    // The card's top edge moves when its *wrapper* changes even if the card
+    // itself does not — a view switching layout, a sidebar folding away. The
+    // parent is what notices that.
+    if (this.parentElement) this.resizeObserver.observe(this.parentElement);
   }
 
   /* ---------------------------------------------------------- author mode */
