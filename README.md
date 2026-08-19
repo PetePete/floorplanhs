@@ -610,7 +610,7 @@ tour:
 | `showLegend` | boolean | `false` | Colour/state legend. |
 | `showFps` | boolean | `false` | FPS counter (diagnostics). |
 | `compact` | boolean | `false` | Smaller chrome for narrow columns. |
-| `theme` | `auto` \| `light` \| `dark` | `auto` | `auto` follows Home Assistant. |
+| `theme` | `auto` \| `light` \| `dark` | `auto` | Which way round the card's own chrome and line work are drawn. `auto` follows Home Assistant; the other two overrule it, for a drawing that has to read on a wall tablet in daylight whatever theme the dashboard is wearing. Entity colours still come from the dashboard's palette. |
 | `height` | string | `520px` | Any CSS length. Ignored in panel mode. |
 | `aspectRatio` | string | `''` | e.g. `16:9`. Overrides `height` when set. |
 

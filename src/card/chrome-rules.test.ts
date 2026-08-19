@@ -5,6 +5,7 @@ import {
   chromeVisibility,
   explodeAvailable,
   levelSelectorVisible,
+  resolveDark,
   sectionButtonVisible,
   sectionPanelVisible,
   toolbarVisible,
@@ -108,5 +109,29 @@ describe('chromeVisibility', () => {
     expect(
       chromeVisibility(config, { editing: true, levelCount: 3, visibleLevels: null }).explode,
     ).toBe(false);
+  });
+});
+
+/**
+ * `ui.theme` was in the schema and in the editor and read by nobody: picking
+ * Light did nothing at all.
+ */
+describe('theme', () => {
+  it('follows the dashboard on auto', () => {
+    expect(resolveDark('auto', true)).toBe(true);
+    expect(resolveDark('auto', false)).toBe(false);
+  });
+
+  it('follows the dashboard when nothing is set', () => {
+    expect(resolveDark(undefined, true)).toBe(true);
+    expect(resolveDark(undefined, false)).toBe(false);
+  });
+
+  it('overrules a dark dashboard when the card asks for light', () => {
+    expect(resolveDark('light', true)).toBe(false);
+  });
+
+  it('overrules a light dashboard when the card asks for dark', () => {
+    expect(resolveDark('dark', false)).toBe(true);
   });
 });

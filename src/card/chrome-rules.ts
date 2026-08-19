@@ -65,6 +65,20 @@ export function levelSelectorVisible(ui: UiConfig): boolean {
   return ui.showLevelSelector !== false;
 }
 
+/**
+ * Dark or light, from the card's own setting and the dashboard's.
+ *
+ * `auto` follows Home Assistant, which is what a card should do by default. The
+ * other two are a decision: a floorplan is a drawing, and a drawing that has to
+ * read on a wall tablet in daylight cannot be at the mercy of whichever theme
+ * the dashboard is wearing this week.
+ */
+export function resolveDark(theme: UiConfig['theme'], dashboardIsDark: boolean): boolean {
+  if (theme === 'light') return false;
+  if (theme === 'dark') return true;
+  return dashboardIsDark;
+}
+
 /** Handy in tests and at the call site: every rule against one config. */
 export function chromeVisibility(
   config: Floorplan3dCardConfig,

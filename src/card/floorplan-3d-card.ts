@@ -62,6 +62,7 @@ import { recallView, rememberView } from '@/card/view-memory';
 import { configKey } from '@/util/config-key';
 import {
   authorToolsVisible,
+  resolveDark,
   explodeAvailable,
   levelSelectorVisible,
   sectionButtonVisible,
@@ -300,11 +301,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.forwardHass(hass);
 
     if (!previous || previous.themes !== hass.themes || previous.selectedTheme !== hass.selectedTheme) {
-      this.dark = readTheme(this, hass).isDark;
-      // The 3D background is transparent, so anything the engine draws over the
-      // card — edge lines above all — has to contrast with the dashboard, not
-      // with the model.
-      this.viewer?.setThemeDark(this.dark);
+      this.applyTheme();
     }
     // First push has to paint: everything else is handed to children directly.
     if (!previous) this.requestUpdate();
@@ -406,7 +403,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.panel = wanted ? 'palette' : 'none';
       }
     }
-    if (changed.has('config')) this.loadLocalPresets();
+    if (changed.has('config')) {
+      this.loadLocalPresets();
+      // The setting can change without `hass` moving at all.
+      this.applyTheme();
+    }
     if ((changed.has('section') || changed.has('visibleLevels')) && this.exploded && !this.canExplode) {
       this.viewer?.setExplode(0, false);
       this.exploded = false;
@@ -435,6 +436,23 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       void this.mountViewer();
     }
     if (this._hass) this.forwardHass(this._hass);
+  }
+
+  /**
+   * Which way round the card is drawn.
+   *
+   * `ui.theme` was written into the schema and offered in the editor and then
+   * never read: picking Light did nothing at all. It is a real setting, so it
+   * decides, and only `auto` asks the dashboard.
+   */
+  private applyTheme(): void {
+    const dark = resolveDark(this.config?.ui?.theme, readTheme(this, this._hass).isDark);
+    if (this.dark === dark) return;
+    this.dark = dark;
+    // The 3D background is transparent, so anything the engine draws over the
+    // card — edge lines above all — has to contrast with the dashboard, not
+    // with the model.
+    this.viewer?.setThemeDark(dark);
   }
 
   /** Height / aspect ratio live on the host so panel mode can fill the view. */
