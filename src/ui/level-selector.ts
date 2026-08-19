@@ -48,6 +48,18 @@ export class Fp3dLevelSelector extends FpBaseElement {
         margin: -2px -2px 2px;
       }
 
+      /*
+       * A finger-sized control with a ground of its own. As a bare 15 px chevron
+       * in the corner it was invisible on a phone — which is exactly where the
+       * panel most needs folding away.
+       */
+      .fold {
+        min-width: 34px;
+        min-height: 30px;
+        justify-content: center;
+        background: var(--fp3d-hover);
+      }
+
       .fold,
       .peek {
         display: flex;
@@ -64,9 +76,6 @@ export class Fp3dLevelSelector extends FpBaseElement {
           color var(--fp3d-fast) var(--fp3d-ease);
       }
 
-      .fold {
-        padding: 2px 4px;
-      }
 
       .fold:hover,
       .peek:hover {
@@ -75,8 +84,8 @@ export class Fp3dLevelSelector extends FpBaseElement {
       }
 
       .fold .fp-icon {
-        width: 15px;
-        height: 15px;
+        width: 17px;
+        height: 17px;
       }
 
       /* Folded: wide enough to say where you are, narrow enough to ignore. */
