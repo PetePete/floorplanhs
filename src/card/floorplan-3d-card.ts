@@ -391,6 +391,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       }
     }
     if (changed.has('config')) this.loadLocalPresets();
+    if ((changed.has('section') || changed.has('visibleLevels')) && this.exploded && !this.canExplode) {
+      this.viewer?.setExplode(0, false);
+      this.exploded = false;
+    }
     if (changed.has('editing')) {
       this.viewer?.setEditMode(this.editing);
       if (!this.editing) {
@@ -735,6 +739,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const key = this.viewMemoryKey();
     const viewer = this.viewer;
     if (!key || !viewer?.isMounted) return;
+    // Only while editing. This exists because saving rebuilds the card mid-work;
+    // carrying a view over to an ordinary visit to the dashboard would override
+    // the opening view the config asks for, which is not ours to override.
+    if (!this.editing) return;
     try {
       rememberView(key, {
         camera: viewer.cameraCtl.capture('resume'),
@@ -1882,6 +1890,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * there both wasted the corner and had it sitting on top of the zoom control,
    * which reserves its strip in the chrome grid from the same two numbers.
    */
+  /**
+   * Pulling the storeys apart says something about a building, and nothing at
+   * all about one storey on its own — in a level view the button moved the one
+   * visible floor up and down for no reason.
+   */
+  private get canExplode(): boolean {
+    if (this.levels.length < 2) return false;
+    if (this.section.mode === 'level') return false;
+    const visible = this.visibleLevels;
+    return visible === null || visible.length > 1;
+  }
+
   private placeViewCube(): void {
     const camera = this.viewer?.cameraCtl;
     if (!camera) return;
@@ -1926,7 +1946,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .autoRotate=${this.autoRotate}
                 .fullscreen=${this.fullscreen}
                 .canSection=${canSection}
-                .canExplode=${this.levels.length > 1}
+                .canExplode=${this.canExplode}
                 .exploded=${this.exploded}
                 .canTour=${this.tourAvailable}
                 .tourPlaying=${this.tourPlaying}

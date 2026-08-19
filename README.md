@@ -428,6 +428,20 @@ Levels are half-open ranges `[elevation, elevation + height)`.
 
 ### Presets
 
+**Which view the card opens in**, in this order:
+
+1. The preset marked `default: true`.
+2. Otherwise the **first** preset in the list — so the order of `presets:`
+   decides, and saving a storey view as your first one makes that storey the
+   opening view.
+3. With no presets at all: the whole building, framed to fit. That is the
+   *Overview*, and it is what an unconfigured card does.
+
+Independently of the camera, `section:` from the config is applied first. A
+`section.mode: level` in the YAML opens on that storey no matter which preset
+runs — if the card starts in a storey you did not expect, look there before the
+presets.
+
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `id` | string | — | Required. Referenced by `action: preset`. |
