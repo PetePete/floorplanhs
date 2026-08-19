@@ -22,7 +22,6 @@ export type ToolbarAction =
   | 'autorotate'
   | 'tour'
   | 'fullscreen'
-  | 'edit'
   | 'palette';
 
 interface ToolbarItem {
@@ -188,8 +187,6 @@ export class Fp3dToolbar extends FpBaseElement {
   @property({ type: Boolean }) orthographic = false;
   @property({ type: Boolean }) autoRotate = false;
   @property({ type: Boolean }) fullscreen = false;
-  @property({ type: Boolean }) editing = false;
-  @property({ type: Boolean }) canEdit = false;
   /** False hides the section button entirely, so it cannot open a hidden panel. */
   @property({ type: Boolean }) canSection = true;
   /** Only worth offering with more than one storey to separate. */
@@ -278,16 +275,6 @@ export class Fp3dToolbar extends FpBaseElement {
         pressed: this.fullscreen,
         hidden: typeof document === 'undefined' || !document.fullscreenEnabled,
         rank: 7,
-      },
-      {
-        action: 'edit',
-        glyph: 'pencil',
-        label: this.editing
-          ? this.t('ui.toolbar.done', 'Done')
-          : this.t('ui.toolbar.edit', 'Edit layout'),
-        pressed: this.editing,
-        hidden: !this.canEdit,
-        rank: 5,
       },
     ];
     return all.filter((item) => !item.hidden);

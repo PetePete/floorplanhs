@@ -351,15 +351,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   protected override updated(changed: PropertyValues): void {
     if (changed.has('editMode') || changed.has('config')) {
-      // `never` outranks the dashboard: no palette, no inspector, no gizmos,
-      // even while Lovelace itself is in edit mode.
-      if (this.authorMode === 'never') this.editing = false;
-      else if (changed.has('editMode')) this.editing = this.editMode;
-    }
-    if (changed.has('editMode') && this.authorMode !== 'never') {
-      // Entering the dashboard's edit mode should show the placement tools, not
-      // just enable them silently.
-      if (this.editMode) this.panel = 'palette';
+      // The dashboard decides. There is no switch of our own any more: a card
+      // with its own edit mode gives you two of them to keep track of, and the
+      // one that matters is the dashboard's — that is the mode in which a change
+      // can be saved at all. `authorTools: never` still outranks it.
+      const wanted = this.authorMode !== 'never' && (this.editMode || this.inCardEditor());
+      if (this.editing !== wanted) {
+        this.editing = wanted;
+        // Entering it shows the placement tools rather than just enabling them.
+        this.panel = wanted ? 'palette' : 'none';
+      }
     }
     if (changed.has('config')) this.loadLocalPresets();
     if (changed.has('editing')) {
@@ -702,10 +703,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         break;
       case 'fullscreen':
         this.toggleFullscreen();
-        break;
-      case 'edit':
-        this.editing = !this.editing;
-        this.panel = this.editing ? 'palette' : 'none';
         break;
       case 'section':
       case 'palette':
@@ -1066,6 +1063,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   /* ----------------------------------------------------------- local views */
+
+  /** True inside the card editor's live preview, where a drop can be saved. */
+  private inCardEditor(): boolean {
+    return hasLovelaceEditorAncestor(this);
+  }
 
   private canPersistConfig(): boolean {
     if (this.configPersistence !== 'auto') return this.configPersistence === 'available';
@@ -1613,9 +1615,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const ui = config?.ui ?? {};
     const author = this.showAuthorTools;
     const mode = this.authorMode;
-    // The edit toggle is how an admin *enters* author mode, so it cannot be
-    // gated on author mode already being visible — only on `never`.
-    const canEdit = mode !== 'never' && (this.editMode || this._hass?.user?.is_admin === true);
     // Opt-in only, and deliberately NOT tied to author mode: the lift panel is
     // a second way to do what a saved view already does, and having it appear
     // the moment you start editing is exactly the clutter we removed.
@@ -1648,8 +1647,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .openPanel=${this.panel}
                 .autoRotate=${this.autoRotate}
                 .fullscreen=${this.fullscreen}
-                .editing=${this.editing}
-                .canEdit=${canEdit}
                 .canSection=${canSection}
                 .canExplode=${this.levels.length > 1}
                 .exploded=${this.exploded}

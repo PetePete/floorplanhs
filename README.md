@@ -319,11 +319,18 @@ on load.
 
 ### Drag & drop
 
-In dashboard edit mode the card accepts entities dropped onto the model. The
-drop is raycast against the building shell, so the entity lands on the surface
-under your finger, gets the level it fell into, and its position is rounded to
-three decimals before being written back through `config-changed`. Touch is a
-first-class path — this works with a finger, not just a mouse.
+The card follows the dashboard: put the dashboard in edit mode and the placement
+tools appear, with no switch of the card's own to keep track of. A drop is
+raycast against the building shell, so the entity lands on the surface under your
+finger, gets the storey it fell into, and its position is rounded to millimetres
+before being written back through `config-changed`. Touch is a first-class path —
+this works with a finger, not just a mouse.
+
+**Where it sticks.** Lovelace only accepts a card's `config-changed` from the
+card editor, so that is the place to do the placing: **⋮ → Edit**, drag in the
+live preview, **Save**. A drop made anywhere else applies to what is on screen
+and is gone on the next reload; the card says so rather than letting you find
+out later.
 
 ---
 
@@ -553,7 +560,7 @@ tour:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `authorTools` | `auto` \| `never` \| `always` | `auto` | Master switch for every authoring affordance — level selector, section panel, entity palette, inspector, save-view, edit toggle. `auto` shows them only in edit mode; `never` hides them even in a dashboard being edited (the wall-tablet case); `always` keeps them visible. It outranks the individual `show*` flags below. |
+| `authorTools` | `auto` \| `never` \| `always` | `auto` | Master switch for every authoring affordance — section panel, entity palette, inspector, save-view. The card follows the *dashboard's* edit mode; it has no switch of its own. `auto` shows the tools while the dashboard is being edited; `never` hides them even then (the wall-tablet case); `always` keeps them visible. It outranks the individual `show*` flags below. |
 | `room` *(per entity)* | string | — | The room this entity belongs to. Sets which room a light fills in `lightMode: room`, and draws a leader line back to that room when the entity is placed outside it. |
 | `snapPlacement` | boolean | `false` | Drop an entity where you dropped it (default), or move it to the height the fixture would really sit at — a light to the ceiling, a switch to 1.10 m. |
 | `showCeilings` | boolean | `true` | Draw the ceiling slabs. Off is often the better floorplan: a ceiling is the one surface you never look at, and in a plan or exploded view it is all you see of the storey below it. |
