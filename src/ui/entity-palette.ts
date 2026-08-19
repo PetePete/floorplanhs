@@ -33,6 +33,11 @@ const LONG_PRESS_MS = 420;
 const LONG_PRESS_SLOP_PX = 10;
 
 /** Lights first: putting a lamp in a room is what this card is for. */
+/**
+ * The chips above the list. Not every domain — the search box reaches all of
+ * them — but the ones a floorplan is usually filled with, in the order you
+ * reach for them while furnishing one.
+ */
 const DOMAIN_FILTERS = [
   "light",
   "switch",
@@ -40,6 +45,8 @@ const DOMAIN_FILTERS = [
   "binary_sensor",
   "cover",
   "media_player",
+  "script",
+  "scene",
 ];
 
 type Row =

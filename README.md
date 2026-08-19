@@ -39,7 +39,10 @@ and your model file never leaves your Home Assistant instance.
   lands on the surface you dropped it on, on the correct level, and the position
   is written back to your YAML rounded to millimetres.
 - **Markers & hotspots** for everything that is not a light: sensors, covers,
-  climate, media players, people — with tap / hold / double-tap actions.
+  climate, media players, people, scripts and scenes — with tap / hold /
+  double-tap actions. Any entity can be placed; the chips above the palette are
+  the domains a floorplan is usually filled with, and the search box reaches
+  the rest.
 - **On-demand rendering.** The render loop idles when nothing changes, which is
   what makes this usable on a wall tablet.
 - **Visual editor.** Full GUI configuration with a live YAML preview; every

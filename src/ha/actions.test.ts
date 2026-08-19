@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { defaultActionFor, hasAction, isToggleable } from '@/ha/actions';
+import { defaultActionFor, hasAction, isToggleable, toggleEntity } from '@/ha/actions';
+import type { HomeAssistant } from '@/types/hass';
 
 /**
  * What a tap does when the config says nothing.
@@ -48,5 +49,40 @@ describe('default actions', () => {
   it('reports which of those count as an action', () => {
     expect(hasAction(defaultActionFor('tap', 'light.hall'))).toBe(true);
     expect(hasAction(defaultActionFor('tap', 'sensor.temperature'))).toBe(false);
+  });
+});
+
+/**
+ * A script is not a state you change, it is an errand you send. Tapping one
+ * should run it — `script.toggle` would stop a running script, which is not
+ * what tapping "Gute Nacht" means.
+ */
+describe('running a script or a scene', () => {
+  function recorder(): { hass: HomeAssistant; calls: Array<[string, string, unknown]> } {
+    const calls: Array<[string, string, unknown]> = [];
+    const hass = {
+      states: {},
+      callService: async (domain: string, service: string, data: unknown) => {
+        calls.push([domain, service, data]);
+      },
+    } as unknown as HomeAssistant;
+    return { hass, calls };
+  }
+
+  it('turns a script on rather than toggling it', async () => {
+    const { hass, calls } = recorder();
+    await toggleEntity(hass, 'script.good_night');
+    expect(calls).toEqual([['script', 'turn_on', {}]]);
+  });
+
+  it('turns a scene on', async () => {
+    const { hass, calls } = recorder();
+    await toggleEntity(hass, 'scene.movie');
+    expect(calls).toEqual([['scene', 'turn_on', {}]]);
+  });
+
+  it('offers both to a tap, since both are things you can operate', () => {
+    expect(defaultActionFor('tap', 'script.good_night')).toEqual({ action: 'toggle' });
+    expect(defaultActionFor('tap', 'scene.movie')).toEqual({ action: 'toggle' });
   });
 });
