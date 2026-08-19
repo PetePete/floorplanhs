@@ -326,14 +326,22 @@ finger, gets the storey it fell into, and its position is rounded to millimetres
 before being written back through `config-changed`. Touch is a first-class path —
 this works with a finger, not just a mouse.
 
-**Where it sticks.** Lovelace saves a card's config only when its *editor*
-asks it to — a card cannot save itself, not even from the edit dialog's own
-preview. So the card hands what you dropped to its editor, which passes it on:
-**⋮ → Edit**, drag in the live preview with the visual editor open (not the
-code editor), **Save**. The `entities:` block in the YAML grows as you drop,
-which is the confirmation that it landed. A drop made anywhere else applies to
-what is on screen and is gone on the next reload; the card says so rather than
-letting you find out later.
+**Where it sticks.** In the dashboard's edit mode, where you placed it. Home
+Assistant gives every view a `lovelace` object that owns the dashboard config
+and can save it, so the card writes the placement into its own YAML directly —
+full-size view, no postage-stamp preview to aim in. Three conditions, and each
+one is deliberate:
+
+| | |
+| --- | --- |
+| Dashboard in **edit mode** | The state that put the placement tools on screen in the first place. |
+| A **storage** dashboard | A YAML dashboard is your file; the card does not rewrite it. Copy the block from the editor's YAML preview instead. |
+| This card **identifiable** in the config | With two identical floorplan cards and nothing to tell them apart, saving would move the lamp on the wrong one. |
+
+The card editor works too — its preview hands each drop to the editor, which is
+the only thing Lovelace takes a config from in that dialog. If none of the
+routes are open, the drop still applies to what is on screen and the card says
+once that it is not saved, rather than letting you find out after a reload.
 
 ---
 

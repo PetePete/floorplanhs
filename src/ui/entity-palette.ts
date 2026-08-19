@@ -715,7 +715,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
               ? this.t("ui.placement.hint_drag", "Drag an entity onto the model to place it.")
               : this.t(
                   "ui.placement.hint_volatile",
-                  "Placements made here are not saved. Open the card with ⋮ → Edit and place them in its preview, then Save.",
+                  "Not saved. Placements are written to the dashboard while it is in edit mode — a YAML dashboard has to be edited by hand.",
                 )}
           </p>
         </div>

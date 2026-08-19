@@ -66,7 +66,8 @@ const EN = {
   /* ------------------------------------------------------------ placement */
   'ui.placement.hint_drag': 'Drag an entity onto the model to place it.',
   'ui.placement.hint_volatile':
-    'Placements made here are not saved. Open the card with ⋮ → Edit, place them in its preview with the visual editor open, then Save.',
+    'Not saved. Placements are written to the dashboard while it is in edit mode — a YAML dashboard has to be edited by hand.',
+  'ui.placement.save_failed': 'Could not save to the dashboard: {error}',
   'ui.placement.hint_drop': 'Release to place {name} here.',
   'ui.placement.hint_invalid': 'Drop on a surface of the house.',
   'ui.placement.hint_move': 'Drag the marker to move it, Esc to cancel.',
@@ -149,7 +150,8 @@ const DE: Table = {
 
   'ui.placement.hint_drag': 'Entität auf das Modell ziehen, um sie zu platzieren.',
   'ui.placement.hint_volatile':
-    'Platzierungen von hier werden nicht gespeichert. Karte über ⋮ → Bearbeiten öffnen, im Vorschaubereich mit geöffnetem visuellem Editor platzieren, dann Speichern.',
+    'Nicht gespeichert. Platzierungen werden geschrieben, solange das Dashboard im Bearbeitungsmodus ist — ein YAML-Dashboard muss von Hand bearbeitet werden.',
+  'ui.placement.save_failed': 'Konnte nicht im Dashboard gespeichert werden: {error}',
   'ui.placement.hint_drop': 'Loslassen, um {name} hier zu platzieren.',
   'ui.placement.hint_invalid': 'Auf einer Fläche des Hauses ablegen.',
   'ui.placement.hint_move': 'Marker ziehen zum Verschieben, Esc zum Abbrechen.',

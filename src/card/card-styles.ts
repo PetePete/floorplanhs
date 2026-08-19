@@ -587,10 +587,11 @@ export const cardStyles = css`
   }
 
   /*
-   * This fills the view only because stretchAncestors has given every wrapper
-   * between us and the dashboard a height to be 100% of. Without that the
-   * question goes unanswered and the card falls back to its content height —
-   * which is a canvas, and a canvas has no size of its own.
+   * The starting point, and all an embed needs. On a dashboard the card
+   * measures the view box and writes a pixel height over this one, because
+   * height: 100% is a question the boxes Home Assistant wraps a card in do not
+   * answer — and the content it would fall back to is a canvas, which has no
+   * size of its own.
    */
   :host([full]) {
     height: 100%;

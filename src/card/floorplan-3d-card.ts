@@ -27,6 +27,13 @@ import type { EditIntent, LoadedModel, ModelLoadProgress } from '@/engine/contra
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
+import {
+  cardMatcher,
+  findLovelaceHost,
+  substituteCard,
+  type CardMatcher,
+  type LovelaceHost,
+} from '@/ha/lovelace-store';
 import { localize } from '@/ha/localize';
 import { domainOf, getEntityName, suggestPlacementLevel } from '@/ha/registry';
 import { readTheme } from '@/ha/theme';
@@ -192,10 +199,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private resizeObserver: ResizeObserver | null = null;
   /** Pending re-measure of the card's box; see `scheduleSizing`. */
   private sizingFrame: number | null = null;
-  /** Pixel height we took for ourselves in a panel view; see `pinPanelHeight`. */
+  /** The config object Lovelace handed us, verbatim; see `saveToDashboard`. */
+  private rawConfig: unknown = null;
+  /** The dashboard config we last submitted, while the save is in flight. */
+  private sentDashboard: unknown = null;
+  /** Saves run one after another; see `saveToDashboard`. */
+  private dashboardWrite: Promise<void> = Promise.resolve();
+  /** Pixel height we took for ourselves in a panel view; see `fitToViewBox`. */
   private pinnedHeight: number | null = null;
-  /** Wrappers we gave a height to, and what they had before; see `stretchAncestors`. */
-  private readonly stretched: Array<{ el: HTMLElement; height: string; align: string }> = [];
   private disposeTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribers: Array<() => void> = [];
   /** Serialised form of the config we last emitted, to ignore our own echo. */
@@ -225,6 +236,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   setConfig(config: unknown): void {
+    // Kept as handed over, not as validated: this is the object to look for in
+    // the dashboard config when a placement has to be written back.
+    this.rawConfig = config;
     let next: Floorplan3dCardConfig;
     try {
       next = validateConfig(config);
@@ -332,7 +346,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.unpinHeight();
-    this.releaseAncestors();
     if (this.sizingFrame !== null) {
       cancelAnimationFrame(this.sizingFrame);
       this.sizingFrame = null;
@@ -355,12 +368,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   protected override updated(changed: PropertyValues): void {
-    if (changed.has('editMode') || changed.has('config')) {
+    {
       // The dashboard decides. There is no switch of our own any more: a card
       // with its own edit mode gives you two of them to keep track of, and the
       // one that matters is the dashboard's — that is the mode in which a change
       // can be saved at all. `authorTools: never` still outranks it.
-      const wanted = this.authorMode !== 'never' && (this.editMode || this.inCardEditor());
+      //
+      // Asked of the dashboard as well as read from the property, because the
+      // property is set by whatever wrapper Home Assistant happens to use and a
+      // card that missed the memo would show no tools in the one mode that can
+      // save. Checked on every update for the same reason: there is no event.
+      const wanted =
+        this.authorMode !== 'never' &&
+        (this.editMode || this.inCardEditor() || findLovelaceHost(this)?.editMode === true);
       if (this.editing !== wanted) {
         this.editing = wanted;
         // Entering it shows the placement tools rather than just enabling them.
@@ -398,56 +418,101 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private applyHostSizing(): void {
     const ui = this.config?.ui ?? {};
     const height = ui.height ?? '520px';
-    const full = this.isPanel || height === '100%' || height === '100vh';
+    const view = this.findViewBox();
+    const full = this.isPanel || view.panel || height === '100%' || height === '100vh';
     this.toggleAttribute('full', full);
     this.toggleAttribute('aspect', !full && Boolean(ui.aspectRatio));
     if (ui.aspectRatio) this.style.setProperty('--fp3d-aspect', ui.aspectRatio.replace(':', ' / '));
     this.style.setProperty('--fp3d-card-height', full ? '100%' : height);
 
     if (!full) {
-      this.releaseAncestors();
       this.unpinHeight();
       return;
     }
-    this.stretchAncestors();
-    this.pinPanelHeight();
+    this.fitToViewBox(view.container);
   }
 
   /**
-   * The safety net under `stretchAncestors`, for a panel view only.
+   * Where the dashboard put us: the view box that owns our height, and whether
+   * this is a panel view at all.
    *
-   * A definite chain is the right fix, but it is only as good as the boxes it
-   * finds: if the dashboard sizes the view with `min-height` rather than
-   * `height`, our `100%` resolves against nothing and the card ends up
-   * content-tall — the half-height card, again. So after stretching, check
-   * whether it actually worked, and if it plainly did not, take the rest of the
-   * viewport in pixels, which no ancestor can refuse.
+   * `isPanel` is a property Home Assistant may or may not set — in a panel view
+   * the card sits inside `hui-card`, which does not pass it on, so the card can
+   * be filling a whole view without ever being told. The DOM around us says it
+   * plainly, so read that instead of waiting to be informed.
    *
-   * This is measurement, which failed on its own before, for one reason: a wrong
-   * reading stuck. Here it cannot. Nothing is pinned until the card is laid out
-   * and demonstrably too short, and once pinned the number is re-checked on
-   * every resize and every re-parenting, so a bad frame is corrected by the next
-   * one instead of becoming the card's height forever.
+   * The walk crosses shadow boundaries: `parentElement` stops dead at the edge
+   * of a shadow root, and Home Assistant puts one right in this chain.
    */
-  private pinPanelHeight(): void {
-    if (!this.isPanel || typeof window === 'undefined') return;
-    const rect = this.getBoundingClientRect();
-    const avail = Math.round(window.innerHeight - rect.top);
-    // Not laid out yet, scrolled out of view, or plain absurd: no reading here
-    // is worth having.
-    if (rect.top < 0 || avail < 240) return;
+  private findViewBox(): { container: HTMLElement | null; panel: boolean } {
+    let node: Node | null = this.parentNode;
+    let container: HTMLElement | null = null;
+    let panel = false;
 
-    if (this.pinnedHeight !== null) {
-      if (Math.abs(avail - this.pinnedHeight) > 8) {
-        this.pinnedHeight = avail;
-        this.style.height = `${avail}px`;
+    for (let hops = 0; node && hops < 14; hops += 1) {
+      const el: Node = node instanceof ShadowRoot ? node.host : node;
+      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
+
+      if (el instanceof HTMLElement) {
+        const tag = el.localName;
+        if (tag === 'body' || tag === 'html') break;
+        if (tag === 'hui-panel-view') panel = true;
+        // `hui-view-container` is the box the dashboard sizes itself, so it is
+        // the one worth measuring; the views inside it are the fallback for a
+        // layout that does not have one.
+        if (tag === 'hui-view-container') {
+          container = el;
+          break;
+        }
+        if (!container && (tag === 'hui-panel-view' || tag === 'hui-view')) container = el;
       }
+      node = next === node ? null : next;
+    }
+    return { container, panel };
+  }
+
+  /**
+   * Take the height from the view box and be done with it.
+   *
+   * Everything else was tried first: `height: 100%` (a question no ancestor
+   * answered), then giving each wrapper a height so it would (defeated by a view
+   * sized with `min-height`), then the viewport as a fallback. The box the
+   * dashboard sizes is right there and knows its own height — measure from our
+   * top edge to its bottom and take that, in pixels, which nothing above can
+   * refuse.
+   *
+   * Measurement alone failed before because a wrong reading stuck. Here it
+   * cannot: a reading is only taken once the card is laid out, and it is redone
+   * on every resize, every re-parenting and every render, so a premature frame
+   * is corrected by the next one instead of becoming the card's height forever.
+   */
+  private fitToViewBox(container: HTMLElement | null): void {
+    if (typeof window === 'undefined') return;
+    // No dashboard around us — a dev harness, a storybook, an embed. Whoever
+    // put the card there sized their own box; `height: 100%` from the stylesheet
+    // is the right answer and a viewport measurement is not.
+    if (!container && !this.isPanel) {
+      this.unpinHeight();
       return;
     }
-    if (avail - Math.round(rect.height) > 24) {
-      this.pinnedHeight = avail;
-      this.style.height = `${avail}px`;
+    const top = this.getBoundingClientRect().top;
+    let bottom = window.innerHeight;
+    if (container) {
+      const box = container.getBoundingClientRect();
+      const pad = Number.parseFloat(getComputedStyle(container).paddingBottom) || 0;
+      if (box.height > 0) bottom = Math.min(bottom, box.bottom - pad);
     }
+
+    const avail = Math.round(bottom - top);
+    // Not laid out yet, or scrolled out of view: no number here is worth having,
+    // and the next pass will have a better one.
+    if (!Number.isFinite(avail) || avail < 240) return;
+    // A tolerance, not thrift: our own height feeds back into the observer that
+    // called us, and a one-pixel disagreement must not become a loop.
+    if (this.pinnedHeight !== null && Math.abs(avail - this.pinnedHeight) <= 4) return;
+
+    this.pinnedHeight = avail;
+    this.style.height = `${avail}px`;
   }
 
   private unpinHeight(): void {
@@ -457,79 +522,17 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   /**
-   * Give the wrappers between us and the view a height, so ours can be 100%.
-   *
-   * `height: 100%` is a question — *100% of what?* — and it goes unanswered when
-   * an ancestor is content-sized, which is the case for at least one of the
-   * boxes Home Assistant wraps a card in. Three releases were spent trying to
-   * answer it by measurement instead: read the card's top edge, take the rest of
-   * the viewport. Measurement has a failure mode that is impossible to close
-   * from inside — the number is only correct once the dashboard has finished
-   * moving the card, and there is no event for "finished". Every wrong reading
-   * stuck, because a wrong height is still a height.
-   *
-   * So the chain is made definite instead. It is somebody else's DOM, so this
-   * stays inside a panel view, walks at most a handful of levels, stops at the
-   * view itself, and remembers exactly what it set so it can put it all back.
-   */
-  private stretchAncestors(): void {
-    if (this.stretched.length > 0) return;
-
-    // Up through shadow boundaries, not just light DOM. `parentElement` stops
-    // dead at the edge of a shadow root, and Home Assistant puts one in the
-    // middle of exactly this chain: a panel view renders `hui-card` inside its
-    // own shadow root, so walking with `parentElement` reached that one card
-    // wrapper and gave up — the boxes that actually needed a height were above
-    // the boundary. That is why this was still broken after being "fixed".
-    let node: Node | null = this.parentNode;
-    for (let depth = 0; node && depth < 10; depth += 1) {
-      const el: Node = node instanceof ShadowRoot ? node.host : node;
-      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
-
-      if (el instanceof HTMLElement) {
-        const tag = el.localName;
-        if (tag === 'body' || tag === 'html') break;
-
-        this.stretched.push({ el, height: el.style.height, align: el.style.alignSelf });
-        el.style.height = '100%';
-        // A card in a flex or grid parent is stretched by the parent rather than
-        // by its own height; setting both covers either kind of wrapper.
-        el.style.alignSelf = 'stretch';
-
-        // The view is the box the dashboard sizes itself. Above it is none of
-        // our business.
-        if (tag.endsWith('-view') && tag.startsWith('hui-')) break;
-      }
-      node = next === node ? null : next;
-    }
-  }
-
-  /** Hand every wrapper back exactly what it had. */
-  private releaseAncestors(): void {
-    for (const entry of this.stretched.splice(0)) {
-      entry.el.style.height = entry.height;
-      entry.el.style.alignSelf = entry.align;
-    }
-  }
-
-  /**
    * Re-apply the sizing once the dashboard has finished moving things around.
    *
    * Home Assistant re-parents cards: a view switching layout, an error card
-   * being replaced by the real one. Each of those hands us a *new* set of
-   * wrappers, and the ones we stretched are no longer the ones above us.
+   * being replaced by the real one. Each of those puts us in a different box,
+   * and the height we measured belongs to the old one.
    */
   private scheduleSizing(): void {
     if (this.sizingFrame !== null || typeof requestAnimationFrame !== 'function') return;
     this.sizingFrame = requestAnimationFrame(() => {
       this.sizingFrame = requestAnimationFrame(() => {
         this.sizingFrame = null;
-        // Re-parented since last time? Then those wrappers are somebody else's
-        // problem now and the new ones need the same treatment.
-        if (this.stretched.some((entry) => !entry.el.contains(this))) {
-          this.releaseAncestors();
-          this.unpinHeight();
-        }
         this.applyHostSizing();
         this.viewer?.resize();
       });
@@ -558,10 +561,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.viewer?.resize();
     });
     this.resizeObserver.observe(this);
-    // The card's top edge moves when its *wrapper* changes even if the card
-    // itself does not — a view switching layout, a sidebar folding away. The
-    // parent is what notices that.
-    if (this.parentElement) this.resizeObserver.observe(this.parentElement);
+    // The card's top edge moves, and the box it fills changes size, when the
+    // *view* changes even though the card does not — a sidebar folding away, a
+    // header appearing. `parentElement` is null across a shadow boundary, which
+    // is exactly where Home Assistant puts us, so watch the view box instead.
+    const { container } = this.findViewBox();
+    if (container) this.resizeObserver.observe(container);
+    else if (this.parentElement) this.resizeObserver.observe(this.parentElement);
   }
 
   /* ---------------------------------------------------------- author mode */
@@ -909,6 +915,68 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     if (label) this.offerUndo(intent, label, current);
   }
 
+  /**
+   * Write the placement into the dashboard config, from the dashboard.
+   *
+   * Home Assistant hands each view a `lovelace` object that owns the config and
+   * can save it, which is how this is possible at all. Three things gate it, and
+   * all three are the point rather than caution for its own sake: the dashboard
+   * must be in edit mode (the same state that put the placement tools on screen),
+   * it must be a storage dashboard (a YAML one is the user's file, not ours to
+   * rewrite), and this card must be findable in the config beyond doubt — with
+   * two identical cards and nothing to tell them apart, saving would move a lamp
+   * on the wrong one.
+   *
+   * Returns whether the save was started; a rejection later is reported as a
+   * toast, because by then the placement is on screen and the user must know it
+   * did not stick.
+   */
+  private saveToDashboard(next: Floorplan3dCardConfig): boolean {
+    const target = this.dashboardTarget();
+    if (!target) return false;
+
+    // Two lamps in a row: `saveConfig` is a round trip, and until it comes back
+    // the dashboard still holds the config from before the first one — in which
+    // this card no longer matches. So fall back to what we last sent, and the
+    // second placement builds on the first instead of being dropped.
+    let updated = substituteCard(target.host.config, target.matches, next);
+    if (updated === null && this.sentDashboard !== null) {
+      updated = substituteCard(this.sentDashboard, target.matches, next);
+    }
+    if (updated === null) return false;
+
+    // Ours now, so the next placement finds this one and not the config we were
+    // originally handed.
+    this.rawConfig = next;
+    this.sentDashboard = updated;
+    // Chained rather than fired in parallel: two saves racing means the loser
+    // silently wins the file.
+    this.dashboardWrite = this.dashboardWrite
+      .then(() => target.host.saveConfig(updated))
+      .catch((err: unknown) => {
+        this.hud?.toast({
+          message: this.t('ui.placement.save_failed', 'Could not save to the dashboard: {error}', {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        });
+      });
+    return true;
+  }
+
+  /** The dashboard, if it is in a state where this card may write to it. */
+  private dashboardTarget(): { host: LovelaceHost; matches: CardMatcher } | null {
+    const host = findLovelaceHost(this);
+    if (!host || host.editMode !== true) return null;
+    if (host.mode !== undefined && host.mode !== 'storage') return null;
+    const matches = cardMatcher(host.config, this.rawConfig, CARD_TYPE);
+    return matches ? { host, matches } : null;
+  }
+
+  /** Whether a change made here survives a reload, by whichever route. */
+  private configWritable(): boolean {
+    return this.canPersistConfig() || this.dashboardTarget() !== null;
+  }
+
   private isDuplicateAdd(entityId: string): boolean {
     const at = this.recentAdds.get(entityId);
     const now = Date.now();
@@ -927,13 +995,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // the config dirty in the editor and rewrites the user's YAML for nothing.
     if (serialised === this.lastEmitted) return;
     this.lastEmitted = serialised;
-    // Outside the card editor the event is dropped on the floor anyway, and
-    // firing it still costs a full normalise plus a chrome re-render — which a
-    // slider drag would do once per frame.
     // A host that declares itself persistent (the dev harness) listens to the
     // card directly and needs no bridge.
     let adopted = this.configPersistence === 'available';
-    if (this.canPersistConfig()) {
+    // The dashboard's own edit mode is where placing actually happens — the
+    // card editor's preview is a postage stamp to work in. There the card
+    // writes to the dashboard config itself.
+    if (!adopted) adopted = this.saveToDashboard(normalised);
+    if (!adopted && this.canPersistConfig()) {
       fireEvent(this, 'config-changed', { config: normalised });
       // The real channel. Lovelace's edit dialog listens to the *editor element*
       // for `config-changed` and ignores the card in its preview entirely, so the
@@ -945,15 +1014,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       adopted = adopted || detail.adopted;
     }
     if (!adopted && !this.warnedVolatile) {
-      // On a live dashboard, or with the dialog switched to its YAML editor, the
-      // change applies to what is on screen and is gone on the next reload —
-      // saying so once beats letting someone place a houseful of lamps and lose
-      // them.
+      // Nobody took it: not a storage dashboard, not in edit mode, or this card
+      // could not be told apart from another of its kind. The change applies to
+      // what is on screen and is gone on the next reload — saying so once beats
+      // letting someone place a houseful of lamps and lose them.
       this.warnedVolatile = true;
       this.hud?.toast({
         message: this.t(
           'ui.placement.hint_volatile',
-          'Placements made here are not saved. Open the card with ⋮ → Edit, place them in its preview with the visual editor open, then Save.',
+          'Not saved. Placements are written to the dashboard while it is in edit mode — a YAML dashboard has to be edited by hand.',
         ),
       });
     }
@@ -1395,7 +1464,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.hud?.toast({
       message: this.t(
         'ui.preset.saved_local',
-        'Saved "{name}" in this browser — Lovelace only accepts views from the card editor.',
+        'Saved "{name}" in this browser — put the dashboard in edit mode to keep views in the card itself.',
         { name: preset.name },
       ),
       duration: 12000,
@@ -1585,7 +1654,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     preset.section = JSON.parse(JSON.stringify(this.section)) as SectionState;
     preset.visibleLevels = this.visibleLevels;
 
-    if (!this.canPersistConfig()) {
+    if (!this.configWritable()) {
       this.saveLocalPreset(preset);
       return;
     }
@@ -1756,7 +1825,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .dark=${this.dark}
                 .size=${this.layout}
                 .placed=${config?.entities ?? []}
-                .canPersist=${this.canPersistConfig()}
+                .canPersist=${this.configWritable()}
                 @fp3d-palette-close=${() => {
                   this.panel = 'none';
                 }}

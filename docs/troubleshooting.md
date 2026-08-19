@@ -227,19 +227,26 @@ pseudo-room (`site/roof/...`) so isolating a level handles it specially.
 
 ## Placed entities are gone after a reload
 
-A card cannot save its own configuration — Lovelace takes that only from a
-card's **editor**. So placements have to be made where the editor is listening:
-**⋮ → Edit**, then drag in the live preview **with the visual editor open**, and
-**Save**. Watch the `entities:` list in the YAML preview grow as you drop; if it
-does not, nothing is being saved.
+Placements are saved while the **dashboard is in edit mode** — that is the
+normal way to do it, at full size. The card writes into its own YAML through the
+dashboard's `lovelace` object, so the entity is in the config the moment you let
+go of it.
 
-Two ways to end up with nothing saved:
+If a placement is not saved, it is one of these:
 
-- Placing on the dashboard itself, in edit mode. The card shows the position on
-  screen and warns once that it is not saved.
-- Placing in the edit dialog while it is switched to the **code editor**. The
-  visual editor is not in the DOM then, so there is nothing to hand the drop to;
-  the same warning appears.
+- **The dashboard is not in edit mode.** Without it there is nothing to write
+  through. The placement tools normally appear with edit mode, so this shows up
+  mainly with `ui.authorTools: always`.
+- **It is a YAML dashboard.** Those are your files and the card will not rewrite
+  them. Place the entity, then copy the `entities:` block out of the card
+  editor's YAML preview into the file.
+- **Two identical floorplan cards.** If the card cannot tell which one in the
+  config is itself, it saves nothing rather than editing the wrong one. Give
+  them different titles, or a different `model.url`, and it can.
+
+The card editor is the other route: drop in its preview with the **visual**
+editor open (not the code editor) and Save. In every unsaved case the card warns
+once, so the placement on screen is never quietly lost.
 
 ---
 
