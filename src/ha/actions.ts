@@ -58,14 +58,22 @@ export function hasAction(config?: ActionConfig): boolean {
 }
 
 /**
- * What happens when nothing is configured. Matches HA's own cards: things you
- * can operate toggle, things you can only read open their dialog.
+ * What happens when nothing is configured.
+ *
+ * Things you can operate toggle. Things you can only read do **nothing** on a
+ * tap — a motion sensor is not a control, and opening its dialog puts the
+ * device's own settings one further tap away, which is how a sensor ends up
+ * disabled by someone who only meant to look at the floorplan. Hold still opens
+ * the dialog, so nothing is out of reach; it is simply not the gesture you make
+ * by brushing a wall tablet.
+ *
+ * `tap_action: more-info` restores the old behaviour per entity.
  */
 export function defaultActionFor(kind: ActionKind, entityId: string | undefined): ActionConfig {
-  if (!entityId) return { action: kind === 'tap' ? 'none' : 'none' };
+  if (!entityId) return { action: 'none' };
   if (kind === 'hold') return { action: 'more-info' };
   if (kind === 'double-tap') return { action: 'none' };
-  return isToggleable(entityId) ? { action: 'toggle' } : { action: 'more-info' };
+  return isToggleable(entityId) ? { action: 'toggle' } : { action: 'none' };
 }
 
 function selectAction(config: ActionableConfig, kind: ActionKind): ActionConfig {

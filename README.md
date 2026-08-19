@@ -515,8 +515,8 @@ tour:
 | `role` | see below | derived from the domain | Forces the visual treatment. |
 | `light` | [`LightVisualConfig`](#light-options) | — | Only meaningful for the `light` role. |
 | `marker` | [`MarkerConfig`](#marker-options) | — | Marker appearance. |
-| `tap_action` | `ActionConfig` | `more-info` | What a tap does. |
-| `hold_action` | `ActionConfig` | `more-info` | What a long press does. |
+| `tap_action` | `ActionConfig` | `toggle`, or nothing | What a tap does. Entities that can be operated (lights, switches, covers, …) toggle; entities you can only read do nothing, because a floorplan on a wall gets touched by people walking past and a sensor is not a control. Set `more-info` to open the dialog on tap. |
+| `hold_action` | `ActionConfig` | `more-info` | What a long press does. Opens the dialog for anything, so nothing is out of reach. |
 | `double_tap_action` | `ActionConfig` | none | What a double tap does. |
 | `bindNode` | string | — | glTF node tinted/animated by this entity's state. |
 
