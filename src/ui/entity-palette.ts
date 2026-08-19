@@ -123,19 +123,18 @@ export class Fp3dEntityPalette extends FpBaseElement {
         padding: 0;
       }
 
+      /*
+       * Wrapped, not scrolled sideways. A row that scrolls horizontally with no
+       * scrollbar can be dragged with a finger and not with a mouse — the wheel
+       * scrolls the page, and the filters past the right edge were simply out of
+       * reach. Two short lines of chips cost less than a control you cannot use.
+       */
       .filters {
         display: flex;
         flex: none;
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 5px;
         padding: 2px 12px 8px;
-        overflow-x: auto;
-        overscroll-behavior-x: contain;
-        scrollbar-width: none;
-      }
-
-      .filters::-webkit-scrollbar {
-        display: none;
       }
 
       .filters .chip {
@@ -730,7 +729,7 @@ export class Fp3dEntityPalette extends FpBaseElement {
           </div>
 
           <div
-            class="filters scroll-x"
+            class="filters"
             role="group"
             aria-label=${this.t("ui.placement.filter", "Filter")}
           >

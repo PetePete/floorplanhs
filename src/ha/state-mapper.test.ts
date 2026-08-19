@@ -559,9 +559,10 @@ describe('icon for an overridden role', () => {
   it('still shows the state within that role', () => {
     const lamp = placed('switch.kettle', { role: 'light' });
     expect(iconFor('switch.kettle', attrs, lamp, undefined, 'off')).toBe('mdi:lightbulb-off');
-    expect(iconFor('cover.hatch', {}, placed('cover.hatch', { role: 'cover' }), undefined, 'open')).toBe(
-      'mdi:blinds-open',
-    );
+    // A switch driving a blind: the role overrides the domain, so it decides.
+    const blind = placed('switch.hatch', { role: 'cover' });
+    expect(iconFor('switch.hatch', {}, blind, undefined, 'on')).toBe('mdi:blinds-open');
+    expect(iconFor('switch.hatch', {}, blind, undefined, 'off')).toBe('mdi:blinds-closed');
   });
 
   it('leaves the entity its own icon when no role was assigned', () => {
@@ -580,6 +581,26 @@ describe('icon for an overridden role', () => {
   it('gives the plain marker role a pin', () => {
     expect(iconFor('sensor.humidity', attrs, placed('sensor.humidity', { role: 'marker' }))).toBe(
       'mdi:map-marker',
+    );
+  });
+});
+
+/**
+ * A role that repeats the domain says nothing new, so it must not shout down
+ * what the entity already tells us about itself.
+ */
+describe('a role that matches the domain', () => {
+  it('leaves a television its own icon', () => {
+    const tv = placed('media_player.living_room', { role: 'media_player' });
+    expect(iconFor('media_player.living_room', { device_class: 'tv' }, tv, undefined, 'on')).toBe(
+      'mdi:television',
+    );
+  });
+
+  it('still overrides where the role differs from the domain', () => {
+    const lamp = placed('switch.kettle', { role: 'light' });
+    expect(iconFor('switch.kettle', { device_class: 'outlet' }, lamp, undefined, 'on')).toBe(
+      'mdi:lightbulb',
     );
   });
 });

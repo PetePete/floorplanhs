@@ -554,7 +554,11 @@ export function iconFor(
   // sensor you want read as a marker — and a marker that kept the old symbol
   // gave no sign the override had taken. An explicit `marker.icon` above still
   // wins, because that is the more specific statement of the two.
-  if (placed?.role) {
+  // Only a role that *overrides* the domain, and that is the whole point: it is
+  // how you say "this switch drives a lamp". Where the role merely repeats the
+  // domain it must not shout down what follows — a `media_player` with a device
+  // class of `tv` is a television, and the role would have made it a speaker.
+  if (placed?.role && placed.role !== (ROLE_BY_DOMAIN[domainOf(entityId)] ?? 'marker')) {
     const pair = ROLE_ICONS[placed.role];
     if (pair) return isActiveState(entityId, state ?? '', attrs) ? pair[1] : pair[0];
   }
