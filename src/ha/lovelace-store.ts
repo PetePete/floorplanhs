@@ -12,6 +12,8 @@
  * never saves by itself — the caller decides that, and only in edit mode.
  */
 
+import { ancestorsAcrossShadow } from '@/util/dom-chain';
+
 export interface LovelaceHost {
   /** The whole dashboard config, views and all. */
   config: unknown;
@@ -36,16 +38,10 @@ function isLovelaceHost(value: unknown): value is LovelaceHost {
  * `hui-panel-view` are the elements that hold the object.
  */
 export function findLovelaceHost(start: Node): LovelaceHost | null {
-  let node: Node | null = start;
-  for (let hops = 0; node && hops < 16; hops += 1) {
-    const el: Node = node instanceof ShadowRoot ? node.host : node;
-    const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
-    if (el instanceof HTMLElement) {
-      if (el.localName === 'body' || el.localName === 'html') break;
-      const candidate = (el as HTMLElement & { lovelace?: unknown }).lovelace;
-      if (isLovelaceHost(candidate)) return candidate;
-    }
-    node = next === node ? null : next;
+  for (const el of ancestorsAcrossShadow(start)) {
+    if (el.localName === 'body' || el.localName === 'html') break;
+    const candidate = (el as HTMLElement & { lovelace?: unknown }).lovelace;
+    if (isLovelaceHost(candidate)) return candidate;
   }
   return null;
 }

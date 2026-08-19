@@ -60,6 +60,7 @@ import { vRound } from '@/util/math';
 import type { CardError } from '@/ui/error-panel';
 import { recallView, rememberView } from '@/card/view-memory';
 import { configKey } from '@/util/config-key';
+import { ancestorsAcrossShadow } from '@/util/dom-chain';
 import type { Fp3dHud } from '@/ui/hud';
 import type { UiSize } from '@/ui/base-element';
 import type { ToolbarAction } from '@/ui/toolbar';
@@ -133,14 +134,10 @@ function hash32(input: string): string {
  * signal available to a custom card.
  */
 function hasLovelaceEditorAncestor(start: Node): boolean {
-  let node: Node | null = start;
-  for (let hops = 0; node && hops < 60; hops += 1) {
-    const name = (node as Element).localName;
-    if (typeof name === 'string') {
-      if (name === 'hui-card-preview' || name === 'hui-dialog-edit-card') return true;
-      if (name.startsWith('hui-') && name.includes('editor')) return true;
-    }
-    node = node.parentNode ?? (node as ShadowRoot).host ?? null;
+  for (const el of ancestorsAcrossShadow(start, 60)) {
+    const name = el.localName;
+    if (name === 'hui-card-preview' || name === 'hui-dialog-edit-card') return true;
+    if (name.startsWith('hui-') && name.includes('editor')) return true;
   }
   return false;
 }
@@ -340,6 +337,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    // Here, not in `teardownViewer`: disposal is deferred by DISPOSE_GRACE_MS
+    // because Home Assistant re-parents cards, so by the time it runs the card
+    // that replaces us has already mounted and looked for this.
+    this.rememberView();
     window.removeEventListener('fullscreenchange', this.onFullscreenChange);
     window.removeEventListener('resize', this.onWindowResize);
     this.removeEventListener(PRESET_EVENT, this.onPresetEvent as EventListener);
@@ -447,28 +448,21 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * of a shadow root, and Home Assistant puts one right in this chain.
    */
   private findViewBox(): { container: HTMLElement | null; panel: boolean } {
-    let node: Node | null = this.parentNode;
     let container: HTMLElement | null = null;
     let panel = false;
 
-    for (let hops = 0; node && hops < 14; hops += 1) {
-      const el: Node = node instanceof ShadowRoot ? node.host : node;
-      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
-
-      if (el instanceof HTMLElement) {
-        const tag = el.localName;
-        if (tag === 'body' || tag === 'html') break;
-        if (tag === 'hui-panel-view') panel = true;
-        // `hui-view-container` is the box the dashboard sizes itself, so it is
-        // the one worth measuring; the views inside it are the fallback for a
-        // layout that does not have one.
-        if (tag === 'hui-view-container') {
-          container = el;
-          break;
-        }
-        if (!container && (tag === 'hui-panel-view' || tag === 'hui-view')) container = el;
+    for (const el of ancestorsAcrossShadow(this.parentNode ?? this)) {
+      const tag = el.localName;
+      if (tag === 'body' || tag === 'html') break;
+      if (tag === 'hui-panel-view') panel = true;
+      // `hui-view-container` is the box the dashboard sizes itself, so it is the
+      // one worth measuring; the views inside it are the fallback for a layout
+      // that does not have one.
+      if (tag === 'hui-view-container') {
+        container = el;
+        break;
       }
-      node = next === node ? null : next;
+      if (!container && (tag === 'hui-panel-view' || tag === 'hui-view')) container = el;
     }
     return { container, panel };
   }
@@ -515,6 +509,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     this.pinnedHeight = avail;
     this.style.height = `${avail}px`;
+    // `showFps` is the card's debug switch, and a height that comes out wrong is
+    // impossible to reason about from a screenshot. These four numbers say which
+    // step got it wrong.
+    if (this.config?.ui?.showFps === true) {
+      console.info(
+        '[floorplan-3d] height %dpx = %s bottom %d − card top %d − chrome below %d',
+        avail,
+        container ? container.localName : 'viewport',
+        Math.round(bottom),
+        Math.round(top),
+        Math.round(this.spaceBelow(container)),
+      );
+    }
   }
 
   /**
@@ -529,29 +536,21 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * next without knowing what it is.
    */
   private spaceBelow(container: HTMLElement | null): number {
-    let extra = 0;
-    let node: Node | null = this;
-
-    for (let hops = 0; node && hops < 14; hops += 1) {
-      const el: Node = node instanceof ShadowRoot ? node.host : node;
-      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
-      if (el instanceof HTMLElement) {
-        if (el === container) break;
-        for (let sibling = el.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
-          const box = sibling.getBoundingClientRect();
-          if (box.height > 0) extra += box.height;
-        }
-        const parent = el.parentElement;
-        if (parent && parent !== container) {
-          const style = getComputedStyle(parent);
-          extra +=
-            (Number.parseFloat(style.paddingBottom) || 0) +
-            (Number.parseFloat(style.borderBottomWidth) || 0);
-        }
-      }
-      node = next === node ? null : next;
+    // How far each wrapper reaches past our own bottom edge, rather than a sum of
+    // what we can see: edit mode's toolbar is inside `hui-card-options`' shadow
+    // root, so it is not a sibling of the card and no walk of the light DOM finds
+    // it. A wrapper that is taller than its card, though, is taller by exactly
+    // that much — and this holds for whatever the dashboard adds next.
+    //
+    // Stable to measure while our own height is applied: these wrappers are
+    // content-sized, so the overhang is the chrome's height either way.
+    const own = this.getBoundingClientRect().bottom;
+    let overhang = 0;
+    for (const el of ancestorsAcrossShadow(this)) {
+      if (el === container) break;
+      overhang = Math.max(overhang, el.getBoundingClientRect().bottom - own);
     }
-    return extra;
+    return overhang;
   }
 
   private unpinHeight(): void {
@@ -609,15 +608,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // null across a shadow boundary, which is where Home Assistant puts us, so
     // the walk crosses those.
     const { container } = this.findViewBox();
-    let node: Node | null = this.parentNode;
-    for (let hops = 0; node && hops < 14; hops += 1) {
-      const el: Node = node instanceof ShadowRoot ? node.host : node;
-      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
-      if (el instanceof HTMLElement) {
-        this.resizeObserver.observe(el);
-        if (el === container) break;
-      }
-      node = next === node ? null : next;
+    for (const el of ancestorsAcrossShadow(this.parentNode ?? this)) {
+      this.resizeObserver.observe(el);
+      if (el === container) break;
     }
   }
 
