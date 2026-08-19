@@ -605,7 +605,7 @@ tour:
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |
 | `showZoomSlider` | boolean | `true` | Vertical zoom control under the cube. |
 | `levelPresets` | boolean | `true` | Add one generated isometric view per detected storey to the view bar. They follow the model, so they are not editable and never written to the config; saved views come first. |
-| `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. The chevron in its corner folds it down to a single chip showing where you are, for when it is over the part of the house you are looking at; the fold lasts the session, not the config. |
+| `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. The chevron in its corner folds it down to a single chip showing where you are, for when it is over the part of the house you are looking at. On a narrow card it starts folded, since the panel is a third of a phone screen; unfold it once and that choice stands. The fold lasts the session, not the config. |
 | `showSectionControls` | boolean | `false` | Cross-section controls. Shown anyway while author tools are visible. |
 | `showFps` | boolean | `false` | FPS counter (diagnostics). |
 | `theme` | `auto` \| `light` \| `dark` | `auto` | Which way round the card's own chrome and line work are drawn. `auto` follows Home Assistant; the other two overrule it, for a drawing that has to read on a wall tablet in daylight whatever theme the dashboard is wearing. Entity colours still come from the dashboard's palette. |

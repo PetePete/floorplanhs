@@ -23,6 +23,8 @@ export interface ViewMemory {
   /** Navigator folded away. Folding it to work, then having it pop back on
    *  every placement, is the annoyance it was folded away for. */
   collapsed: boolean;
+  /** Whether that was the user's doing rather than the card's width rule. */
+  collapseChosen: boolean;
   at: number;
 }
 

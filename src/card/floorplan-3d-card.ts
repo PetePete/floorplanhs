@@ -200,6 +200,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * moment" is not a property of the dashboard.
    */
   @state() private levelsCollapsed = false;
+  /**
+   * Whether the fold state is the user's doing.
+   *
+   * Until it is, the card decides by width: on a phone the navigator covers a
+   * quarter of the house, and a list of places to go is worth less than seeing
+   * where you are. Once folded or unfolded by hand, that choice stands however
+   * the card is resized.
+   */
+  private collapseChosen = false;
 
   @query('.canvas-host') private canvasHost?: HTMLDivElement;
   @query('.card') private cardRoot?: HTMLDivElement;
@@ -419,7 +428,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         if (this.panel === 'palette') this.panel = 'none';
       }
     }
-    if (changed.has('layout')) this.setAttribute('data-layout', this.layout);
+    if (changed.has('layout')) {
+      this.setAttribute('data-layout', this.layout);
+      // Anything but a wide card: the panel is around 200 px, which is a third
+      // of a phone in portrait and most of what you came to look at.
+      if (!this.collapseChosen) this.levelsCollapsed = this.layout !== 'wide';
+    }
     // Every update, not just when `config` or `isPanel` changed. Home Assistant
     // sets `isPanel` on its own schedule — sometimes before the module that
     // defines this element has even loaded — and a card that missed the memo
@@ -782,6 +796,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         explode: viewer.explode,
         activePreset: this.activePreset,
         collapsed: this.levelsCollapsed,
+        collapseChosen: this.collapseChosen,
       });
     } catch {
       // Camera subsystem already gone; nothing worth keeping.
@@ -800,6 +815,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     }
     this.visibleLevels = memory.visibleLevels;
     this.levelsCollapsed = memory.collapsed;
+    this.collapseChosen = memory.collapseChosen;
     viewer.setVisibleLevels(memory.visibleLevels);
     if (memory.explode > 0) {
       viewer.setExplode(memory.explode, false);
@@ -2063,6 +2079,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .collapsed=${this.levelsCollapsed}
                 @fp3d-panel-collapse=${(event: CustomEvent<{ collapsed: boolean }>) => {
                   this.levelsCollapsed = event.detail.collapsed;
+                  this.collapseChosen = true;
                 }}
                 @fp3d-preset-select=${(event: CustomEvent<{ presetId: string }>) =>
                   this.onPresetSelect(event.detail.presetId)}
