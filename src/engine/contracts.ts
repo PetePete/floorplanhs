@@ -302,6 +302,9 @@ export type EditIntent =
   | { kind: 'add-preset'; preset: CameraPreset }
   | { kind: 'update-preset'; presetId: string; patch: Partial<CameraPreset> }
   | { kind: 'remove-preset'; presetId: string }
+  /** Entities that live in the panel rather than on the plan. */
+  | { kind: 'add-shortcut'; entityId: string }
+  | { kind: 'remove-shortcut'; entityId: string }
   | { kind: 'set-section'; section: SectionState };
 
 /** Emitted by the viewer; the card turns these into `config-changed`. */

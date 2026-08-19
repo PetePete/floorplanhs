@@ -23,7 +23,13 @@ import { classMap } from 'lit/directives/class-map.js';
 
 import { cardStyles, themeTokens } from '@/card/card-styles';
 import { ensureChakraPetch } from '@/ui/fonts/chakra-petch';
-import type { EditIntent, LoadedModel, ModelLoadProgress } from '@/engine/contracts';
+import type {
+  EditIntent,
+  EntityVisualState,
+  LoadedModel,
+  ModelLoadProgress,
+} from '@/engine/contracts';
+import { toEntityVisual } from '@/ha/state-mapper';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
@@ -79,6 +85,7 @@ import '@/ui/loading-overlay';
 import '@/ui/toolbar';
 import '@/ui/zoom-slider';
 import '@/ui/level-selector';
+import '@/ui/action-dock';
 import '@/ui/section-panel';
 import '@/ui/entity-palette';
 import '@/ui/entity-inspector';
@@ -1018,6 +1025,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     const next: Floorplan3dCardConfig = JSON.parse(JSON.stringify(current));
     const entities = [...(next.entities ?? [])];
     const presets = [...(next.presets ?? [])];
+    const shortcuts = [...(next.shortcuts ?? [])];
     let label: string | null = null;
 
     switch (intent.kind) {
@@ -1063,6 +1071,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         next.entities = entities.filter((entry) => entry.entity !== intent.entityId);
         if (next.entities.length === entities.length) return;
         if (this.selectedEntity === intent.entityId) this.selectedEntity = null;
+        label = this.entityLabel(intent.entityId);
+        break;
+      }
+      case 'add-shortcut': {
+        if (shortcuts.some((entry) => entry.entity === intent.entityId)) return;
+        shortcuts.push({ entity: intent.entityId });
+        next.shortcuts = shortcuts;
+        label = this.entityLabel(intent.entityId);
+        break;
+      }
+      case 'remove-shortcut': {
+        next.shortcuts = shortcuts.filter((entry) => entry.entity !== intent.entityId);
+        if (next.shortcuts.length === shortcuts.length) return;
         label = this.entityLabel(intent.entityId);
         break;
       }
@@ -1236,6 +1257,34 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       actionLabel: this.t('ui.action.undo', 'Undo'),
       action: () => this.commitConfig(previous, { reload: true }),
     });
+  }
+
+  /**
+   * What the docked entities are doing, keyed by id.
+   *
+   * The same mapping the markers use, so a running script reads the same in the
+   * panel as it would on the plan. Rebuilt per render: a handful of entities,
+   * and `hass` changes under us constantly.
+   */
+  private shortcutVisuals(): Record<string, EntityVisualState> {
+    const hass = this._hass;
+    const items = this.config?.shortcuts ?? [];
+    if (!hass || items.length === 0) return {};
+    const out: Record<string, EntityVisualState> = {};
+    for (const item of items) {
+      const state = hass.states?.[item.entity];
+      if (!state) continue;
+      out[item.entity] = toEntityVisual(state, { entity: item.entity, position: [0, 0, 0] }, hass);
+    }
+    return out;
+  }
+
+  /** A docked entity is operated, never placed: tap runs it, hold explains it. */
+  private runShortcut(entityId: string): void {
+    const hass = this._hass;
+    if (!hass) return;
+    const item = this.config?.shortcuts?.find((entry) => entry.entity === entityId);
+    void handleAction(this, hass, { entity: entityId, ...(item ?? {}) }, 'tap');
   }
 
   private t(key: string, fallback: string, params?: Record<string, string | number>): string {
@@ -2098,6 +2147,25 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                         false,
                       )}
               ></fp3d-level-selector>`
+            : nothing}
+          ${showLevels && !(showPalette && this.layout === 'narrow')
+            ? html`<fp3d-action-dock
+                data-hass
+                .dark=${this.dark}
+                .size=${this.layout}
+                .items=${config?.shortcuts ?? []}
+                .visuals=${this.shortcutVisuals()}
+                .editMode=${this.editing}
+                @fp3d-shortcut-add=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.applyIntent({ kind: 'add-shortcut', entityId: event.detail.entityId }, false)}
+                @fp3d-shortcut-remove=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.applyIntent(
+                    { kind: 'remove-shortcut', entityId: event.detail.entityId },
+                    false,
+                  )}
+                @fp3d-shortcut-run=${(event: CustomEvent<{ entityId: string }>) =>
+                  this.runShortcut(event.detail.entityId)}
+              ></fp3d-action-dock>`
             : nothing}
         </div>
         ${this.renderRightSheet(selected)}

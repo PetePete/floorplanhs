@@ -31,6 +31,7 @@ import {
   type MarkerShape,
   type ModelConfig,
   type PlacedEntity,
+  type ShortcutItem,
   type RenderConfig,
   type SectionMode,
   type SectionState,
@@ -638,6 +639,46 @@ function readMarker(raw: unknown, path: string): MarkerConfig {
   return marker;
 }
 
+/**
+ * `shortcuts: [script.good_night]` or the long form with a name and an icon.
+ *
+ * No position, and that is the point: these are the entities that have no place
+ * in the house — an errand rather than a thing on a wall.
+ */
+function readShortcuts(raw: unknown[], path: string): ShortcutItem[] {
+  return raw.map((entry, index) => {
+    const here = item(path, index);
+
+    if (typeof entry === 'string') {
+      if (!ENTITY_ID_RE.test(entry)) {
+        return fail(here, `"${entry}" is not an entity id like "script.good_night"`);
+      }
+      return { entity: entry };
+    }
+
+    if (!isRecord(entry)) {
+      return fail(here, 'must be an entity id or a mapping with "entity"');
+    }
+
+    const entity = readString(entry, 'entity', here);
+    if (!entity) return fail(here, '"entity" is required, e.g. `entity: script.good_night`');
+    if (!ENTITY_ID_RE.test(entity)) {
+      return fail(here, `"${entity}" is not an entity id like "script.good_night"`);
+    }
+
+    const shortcut: ShortcutItem = { entity };
+    const name = readString(entry, 'name', here);
+    if (name) shortcut.name = name;
+    const icon = readString(entry, 'icon', here);
+    if (icon) shortcut.icon = icon;
+    const tap = readAction(entry, 'tap_action', here);
+    if (tap) shortcut.tap_action = tap;
+    const hold = readAction(entry, 'hold_action', here);
+    if (hold) shortcut.hold_action = hold;
+    return shortcut;
+  });
+}
+
 function readEntities(raw: unknown[], path: string): PlacedEntity[] {
   return raw.map((entry, index) => {
     const here = item(path, index);
@@ -943,8 +984,10 @@ const KNOWN_KEYS = new Set([
   'camera',
   'presets',
   'entities',
+  'shortcuts',
   'section',
   'render',
+  'tour',
   'ui',
   'config_version',
 ]);
@@ -1062,6 +1105,9 @@ export function validateConfig(raw: unknown): Floorplan3dCardConfig {
 
   const entities = readObjectList(source, 'entities', '');
   if (entities) validated.entities = readEntities(entities, 'entities');
+
+  const shortcuts = readObjectList(source, 'shortcuts', '');
+  if (shortcuts) validated.shortcuts = readShortcuts(shortcuts, 'shortcuts');
 
   if (source.section !== undefined && source.section !== null) {
     validated.section = readSection(source.section, 'section');

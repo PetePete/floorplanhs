@@ -22,7 +22,7 @@ export interface CardEditDetail {
 }
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.2.27';
+export const CARD_VERSION = '0.3.0';
 
 export type Vec3 = [number, number, number];
 
@@ -431,6 +431,27 @@ export interface UiConfig {
   aspectRatio?: string;
 }
 
+/* -------------------------------------------------------------- shortcuts */
+
+/**
+ * An entity that belongs to the house but not to a *place* in it.
+ *
+ * A script is an errand, not a thing on a wall: "good night", "leave home".
+ * Pinning one to a spot on the floor says something false about it and puts it
+ * behind whatever wall the camera is on the wrong side of. These sit in a panel
+ * instead, in the order you put them.
+ */
+export interface ShortcutItem {
+  entity: string;
+  /** Overrides the entity's own name. */
+  name?: string;
+  /** Overrides the icon the domain would give it. */
+  icon?: string;
+  /** What a tap does; defaults as everywhere else — a script runs. */
+  tap_action?: ActionConfig;
+  hold_action?: ActionConfig;
+}
+
 /* ----------------------------------------------------------------- config */
 
 export interface Floorplan3dCardConfig {
@@ -441,6 +462,8 @@ export interface Floorplan3dCardConfig {
   presets?: CameraPreset[];
   tour?: TourConfig;
   entities?: PlacedEntity[];
+  /** Entities that live in the panel rather than on the plan; see ShortcutItem. */
+  shortcuts?: ShortcutItem[];
   section?: SectionState;
   render?: RenderConfig;
   ui?: UiConfig;

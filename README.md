@@ -575,6 +575,35 @@ tour:
 | `preset_id` | string | For `preset`: the camera preset to fly to. |
 | `confirmation.text` | string | Ask before performing the action. |
 
+### Shortcuts
+
+Entities that belong to the house but not to a *place* in it — a script is an
+errand ("good night", "leave home"), not a thing hanging on a wall. Pinning one
+to a spot on the floor says something false about it, and puts it behind
+whichever wall the camera is on the wrong side of. These sit in a panel under
+the navigator instead, in the order you put them.
+
+```yaml
+shortcuts:
+  - script.good_night
+  - entity: scene.movie
+    name: Film
+    icon: mdi:movie
+```
+
+Drag one there from the entity palette in edit mode, or write it by hand. A tap
+runs it — `script.turn_on`, not `toggle`, so a running script is not stopped
+half way. Anything can go there, not only scripts: a scene, a switch you reach
+for constantly. What decides is whether it belongs *somewhere*.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `entity` | string | — | Required. Entity id. A bare string is the whole item. |
+| `name` | string | the entity's own | Label in the panel. |
+| `icon` | string | from the domain | MDI icon. |
+| `tap_action` | `ActionConfig` | `toggle` | What a tap does. |
+| `hold_action` | `ActionConfig` | `more-info` | What a long press does. |
+
 ### Render
 
 | Option | Type | Default | Description |

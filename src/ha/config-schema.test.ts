@@ -468,3 +468,84 @@ describe('an option that no longer exists', () => {
     expect((config.ui as Record<string, unknown>).compact).toBeUndefined();
   });
 });
+
+/**
+ * Entities that have no place in the house: a script is an errand, not a thing
+ * on a wall. They carry no position, and asking for one would be asking the
+ * user to invent an answer.
+ */
+describe('shortcuts', () => {
+  it('takes a bare entity id', () => {
+    const config = validateConfig(minimal({ shortcuts: ['script.good_night'] }));
+    expect(config.shortcuts).toEqual([{ entity: 'script.good_night' }]);
+  });
+
+  it('takes a name, an icon and an action', () => {
+    const config = validateConfig(
+      minimal({
+        shortcuts: [
+          {
+            entity: 'scene.movie',
+            name: 'Film',
+            icon: 'mdi:movie',
+            tap_action: { action: 'toggle' },
+          },
+        ],
+      }),
+    );
+    expect(config.shortcuts?.[0]).toEqual({
+      entity: 'scene.movie',
+      name: 'Film',
+      icon: 'mdi:movie',
+      tap_action: { action: 'toggle' },
+    });
+  });
+
+  it('accepts the shorthand action form', () => {
+    const config = validateConfig(
+      minimal({ shortcuts: [{ entity: 'script.x', tap_action: 'none' }] }),
+    );
+    expect(config.shortcuts?.[0].tap_action).toEqual({ action: 'none' });
+  });
+
+  it('says what is wrong with something that is not an entity id', () => {
+    expectMessage(
+      minimal({ shortcuts: ['not an entity'] }),
+      'shortcuts[0]: "not an entity" is not an entity id like "script.good_night"',
+    );
+  });
+
+  it('says what is wrong when the entity is missing entirely', () => {
+    expectMessage(
+      minimal({ shortcuts: [{ name: 'Nameless' }] }),
+      'shortcuts[0]: "entity" is required, e.g. `entity: script.good_night`',
+    );
+  });
+
+  it('is absent rather than empty when nothing is docked', () => {
+    expect(validateConfig(minimal({})).shortcuts).toBeUndefined();
+  });
+});
+
+/**
+ * Anything the schema does not claim as its own is handed back untouched, so
+ * Lovelace's own keys (`view_layout`, `grid_options`, `visibility`) survive.
+ * A block the schema *does* read has to be claimed, or the raw value wins and
+ * the reading was for nothing.
+ */
+describe('keys the schema claims', () => {
+  it('validates the tour block rather than passing it through', () => {
+    expectMessage(
+      minimal({ tour: { interval: 1 } }),
+      'tour: "interval" must be at least 3',
+    );
+  });
+
+  it('keeps Lovelace layout keys it knows nothing about', () => {
+    const config = validateConfig(
+      minimal({ view_layout: { position: 'sidebar' }, grid_options: { columns: 6 } }),
+    ) as unknown as Record<string, unknown>;
+    expect(config.view_layout).toEqual({ position: 'sidebar' });
+    expect(config.grid_options).toEqual({ columns: 6 });
+  });
+});

@@ -48,6 +48,9 @@ const EN = {
   'ui.preset.overview': 'Overview',
   'ui.preset.whole_house': 'Building',
   'ui.preset.saved_group': 'Saved views',
+  'ui.dock.title': 'Actions',
+  'ui.dock.empty':
+    'Drop a script or scene here — things that happen, rather than things that sit somewhere.',
   'ui.preset.title': 'Camera views',
   'ui.preset.collapse': 'Hide views',
   'ui.preset.expand': 'Show views',
@@ -134,6 +137,9 @@ const DE: Table = {
   'ui.section.caps': 'Massive Schnittflächen',
   'ui.section.handles': 'Griffe anzeigen',
 
+  'ui.dock.title': 'Aktionen',
+  'ui.dock.empty':
+    'Skript oder Szene hierher ziehen — Dinge, die passieren, statt Dinge, die irgendwo stehen.',
   'ui.preset.title': 'Kameraansichten',
   'ui.preset.collapse': 'Ansichten ausblenden',
   'ui.preset.expand': 'Ansichten einblenden',
