@@ -31,7 +31,6 @@ const EN = {
   'ui.toolbar.fullscreen': 'Fullscreen',
   'ui.toolbar.exit_fullscreen': 'Exit fullscreen',
   'ui.toolbar.markers': 'Markers',
-  'ui.toolbar.legend': 'Legend',
 
   /* -------------------------------------------------------- section modes */
   'ui.section.none': 'Off',
@@ -123,7 +122,6 @@ const DE: Table = {
   'ui.toolbar.fullscreen': 'Vollbild',
   'ui.toolbar.exit_fullscreen': 'Vollbild beenden',
   'ui.toolbar.markers': 'Marker',
-  'ui.toolbar.legend': 'Legende',
 
   'ui.section.none': 'Aus',
   'ui.section.level': 'Etage isolieren',

@@ -22,7 +22,7 @@ export interface CardEditDetail {
 }
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.2.21';
+export const CARD_VERSION = '0.2.22';
 
 export type Vec3 = [number, number, number];
 
@@ -391,7 +391,6 @@ export interface UiConfig {
   showToolbar?: boolean;
   showLevelSelector?: boolean;
   showSectionControls?: boolean;
-  showLegend?: boolean;
   showFps?: boolean;
   /** Vertical zoom control under the orientation cube. */
   showZoomSlider?: boolean;
@@ -426,7 +425,6 @@ export interface UiConfig {
    */
   authorTools?: 'auto' | 'never' | 'always';
   /** Compact layout for small cards. */
-  compact?: boolean;
   theme?: 'auto' | 'light' | 'dark';
   /** Card height, any CSS length; ignored in panel mode. */
   height?: string;
@@ -529,14 +527,12 @@ export const DEFAULT_UI_CONFIG: Required<UiConfig> = {
   // saved. Both reappear automatically in edit mode, so nothing is lost.
   showLevelSelector: true,
   showSectionControls: false,
-  showLegend: false,
   showFps: false,
   showZoomSlider: true,
   markersThroughWalls: false,
   levelPresets: true,
   showViewCube: true,
   authorTools: 'auto',
-  compact: false,
   theme: 'auto',
   height: '520px',
   aspectRatio: '',

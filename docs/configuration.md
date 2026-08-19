@@ -505,9 +505,7 @@ ui:
   showLevelSelector: true
   showPresetBar: false
   showSectionControls: true
-  showLegend: false
   showFps: false
-  compact: false
   theme: auto
   height: 560px
   aspectRatio: ""
@@ -516,7 +514,6 @@ ui:
 - `height` accepts any CSS length and is ignored in panel mode.
 - `aspectRatio` (`16:9`, `4:3`, …) overrides `height` when set — better for
   responsive dashboards viewed on both phone and desktop.
-- `compact: true` shrinks the chrome for narrow columns.
 - `theme: auto` follows Home Assistant's light/dark mode.
 - A kiosk-style card with no controls at all:
 

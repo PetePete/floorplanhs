@@ -812,7 +812,6 @@ const UI_ALIASES: Record<string, string> = {
   show_toolbar: 'showToolbar',
   show_level_selector: 'showLevelSelector',
   show_section_controls: 'showSectionControls',
-  show_legend: 'showLegend',
   show_fps: 'showFps',
   show_view_cube: 'showViewCube',
   show_ceilings: 'showCeilings',
@@ -840,14 +839,12 @@ function readUi(raw: unknown, path: string): UiConfig {
   assign('showToolbar', readBoolean(obj, 'showToolbar', path));
   assign('showLevelSelector', readBoolean(obj, 'showLevelSelector', path));
   assign('showSectionControls', readBoolean(obj, 'showSectionControls', path));
-  assign('showLegend', readBoolean(obj, 'showLegend', path));
   assign('showFps', readBoolean(obj, 'showFps', path));
   assign('showViewCube', readBoolean(obj, 'showViewCube', path));
   assign('showZoomSlider', readBoolean(obj, 'showZoomSlider', path));
   assign('levelPresets', readBoolean(obj, 'levelPresets', path));
   assign('markersThroughWalls', readBoolean(obj, 'markersThroughWalls', path));
   assign('authorTools', readEnum(obj, 'authorTools', path, ['auto', 'never', 'always'] as const));
-  assign('compact', readBoolean(obj, 'compact', path));
   assign('theme', readEnum(obj, 'theme', path, ['auto', 'light', 'dark'] as const));
 
   // A bare number is metres to nobody and pixels to everybody.

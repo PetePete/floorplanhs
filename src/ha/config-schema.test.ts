@@ -219,10 +219,10 @@ describe('coercion of things that are obviously intended', () => {
 
   it('accepts yes/no and 1/0 for booleans, and a number for height', () => {
     const config = validateConfig(
-      minimal({ ui: { showFps: 'yes', compact: 0, height: 640 } }),
+      minimal({ ui: { showFps: 'yes', showViewCube: 0, height: 640 } }),
     );
     expect(config.ui?.showFps).toBe(true);
-    expect(config.ui?.compact).toBe(false);
+    expect(config.ui?.showViewCube).toBe(false);
     expect(config.ui?.height).toBe('640px');
   });
 
@@ -448,5 +448,23 @@ describe('render.toneMapping', () => {
     expect(() => validateConfig(minimal({ render: { toneMapping: 'filmic' } }))).toThrow(
       ConfigError,
     );
+  });
+});
+
+/**
+ * An option the card has dropped must not break the dashboard that still names
+ * it. Removing `showLegend` and `compact` is the card's business; the YAML in
+ * front of a user is not.
+ */
+describe('an option that no longer exists', () => {
+  it('is ignored rather than rejected', () => {
+    const config = validateConfig({
+      type: 'custom:floorplan-3d-card',
+      model: { url: '/local/house.sh3d' },
+      ui: { showLegend: true, compact: true, height: '480px' },
+    });
+    expect(config.ui?.height).toBe('480px');
+    expect((config.ui as Record<string, unknown>).showLegend).toBeUndefined();
+    expect((config.ui as Record<string, unknown>).compact).toBeUndefined();
   });
 });

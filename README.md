@@ -607,9 +607,7 @@ tour:
 | `levelPresets` | boolean | `true` | Add one generated isometric view per detected storey to the view bar. They follow the model, so they are not editable and never written to the config; saved views come first. |
 | `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. The chevron in its corner folds it down to a single chip showing where you are, for when it is over the part of the house you are looking at; the fold lasts the session, not the config. |
 | `showSectionControls` | boolean | `false` | Cross-section controls. Shown anyway while author tools are visible. |
-| `showLegend` | boolean | `false` | Colour/state legend. |
 | `showFps` | boolean | `false` | FPS counter (diagnostics). |
-| `compact` | boolean | `false` | Smaller chrome for narrow columns. |
 | `theme` | `auto` \| `light` \| `dark` | `auto` | Which way round the card's own chrome and line work are drawn. `auto` follows Home Assistant; the other two overrule it, for a drawing that has to read on a wall tablet in daylight whatever theme the dashboard is wearing. Entity colours still come from the dashboard's palette. |
 | `height` | string | `520px` | Any CSS length. Ignored in panel mode. |
 | `aspectRatio` | string | `''` | e.g. `16:9`. Overrides `height` when set. |

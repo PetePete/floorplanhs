@@ -144,21 +144,10 @@ export function renderAppearanceSection(ctx: EditorContext): TemplateResult {
         onChange: (v) => patchUi(ctx, { showSectionControls: v }, true),
       })}
       ${switchRow({
-        label: ctx.t('editor.show_legend', 'Legend'),
-        checked: ui.showLegend ?? du.showLegend,
-        onChange: (v) => patchUi(ctx, { showLegend: v }, true),
-      })}
-      ${switchRow({
         label: ctx.t('editor.show_fps', 'FPS counter'),
         checked: ui.showFps ?? du.showFps,
         helper: ctx.t('editor.show_fps_help', 'Diagnostics only.'),
         onChange: (v) => patchUi(ctx, { showFps: v }, true),
-      })}
-      ${switchRow({
-        label: ctx.t('editor.compact', 'Compact layout'),
-        checked: ui.compact ?? du.compact,
-        helper: ctx.t('editor.compact_help', 'Smaller chrome for narrow dashboard columns.'),
-        onChange: (v) => patchUi(ctx, { compact: v }, true),
       })}
       <div class="grid two">
         ${selectField({
