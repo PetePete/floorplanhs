@@ -192,7 +192,6 @@ export class Fp3dToolbar extends FpBaseElement {
   @property({ type: Boolean }) canEdit = false;
   /** False hides the section button entirely, so it cannot open a hidden panel. */
   @property({ type: Boolean }) canSection = true;
-  @property({ type: Boolean }) sectionActive = false;
   /** Only worth offering with more than one storey to separate. */
   @property({ type: Boolean }) canExplode = false;
   @property({ type: Boolean }) exploded = false;
@@ -243,7 +242,11 @@ export class Fp3dToolbar extends FpBaseElement {
         action: 'section',
         glyph: 'section',
         label: this.t('ui.toolbar.section', 'Section'),
-        pressed: this.openPanel === 'section' || this.sectionActive,
+        // Lit while the panel is open, and only then. Every generated storey
+        // view carries a cut, so "a section is active" is the ordinary state of
+        // the card and says nothing — a button that is on most of the time
+        // reads as stuck.
+        pressed: this.openPanel === 'section',
         hidden: !this.canSection,
         rank: 3,
       },

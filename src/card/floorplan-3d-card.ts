@@ -190,6 +190,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private resizeObserver: ResizeObserver | null = null;
   /** Pending re-measure of the card's box; see `scheduleSizing`. */
   private sizingFrame: number | null = null;
+  /** Wrappers we gave a height to, and what they had before; see `stretchAncestors`. */
+  private readonly stretched: Array<{ el: HTMLElement; height: string; align: string }> = [];
   private disposeTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribers: Array<() => void> = [];
   /** Serialised form of the config we last emitted, to ignore our own echo. */
@@ -323,6 +325,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.tourPlaying = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.releaseAncestors();
     if (this.sizingFrame !== null) {
       cancelAnimationFrame(this.sizingFrame);
       this.sizingFrame = null;
@@ -392,52 +395,74 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.toggleAttribute('aspect', !full && Boolean(ui.aspectRatio));
     if (ui.aspectRatio) this.style.setProperty('--fp3d-aspect', ui.aspectRatio.replace(':', ' / '));
     this.style.setProperty('--fp3d-card-height', full ? '100%' : height);
+
     if (!full) {
-      this.style.removeProperty('--fp3d-card-top');
+      this.releaseAncestors();
       return;
     }
-    // Where the card starts in the viewport; the stylesheet takes the rest.
-    // Written only when it moves, because this runs from a ResizeObserver and
-    // writing it is what makes the box change size.
-    const box = this.getBoundingClientRect();
-    // Nothing to measure yet: the card is in a view that has not been laid out,
-    // or in a hidden tab. Measuring anyway records a zero and nothing would ever
-    // correct it, since our own box does not change when the dashboard settles.
-    if (box.width <= 0) {
-      this.scheduleSizing();
-      return;
+    this.stretchAncestors();
+  }
+
+  /**
+   * Give the wrappers between us and the view a height, so ours can be 100%.
+   *
+   * `height: 100%` is a question — *100% of what?* — and it goes unanswered when
+   * an ancestor is content-sized, which is the case for at least one of the
+   * boxes Home Assistant wraps a card in. Three releases were spent trying to
+   * answer it by measurement instead: read the card's top edge, take the rest of
+   * the viewport. Measurement has a failure mode that is impossible to close
+   * from inside — the number is only correct once the dashboard has finished
+   * moving the card, and there is no event for "finished". Every wrong reading
+   * stuck, because a wrong height is still a height.
+   *
+   * So the chain is made definite instead. It is somebody else's DOM, so this
+   * stays inside a panel view, walks at most a handful of levels, stops at the
+   * view itself, and remembers exactly what it set so it can put it all back.
+   */
+  private stretchAncestors(): void {
+    if (this.stretched.length > 0) return;
+
+    let node = this.parentElement;
+    for (let depth = 0; node && depth < 6; depth += 1) {
+      const tag = node.localName;
+      if (tag === 'body' || tag === 'html') break;
+
+      this.stretched.push({ el: node, height: node.style.height, align: node.style.alignSelf });
+      node.style.height = '100%';
+      // A card in a flex or grid parent is stretched by the parent, not by its
+      // own height; setting both covers either kind of wrapper.
+      node.style.alignSelf = 'stretch';
+
+      // hui-view is the box the dashboard sizes itself; above it is none of our
+      // business.
+      if (tag.startsWith('hui-view') || tag === 'hui-masonry-view' || tag === 'hui-panel-view') break;
+      node = node.parentElement;
     }
-    // A card that fills the view starts near the top of it. Measured further
-    // down than halfway, the dashboard is still moving things around — the card
-    // is under an error card that is about to be replaced, or below a view that
-    // has not collapsed yet. Believing that number is what produced a card half
-    // the height of the window, and it stuck, because a wrong height is still a
-    // height and nothing measures again on its own.
-    const viewport = typeof window === 'undefined' ? 0 : window.innerHeight;
-    if (viewport > 0 && box.top > viewport / 2) {
-      this.scheduleSizing();
-      return;
-    }
-    const top = `${Math.max(0, Math.round(box.top))}px`;
-    if (this.style.getPropertyValue('--fp3d-card-top') !== top) {
-      this.style.setProperty('--fp3d-card-top', top);
+  }
+
+  /** Hand every wrapper back exactly what it had. */
+  private releaseAncestors(): void {
+    for (const entry of this.stretched.splice(0)) {
+      entry.el.style.height = entry.height;
+      entry.el.style.alignSelf = entry.align;
     }
   }
 
   /**
-   * Measure again once the dashboard has finished moving things around.
+   * Re-apply the sizing once the dashboard has finished moving things around.
    *
-   * Home Assistant lays a view out over several frames — the card is inserted,
-   * then the view decides it is a panel, then the sidebar settles. A single
-   * measurement taken during that lands on a position the card is about to
-   * leave, and nothing afterwards corrects it: our own box stops changing, so
-   * the ResizeObserver goes quiet. Two frames later is after the layout.
+   * Home Assistant re-parents cards: a view switching layout, an error card
+   * being replaced by the real one. Each of those hands us a *new* set of
+   * wrappers, and the ones we stretched are no longer the ones above us.
    */
   private scheduleSizing(): void {
     if (this.sizingFrame !== null || typeof requestAnimationFrame !== 'function') return;
     this.sizingFrame = requestAnimationFrame(() => {
       this.sizingFrame = requestAnimationFrame(() => {
         this.sizingFrame = null;
+        // Re-parented since last time? Then those wrappers are somebody else's
+        // problem now and the new ones need the same treatment.
+        if (this.stretched.some((entry) => !entry.el.contains(this))) this.releaseAncestors();
         this.applyHostSizing();
         this.viewer?.resize();
       });
@@ -1616,7 +1641,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .exploded=${this.exploded}
                 .canTour=${this.tourAvailable}
                 .tourPlaying=${this.tourPlaying}
-                .sectionActive=${this.section.mode !== 'none'}
                 @fp3d-toolbar-action=${(event: CustomEvent<{ action: ToolbarAction }>) =>
                   this.onToolbarAction(event.detail.action)}
               ></fp3d-toolbar>`

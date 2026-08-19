@@ -582,17 +582,17 @@ export const cardStyles = css`
   }
 
   /*
-   * Filling the view is not a matter of height 100%. That only works when every
-   * ancestor has a definite height, and in a Home Assistant panel view one of
-   * the wrappers does not — the card then falls back to its content height,
-   * which is a canvas with no intrinsic size of its own. So the card measures
-   * where it starts and takes the rest of the viewport; --fp3d-card-top is
-   * written by applyHostSizing. The vh line is the fallback for browsers
-   * without dynamic viewport units.
+   * This fills the view only because stretchAncestors has given every wrapper
+   * between us and the dashboard a height to be 100% of. Without that the
+   * question goes unanswered and the card falls back to its content height —
+   * which is a canvas, and a canvas has no size of its own.
    */
   :host([full]) {
-    height: calc(100vh - var(--fp3d-card-top, 0px));
-    height: calc(100dvh - var(--fp3d-card-top, 0px));
+    height: 100%;
+    /* Both, because a wrapper may size us as a block or stretch us as a flex or
+       grid item, and which one it is depends on the dashboard's layout. */
+    align-self: stretch;
+    flex: 1 1 auto;
   }
 
   .card {
