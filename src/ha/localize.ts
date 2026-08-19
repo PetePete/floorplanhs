@@ -50,6 +50,8 @@ const EN = {
   'ui.preset.whole_house': 'Building',
   'ui.preset.saved_group': 'Saved views',
   'ui.preset.title': 'Camera views',
+  'ui.preset.collapse': 'Hide views',
+  'ui.preset.expand': 'Show views',
   'ui.preset.save_current': 'Save current view',
   'ui.preset.name': 'Name',
   'ui.preset.name_placeholder': 'Living room',
@@ -135,6 +137,8 @@ const DE: Table = {
   'ui.section.handles': 'Griffe anzeigen',
 
   'ui.preset.title': 'Kameraansichten',
+  'ui.preset.collapse': 'Ansichten ausblenden',
+  'ui.preset.expand': 'Ansichten einblenden',
   'ui.preset.save_current': 'Aktuelle Ansicht speichern',
   'ui.preset.name': 'Name',
   'ui.preset.name_placeholder': 'Wohnzimmer',

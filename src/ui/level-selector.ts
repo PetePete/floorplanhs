@@ -41,6 +41,65 @@ export class Fp3dLevelSelector extends FpBaseElement {
         overscroll-behavior: contain;
       }
 
+      /* Just the fold control; a titled header would repeat the group labels. */
+      .head {
+        display: flex;
+        justify-content: flex-end;
+        margin: -2px -2px 2px;
+      }
+
+      .fold,
+      .peek {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border: none;
+        background: none;
+        color: var(--fp3d-text-dim);
+        cursor: pointer;
+        pointer-events: auto;
+        border-radius: var(--fp3d-chrome-radius);
+        transition:
+          background-color var(--fp3d-fast) var(--fp3d-ease),
+          color var(--fp3d-fast) var(--fp3d-ease);
+      }
+
+      .fold {
+        padding: 2px 4px;
+      }
+
+      .fold:hover,
+      .peek:hover {
+        background: var(--fp3d-hover);
+        color: var(--fp3d-text);
+      }
+
+      .fold .fp-icon {
+        width: 15px;
+        height: 15px;
+      }
+
+      /* Folded: wide enough to say where you are, narrow enough to ignore. */
+      .peek {
+        padding: 0 8px;
+        min-height: 34px;
+        max-width: 190px;
+        color: var(--fp3d-text);
+        font-size: 12.5px;
+        font-weight: 500;
+      }
+
+      .peek .fp-icon {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        opacity: 0.8;
+      }
+
+      .peek .name {
+        max-width: 120px;
+      }
+
       .group {
         display: flex;
         flex-direction: column;
@@ -228,6 +287,14 @@ export class Fp3dLevelSelector extends FpBaseElement {
   @property({ type: Boolean }) editMode = false;
   /** False when the dashboard cannot persist, so saving would be a dead end. */
   @property({ type: Boolean }) canSave = false;
+  /**
+   * Folded down to a single chip.
+   *
+   * The panel is a list of everywhere you can go, and it sits over the corner
+   * of the house while you are looking at that corner. Held by the card, not
+   * here, so it survives this element being torn down and rebuilt.
+   */
+  @property({ type: Boolean }) collapsed = false;
 
   @state() private naming = false;
   @state() private renamingId: string | null = null;
@@ -355,6 +422,24 @@ export class Fp3dLevelSelector extends FpBaseElement {
     const showSave = this.editMode && this.canSave;
     if (groups.every((group) => group.items.length === 0) && !showSave) return nothing;
 
+    if (this.collapsed) {
+      const active = [...this.overview, ...this.levelViews, ...this.presets].find(
+        (preset) => preset.id === this.activePresetId,
+      );
+      return html`
+        <button
+          class="surface peek"
+          title=${this.t('ui.preset.expand', 'Show views')}
+          aria-expanded="false"
+          @click=${() => this.emit('fp3d-panel-collapse', { collapsed: false })}
+        >
+          ${icon(resolveIconName(active?.icon, 'layers'))}
+          <span class="name">${active?.name ?? this.t('ui.preset.title', 'Camera views')}</span>
+          ${icon('chevronRight')}
+        </button>
+      `;
+    }
+
     return html`
       <div
         class="stack surface ${this.size === 'narrow' ? 'compact' : ''}"
@@ -362,6 +447,16 @@ export class Fp3dLevelSelector extends FpBaseElement {
         aria-label=${this.t('ui.preset.title', 'Camera views')}
         @keydown=${this.onKeyDown}
       >
+        <div class="head">
+          <button
+            class="fold"
+            title=${this.t('ui.preset.collapse', 'Hide views')}
+            aria-expanded="true"
+            @click=${() => this.emit('fp3d-panel-collapse', { collapsed: true })}
+          >
+            ${icon('chevronLeft')}
+          </button>
+        </div>
         ${groups.map((group) => {
           const last = group.editable;
           if (group.items.length === 0 && !(last && showSave)) return nothing;

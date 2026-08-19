@@ -603,7 +603,7 @@ tour:
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |
 | `showZoomSlider` | boolean | `true` | Vertical zoom control under the cube. |
 | `levelPresets` | boolean | `true` | Add one generated isometric view per detected storey to the view bar. They follow the model, so they are not editable and never written to the config; saved views come first. |
-| `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. |
+| `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. The chevron in its corner folds it down to a single chip showing where you are, for when it is over the part of the house you are looking at; the fold lasts the session, not the config. |
 | `showSectionControls` | boolean | `false` | Cross-section controls. Shown anyway while author tools are visible. |
 | `showLegend` | boolean | `false` | Colour/state legend. |
 | `showFps` | boolean | `false` | FPS counter (diagnostics). |

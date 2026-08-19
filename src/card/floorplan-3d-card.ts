@@ -193,6 +193,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private zoom = 0.5;
   /** Storeys pulled apart. A view state, never written back to the config. */
   @state() private exploded = false;
+  /**
+   * Navigator folded down to a chip. Held here rather than in the panel so it
+   * survives the panel being rebuilt, and session-only: "out of the way for a
+   * moment" is not a property of the dashboard.
+   */
+  @state() private levelsCollapsed = false;
 
   @query('.canvas-host') private canvasHost?: HTMLDivElement;
   @query('.card') private cardRoot?: HTMLDivElement;
@@ -757,6 +763,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         visibleLevels: this.visibleLevels,
         explode: viewer.explode,
         activePreset: this.activePreset,
+        collapsed: this.levelsCollapsed,
       });
     } catch {
       // Camera subsystem already gone; nothing worth keeping.
@@ -774,6 +781,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.setSection(memory.section, false);
     }
     this.visibleLevels = memory.visibleLevels;
+    this.levelsCollapsed = memory.collapsed;
     viewer.setVisibleLevels(memory.visibleLevels);
     if (memory.explode > 0) {
       viewer.setExplode(memory.explode, false);
@@ -2034,6 +2042,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .activePresetId=${this.activePreset}
                 .editMode=${this.editing}
                 .canSave=${author}
+                .collapsed=${this.levelsCollapsed}
+                @fp3d-panel-collapse=${(event: CustomEvent<{ collapsed: boolean }>) => {
+                  this.levelsCollapsed = event.detail.collapsed;
+                }}
                 @fp3d-preset-select=${(event: CustomEvent<{ presetId: string }>) =>
                   this.onPresetSelect(event.detail.presetId)}
                 @fp3d-preset-save=${(event: CustomEvent<{ name: string }>) =>
