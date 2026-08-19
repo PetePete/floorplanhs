@@ -518,6 +518,24 @@ const DEVICE_CLASS_ICONS: Record<string, Record<string, string>> = {
   },
 };
 
+/**
+ * What each role looks like. Roles are named after the domains they stand for,
+ * so these are the domain icons — spelled out rather than derived, because a
+ * role is a decision and a domain is a fact, and the two are free to drift.
+ */
+const ROLE_ICONS: Record<EntityRole, string> = {
+  light: 'mdi:lightbulb',
+  switch: 'mdi:toggle-switch-variant',
+  sensor: 'mdi:eye',
+  binary_sensor: 'mdi:checkbox-marked-circle',
+  cover: 'mdi:window-shutter',
+  climate: 'mdi:thermostat',
+  media_player: 'mdi:speaker',
+  camera: 'mdi:video',
+  person: 'mdi:account',
+  marker: 'mdi:map-marker',
+};
+
 export function iconFor(
   entityId: string,
   attrs: HassEntityAttributeBase,
@@ -525,6 +543,12 @@ export function iconFor(
   registryIcon?: string,
 ): string {
   if (placed?.marker?.icon) return placed.marker.icon;
+  // A role set by hand outranks the entity's own icon. Overriding the role is
+  // how you tell the card what a thing *is* — a switch that drives a lamp, a
+  // sensor you want read as a marker — and a marker that kept the old symbol
+  // gave no sign the override had taken. An explicit `marker.icon` above still
+  // wins, because that is the more specific statement of the two.
+  if (placed?.role) return ROLE_ICONS[placed.role] ?? 'mdi:map-marker';
   const own = stringAttr(attrs, 'icon');
   if (own) return own;
   if (registryIcon) return registryIcon;

@@ -5,6 +5,7 @@ import type { PlacedEntity } from '@/types/config';
 import type { HassEntity } from '@/types/hass';
 import {
   diffStates,
+  iconFor,
   isActiveState,
   lightSampleToHex,
   roleFor,
@@ -535,5 +536,39 @@ describe('what "on" looks like per role', () => {
     const visual = toEntityVisual(off, placed('switch.kettle'), hass, FALLBACK_THEME_DARK);
     expect(visual.active).toBe(false);
     expect(visual.color).not.toBe(FALLBACK_THEME_DARK.success);
+  });
+});
+
+/**
+ * Overriding the role is how you tell the card what a thing is — a switch that
+ * drives a lamp, a sensor you would rather read as a plain marker. A marker
+ * that kept its old symbol gave no sign the override had taken.
+ */
+describe('icon for an overridden role', () => {
+  const attrs = { icon: 'mdi:coffee-maker' };
+
+  it('follows the role that was assigned', () => {
+    expect(iconFor('switch.kettle', attrs, placed('switch.kettle', { role: 'light' }))).toBe(
+      'mdi:lightbulb',
+    );
+  });
+
+  it('leaves the entity its own icon when no role was assigned', () => {
+    expect(iconFor('switch.kettle', attrs, placed('switch.kettle'))).toBe('mdi:coffee-maker');
+  });
+
+  it('still lets an explicit marker icon win, being the narrower statement', () => {
+    const config = placed('switch.kettle', { role: 'light', marker: { icon: 'mdi:kettle' } });
+    expect(iconFor('switch.kettle', attrs, config)).toBe('mdi:kettle');
+  });
+
+  it('falls back to the domain when nothing is assigned or set', () => {
+    expect(iconFor('cover.garage', {}, placed('cover.garage'))).toBe('mdi:window-shutter');
+  });
+
+  it('gives the plain marker role a pin', () => {
+    expect(iconFor('sensor.humidity', attrs, placed('sensor.humidity', { role: 'marker' }))).toBe(
+      'mdi:map-marker',
+    );
   });
 });
