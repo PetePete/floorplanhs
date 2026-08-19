@@ -7,7 +7,7 @@
 export const CARD_TYPE = 'floorplan-3d-card';
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.2.6';
+export const CARD_VERSION = '0.2.7';
 
 export type Vec3 = [number, number, number];
 

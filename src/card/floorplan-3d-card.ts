@@ -425,21 +425,32 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private stretchAncestors(): void {
     if (this.stretched.length > 0) return;
 
-    let node = this.parentElement;
-    for (let depth = 0; node && depth < 6; depth += 1) {
-      const tag = node.localName;
-      if (tag === 'body' || tag === 'html') break;
+    // Up through shadow boundaries, not just light DOM. `parentElement` stops
+    // dead at the edge of a shadow root, and Home Assistant puts one in the
+    // middle of exactly this chain: a panel view renders `hui-card` inside its
+    // own shadow root, so walking with `parentElement` reached that one card
+    // wrapper and gave up — the boxes that actually needed a height were above
+    // the boundary. That is why this was still broken after being "fixed".
+    let node: Node | null = this.parentNode;
+    for (let depth = 0; node && depth < 10; depth += 1) {
+      const el: Node = node instanceof ShadowRoot ? node.host : node;
+      const next: Node | null = node instanceof ShadowRoot ? node.host : node.parentNode;
 
-      this.stretched.push({ el: node, height: node.style.height, align: node.style.alignSelf });
-      node.style.height = '100%';
-      // A card in a flex or grid parent is stretched by the parent, not by its
-      // own height; setting both covers either kind of wrapper.
-      node.style.alignSelf = 'stretch';
+      if (el instanceof HTMLElement) {
+        const tag = el.localName;
+        if (tag === 'body' || tag === 'html') break;
 
-      // hui-view is the box the dashboard sizes itself; above it is none of our
-      // business.
-      if (tag.startsWith('hui-view') || tag === 'hui-masonry-view' || tag === 'hui-panel-view') break;
-      node = node.parentElement;
+        this.stretched.push({ el, height: el.style.height, align: el.style.alignSelf });
+        el.style.height = '100%';
+        // A card in a flex or grid parent is stretched by the parent rather than
+        // by its own height; setting both covers either kind of wrapper.
+        el.style.alignSelf = 'stretch';
+
+        // The view is the box the dashboard sizes itself. Above it is none of
+        // our business.
+        if (tag.endsWith('-view') && tag.startsWith('hui-')) break;
+      }
+      node = next === node ? null : next;
     }
   }
 
