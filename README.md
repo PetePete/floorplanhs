@@ -672,4 +672,26 @@ like it, buy me a coffee:
 
 ## Licence
 
-MIT — see [`LICENSE`](LICENSE).
+**GPL-3.0-or-later** — see [`LICENSE`](LICENSE).
+
+Use it, run it, change it, pass it on. What the GPL adds over a permissive
+licence is one condition: if you distribute a modified version, it goes out
+under the GPL too, with its source. A card someone improved should come back
+improvable.
+
+Third-party components keep their own licences, and both are redistributed
+inside `dist/floorplan-3d-card.js`:
+
+| Component | Licence | Text |
+| --- | --- | --- |
+| [three.js](https://threejs.org/) | MIT | [`licenses/MIT-three.js.txt`](licenses/MIT-three.js.txt) |
+| [Lit](https://lit.dev/) | BSD-3-Clause | [`licenses/BSD-3-Clause-lit.txt`](licenses/BSD-3-Clause-lit.txt) |
+| [fflate](https://github.com/101arrowz/fflate) | MIT | [`licenses/MIT-fflate.txt`](licenses/MIT-fflate.txt) |
+| Chakra Petch (Cadson Demak) | SIL Open Font License 1.1 | [`licenses/OFL-ChakraPetch.txt`](licenses/OFL-ChakraPetch.txt) |
+
+Each of those notices also rides in the bundle's own header, because a
+`LICENSE` in a repository never reaches the person who installs the file.
+
+The font is embedded as a base64 `woff2` rather than fetched from a CDN — a
+Home Assistant instance may have no route to the internet, and a font request
+would tell a third party about every dashboard load.
