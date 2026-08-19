@@ -106,6 +106,11 @@ export interface PointerRouterOptions {
  */
 interface PointerAwarePick {
   pick(ndc: { x: number; y: number }, options?: { pointerType?: PointerKind }): string | null;
+  /** Anchor or label; see `EntityLayer.pickPart`. Absent on a stub layer. */
+  pickPart?(
+    ndc: { x: number; y: number },
+    options?: { pointerType?: PointerKind },
+  ): { entityId: string; part: 'anchor' | 'label' } | null;
 }
 
 type GestureMethod =
@@ -143,6 +148,8 @@ const DEFAULTS: Required<PointerRouterOptions> = {
 };
 
 export class PointerRouter implements Subsystem {
+  /** Which part of the marker this gesture went down on; see `pickUp`. */
+  private grabbedPart: 'anchor' | 'label' | null = null;
   private readonly handlers: GestureHandler[] = [];
   private readonly options: Required<PointerRouterOptions>;
 
@@ -330,7 +337,12 @@ export class PointerRouter implements Subsystem {
     };
 
     this.fill(event, 0, 0);
-    this.primary.entityId = this.pickEntity(this.sample.ndc, type);
+    // Which *part* was grabbed decides what a drag means, so it is settled here,
+    // on the way down, and not re-picked mid-drag when the pointer has already
+    // left the marker.
+    const part = this.pickEntityPart(this.sample.ndc, type);
+    this.primary.entityId = part?.entityId ?? null;
+    this.grabbedPart = part?.part ?? null;
     this.dispatch('onDown');
 
     if (this.sample.claimed) this.capture(event);
@@ -441,7 +453,7 @@ export class PointerRouter implements Subsystem {
       if (!this.editMode || this.placement.isActive()) return;
       const entityId = this.primary?.entityId;
       if (!entityId) return;
-      this.placement.beginMove(entityId);
+      this.pickUp(entityId);
       this.placement.updatePlacement(ev.clientX, ev.clientY);
       ev.claim();
     },
@@ -454,7 +466,7 @@ export class PointerRouter implements Subsystem {
       if (!this.editMode) return;
       const entityId = this.primary?.entityId;
       if (!entityId) return;
-      this.placement.beginMove(entityId);
+      this.pickUp(entityId);
       this.placement.updatePlacement(ev.clientX, ev.clientY);
       ev.claim();
     },
@@ -579,6 +591,30 @@ export class PointerRouter implements Subsystem {
       this.invoke(handler, 'onHover');
       if (this.sample.claimed) break;
     }
+  }
+
+  /**
+   * Grab the anchor, move the entity; grab the label, move the label.
+   *
+   * Two things live at one marker — where the lamp is, and where its caption is
+   * — and one drag gesture has to serve both. What the pointer went down on is
+   * the only honest way to tell them apart.
+   */
+  private pickUp(entityId: string): void {
+    if (this.grabbedPart === 'label') this.placement.beginLabelMove(entityId);
+    else this.placement.beginMove(entityId);
+  }
+
+  private pickEntityPart(
+    ndc: { x: number; y: number },
+    type: PointerKind,
+  ): { entityId: string; part: 'anchor' | 'label' } | null {
+    const layer = this.entities as IEntityLayer & PointerAwarePick;
+    if (typeof layer.pickPart === 'function') {
+      return layer.pickPart({ x: ndc.x, y: ndc.y }, { pointerType: type });
+    }
+    const entityId = this.pickEntity(ndc, type);
+    return entityId ? { entityId, part: 'anchor' } : null;
   }
 
   private setHover(entityId: string | null): void {

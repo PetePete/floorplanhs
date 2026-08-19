@@ -326,6 +326,13 @@ finger, gets the storey it fell into, and its position is rounded to millimetres
 before being written back through `config-changed`. Touch is a first-class path —
 this works with a finger, not just a mouse.
 
+**Anchor and label are two things.** The dot is the entity — where the lamp
+hangs, where its light comes from. The chip is a caption, and a plan is full of
+places a caption reads better than directly on top of what it names. So drag the
+**dot** to move the entity, and drag the **chip** to move only the label; a
+leader line keeps saying which dot the chip belongs to. Nothing is lost either
+way: the entity keeps its room and its level while its label goes wandering.
+
 **Where it sticks.** In the dashboard's edit mode, where you placed it. Home
 Assistant gives every view a `lovelace` object that owns the dashboard config
 and can save it, so the card writes the placement into its own YAML directly —
@@ -544,7 +551,7 @@ tour:
 | `scale` | number | `1` *(engine default)* | Size multiplier. |
 | `maxDistance` | number | — | Hide when the camera is further away than this, metres. |
 | `color` | string | state colour | Marker tint. |
-| `offset` | `[x, y, z]` | `[0, 0, 0]` | Lift the marker above the anchor point. |
+| `offset` | `[x, y, z]` | `[0, 0.34, 0]` | Where the label sits, in metres from the anchor. Set by dragging the label itself; the leader line follows it back to the entity. |
 
 #### Actions
 

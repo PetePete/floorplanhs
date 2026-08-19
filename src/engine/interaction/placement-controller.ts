@@ -36,7 +36,7 @@ import { DropIndicator, snapToGrid, type DropFeedback } from '@/engine/interacti
 /** MIME type the entity palette must put on `dataTransfer`. */
 export const ENTITY_DRAG_MIME = 'application/x-ha-entity';
 
-export type PlacementMode = 'add' | 'move';
+export type PlacementMode = 'add' | 'move' | 'label';
 export type PlacementCancelReason = 'escape' | 'outside' | 'user' | 'leave' | 'dispose';
 
 export interface PlacementPreview {
@@ -56,6 +56,8 @@ export interface PlacementEvents {
   };
   'placement-commit': { entityId: string; mode: PlacementMode; result: PlacementResult };
   'placement-cancel': { entityId: string; mode: PlacementMode; reason: PlacementCancelReason };
+  /** A label was dragged to a new spot beside its anchor. */
+  'label-commit': { entityId: string; offset: Vec3 };
 }
 
 /**
@@ -65,6 +67,8 @@ export interface PlacementEvents {
 interface EntityLayerExtras {
   getEntityPosition?(entityId: string): Vec3 | null;
   getPlacedEntity?(entityId: string): PlacedEntity | null;
+  setLabelOffset?(entityId: string, offset: Vec3): void;
+  getLabelOffset?(entityId: string): Vec3 | null;
 }
 
 /* ----------------------------------------------------------------- tuning */
@@ -110,6 +114,11 @@ const UP = new THREE.Vector3(0, 1, 0);
 /** Reused by `resolveFree`; the plane moves, the object does not. */
 const _freePlane = new THREE.Plane();
 
+/** Metres a label floats above its anchor when it has no offset of its own. */
+const DEFAULT_LABEL_LIFT = 0.34;
+
+const round3 = (value: number): number => Math.round(value * 1000) / 1000;
+
 export class PlacementController implements IPlacementController {
   private readonly emitter = new Emitter<PlacementEvents>();
   private readonly indicator: DropIndicator;
@@ -142,6 +151,11 @@ export class PlacementController implements IPlacementController {
   /** Set while `render.style` is `wireframe`; see `setHiddenLine`. */
   private hiddenLine = true;
   private originalPosition: Vec3 | null = null;
+  /** Where the label sat when this drag started; restored on cancel. */
+  private originalOffset: Vec3 | null = null;
+  /** Anchor the label is being dragged around, in world metres. */
+  private labelAnchor: Vec3 | null = null;
+  private labelOffset: Vec3 | null = null;
   /** Latched once a drag leaves the building. See `resolve`. */
   private freePlacement = false;
   /** Storey of the last surface this gesture touched; see `freeLevel`. */
@@ -240,6 +254,7 @@ export class PlacementController implements IPlacementController {
     this.role = entityId ? roleForEntityId(entityId) : 'marker';
     this.originalPosition = null;
     this.lastResult = null;
+    this.indicator.setGhostVisible(true);
     this.applyPreview(this.defaultPreview(entityId));
     this.start();
   }
@@ -259,18 +274,103 @@ export class PlacementController implements IPlacementController {
     this.freePlacement = false;
     this.lastHitLevel = null;
     this.lastResult = null;
-    this.applyPreview({
-      icon: placed?.marker?.icon,
-      label: placed?.name ?? humaniseEntityId(entityId),
-      color: placed?.marker?.color,
-      role: this.role,
-    });
+    // The marker itself follows the cursor from here, so a ghost chip would only
+    // be a second copy of it standing alongside.
+    this.indicator.setGhostVisible(false);
     this.start();
+  }
+
+  /**
+   * Pick up a marker's *label*, leaving the entity where it is.
+   *
+   * Dragging a marker used to drag the thing it names: move the chip somewhere
+   * readable and the lamp went with it, along with the light it casts. The label
+   * is a caption, and a caption is allowed to sit beside what it captions.
+   */
+  beginLabelMove(entityId: string): void {
+    if (this.disposed || !entityId) return;
+    if (this.mode !== null) this.finish('user');
+
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const anchor = extras.getEntityPosition?.(entityId) ?? null;
+    if (!anchor) {
+      // No anchor, no frame to offset from: fall back to moving the entity,
+      // which is at least a gesture that does something.
+      this.beginMove(entityId);
+      return;
+    }
+
+    this.entityId = entityId;
+    this.mode = 'label';
+    this.role = extras.getPlacedEntity?.(entityId)?.role ?? roleForEntityId(entityId);
+    this.labelAnchor = anchor;
+    this.originalOffset = extras.getLabelOffset?.(entityId) ?? null;
+    this.labelOffset = this.originalOffset;
+    this.originalPosition = null;
+    this.lastResult = null;
+    this.indicator.hide();
+    this.start();
+  }
+
+  /**
+   * Cursor on the horizontal plane at height `y`, in world metres.
+   *
+   * A level offset is added and taken off again for the same reason the drop
+   * path does it: in an exploded view a storey is drawn somewhere it is not, and
+   * a number written down from where it is drawn is wrong everywhere else.
+   */
+  private pointOnPlane(clientX: number, clientY: number, y: number): Vec3 | null {
+    const ctx = this.ctx;
+    if (!ctx) return null;
+    const rect = ctx.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+
+    this.ndc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1),
+    );
+    this.raycaster.near = 0;
+    this.raycaster.far = Infinity;
+    this.raycaster.setFromCamera(this.ndc, ctx.activeCamera);
+
+    _freePlane.set(UP, -y);
+    if (!this.raycaster.ray.intersectPlane(_freePlane, this.point)) return null;
+    return [this.point.x, this.point.y, this.point.z];
+  }
+
+  /**
+   * Where the label goes for this pointer position.
+   *
+   * On the horizontal plane through the anchor: a floorplan is read from above,
+   * so sideways is the direction a label has room to move. Its height stays as
+   * configured — that is the lift that keeps a chip clear of the floor.
+   */
+  private updateLabel(clientX: number, clientY: number): void {
+    const anchor = this.labelAnchor;
+    const entityId = this.entityId;
+    if (!anchor || !entityId) return;
+
+    const point = this.pointOnPlane(clientX, clientY, anchor[1]);
+    if (!point) return;
+
+    const lift = this.originalOffset ? this.originalOffset[1] : DEFAULT_LABEL_LIFT;
+    const offset: Vec3 = [
+      round3(point[0] - anchor[0]),
+      round3(lift),
+      round3(point[2] - anchor[2]),
+    ];
+    this.labelOffset = offset;
+    (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(entityId, offset);
+    this.ctx?.invalidate();
   }
 
   /** Pointer moved: returns where the entity would land, or null if nowhere. */
   updatePlacement(clientX: number, clientY: number): PlacementResult | null {
     if (this.mode === null) return null;
+    if (this.mode === 'label') {
+      this.updateLabel(clientX, clientY);
+      return null;
+    }
 
     const resolved = this.resolve(clientX, clientY);
     this.indicator.set(this.feedback);
@@ -308,6 +408,15 @@ export class PlacementController implements IPlacementController {
 
     const mode = this.mode;
     const entityId = this.entityId ?? '';
+
+    if (mode === 'label') {
+      this.updateLabel(clientX, clientY);
+      const offset = this.labelOffset;
+      this.finish(null);
+      if (entityId && offset) this.emitter.emit('label-commit', { entityId, offset });
+      return null;
+    }
+
     const result = this.resolve(clientX, clientY);
 
     if (!result || !entityId) {
@@ -771,6 +880,15 @@ export class PlacementController implements IPlacementController {
     if (reason && mode === 'move' && entityId && this.originalPosition) {
       this.entities.moveEntity(entityId, this.originalPosition);
     }
+    if (reason && mode === 'label' && entityId && this.originalOffset) {
+      (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(
+        entityId,
+        this.originalOffset,
+      );
+    }
+    this.labelAnchor = null;
+    this.labelOffset = null;
+    this.originalOffset = null;
 
     this.mode = null;
     this.entityId = null;

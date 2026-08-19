@@ -465,6 +465,9 @@ export class Viewer implements IViewer {
           });
           this.adoptMove(entityId, position, result.levelId, room);
         }),
+        placement.on('label-commit', ({ entityId, offset }) => {
+          this.adoptLabelOffset(entityId, offset);
+        }),
       );
     }
 
@@ -499,6 +502,26 @@ export class Viewer implements IViewer {
     next[index] = moved;
     this.config = { ...this.config, entities: next };
     this.guard('entities', this._entities, (e) => e.setEntities(next));
+  }
+
+  /**
+   * A label dragged beside its anchor, into the config and into our own copy.
+   *
+   * Same reasoning as `adoptMove`: the dashboard stores it and hands it back on
+   * its own schedule, and until then the marker has to keep the position the
+   * user let go of rather than springing back.
+   */
+  private adoptLabelOffset(entityId: string, offset: Vec3): void {
+    const entities = this.config.entities ?? [];
+    const index = entities.findIndex((entry) => entry.entity === entityId);
+    if (index < 0) return;
+
+    const current = entities[index];
+    const marker = { ...(current.marker ?? {}), offset };
+    const next = [...entities];
+    next[index] = { ...current, marker };
+    this.config = { ...this.config, entities: next };
+    this.emit('edit-intent', { kind: 'update-entity', entityId, patch: { marker } });
   }
 
   /** Default preset if there is one, otherwise frame whatever we loaded. */

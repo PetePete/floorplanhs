@@ -369,3 +369,92 @@ describe('placing outside the building', () => {
     placement.dispose();
   });
 });
+
+/**
+ * A marker is two things at once — where the entity is, and where its caption
+ * sits — and dragging one must not move the other.
+ */
+describe('dragging the label', () => {
+  function labelLayer(): { layer: IEntityLayer; offsets: Vec3[]; moved: Vec3[] } {
+    const offsets: Vec3[] = [];
+    const moved: Vec3[] = [];
+    const layer = {
+      moveEntity: (_id: string, position: Vec3) => moved.push(position),
+      setEntities: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: () => null,
+      setLabelOffset: (_id: string, offset: Vec3) => offsets.push(offset),
+      getLabelOffset: (): Vec3 => [0, 0.34, 0],
+    } as unknown as IEntityLayer;
+    return { layer, offsets, moved };
+  }
+
+  function labelController(): ReturnType<typeof labelLayer> & { placement: PlacementController } {
+    const parts = labelLayer();
+    const placement = new PlacementController(stubModel(house()), parts.layer, noopCamera);
+    placement.init(stubContext());
+    return { ...parts, placement };
+  }
+
+  it('offsets the label without moving the entity', () => {
+    const { placement, offsets, moved } = labelController();
+    placement.beginLabelMove('sensor.a');
+    placement.updatePlacement(...screen(2, 1));
+
+    expect(moved, 'the entity must not have been touched').toHaveLength(0);
+    // One decimal: the screen helper works back from a 100 px viewport, so a
+    // metre is worth about 23 px and the round trip costs a few millimetres.
+    const last = offsets[offsets.length - 1];
+    expect(last?.[0]).toBeCloseTo(2, 1);
+    expect(last?.[2]).toBeCloseTo(1, 1);
+    placement.dispose();
+  });
+
+  it('keeps the lift the label already had', () => {
+    const { placement, offsets } = labelController();
+    placement.beginLabelMove('sensor.a');
+    placement.updatePlacement(...screen(1, 0));
+    expect(offsets[offsets.length - 1][1]).toBeCloseTo(0.34, 3);
+    placement.dispose();
+  });
+
+  it('announces the drop as a label commit, not a placement', () => {
+    const { placement } = labelController();
+    const labels: Array<{ entityId: string; offset: Vec3 }> = [];
+    const placements: string[] = [];
+    placement.on('label-commit', (payload) => labels.push(payload));
+    placement.on('placement-commit', ({ entityId }) => placements.push(entityId));
+
+    placement.beginLabelMove('sensor.a');
+    expect(placement.commitPlacement(...screen(2, 0))).toBeNull();
+
+    expect(placements, 'a caption is not a placement').toHaveLength(0);
+    expect(labels).toHaveLength(1);
+    expect(labels[0].offset[0]).toBeCloseTo(2, 1);
+    placement.dispose();
+  });
+
+  it('puts the label back where it was when the drag is cancelled', () => {
+    const { placement, offsets } = labelController();
+    placement.beginLabelMove('sensor.a');
+    placement.updatePlacement(...screen(3, 3));
+    placement.cancelPlacement();
+    expect(offsets[offsets.length - 1]).toEqual([0, 0.34, 0]);
+    placement.dispose();
+  });
+
+  it('falls back to moving the entity when there is no anchor to offset from', () => {
+    const layer = {
+      moveEntity: () => {},
+      setEntities: () => {},
+      getEntityPosition: () => null,
+      getPlacedEntity: () => null,
+    } as unknown as IEntityLayer;
+    const placement = new PlacementController(stubModel(house()), layer, noopCamera);
+    placement.init(stubContext());
+
+    placement.beginLabelMove('sensor.a');
+    expect(placement.commitPlacement(...screen(0, 0)), 'a plain move still lands').not.toBeNull();
+    placement.dispose();
+  });
+});

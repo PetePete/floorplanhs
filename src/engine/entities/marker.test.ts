@@ -94,3 +94,60 @@ describe('room leader', () => {
     m.dispose();
   });
 });
+
+/**
+ * The anchor is the entity — where a lamp hangs and what its light comes from.
+ * The label is a caption, and a caption may sit beside what it captions.
+ */
+describe('label offset', () => {
+  /** Enough of a frame for the marker to lay itself out against. */
+  function frame(m: EntityMarker): void {
+    const camera = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 100);
+    camera.position.set(0, 6, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    m.update(1 / 60, {
+      size: { width: 800, height: 600 },
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1]);
+  }
+
+  /** The leader's far end, where the pill hangs. */
+  function tip(m: EntityMarker): THREE.Vector3 {
+    const p = (m as unknown as { leaderPositions: Float32Array }).leaderPositions;
+    return new THREE.Vector3(p[6], p[7], p[8]);
+  }
+
+  it('reads the configured offset back', () => {
+    const m = marker({ marker: { offset: [1.5, 0.5, -2] } });
+    expect(m.getLabelOffset()).toEqual([1.5, 0.5, -2]);
+    m.dispose();
+  });
+
+  it('leaves the position of the entity alone', () => {
+    const m = marker({ position: [3, 1, 2] });
+    m.setLabelOffset([2, 0.4, 0]);
+    expect(m.object.position.toArray()).toEqual([3, 1, 2]);
+    m.dispose();
+  });
+
+  it('runs the leader out to where the label went', () => {
+    const m = marker({ position: [0, 0, 0] });
+    m.setLabelOffset([2, 0.4, -1]);
+    frame(m);
+    expect(tip(m).x).toBeCloseTo(2, 3);
+    expect(tip(m).z).toBeCloseTo(-1, 3);
+    m.dispose();
+  });
+
+  it('keeps the leader pointing straight up when nothing was pushed aside', () => {
+    const m = marker({ position: [0, 0, 0] });
+    frame(m);
+    expect(tip(m).x).toBeCloseTo(0, 5);
+    expect(tip(m).z).toBeCloseTo(0, 5);
+    expect(tip(m).y).toBeGreaterThan(0);
+    m.dispose();
+  });
+});

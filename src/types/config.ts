@@ -22,7 +22,7 @@ export interface CardEditDetail {
 }
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.2.14';
+export const CARD_VERSION = '0.2.15';
 
 export type Vec3 = [number, number, number];
 
@@ -196,7 +196,13 @@ export interface MarkerConfig {
   /** Hide when the camera is further away than this (world units). */
   maxDistance?: number;
   color?: string;
-  /** Lift the marker above the anchor point. */
+  /**
+   * Where the label sits, in metres from the anchor.
+   *
+   * The anchor is the entity; this is only its caption. Dragging the label
+   * writes this, dragging the anchor writes `position` — one marker, two things
+   * that are allowed to be in different places.
+   */
   offset?: Vec3;
 }
 

@@ -261,6 +261,8 @@ export interface IPlacementController extends Subsystem {
   cancelPlacement(): void;
   /** Move an already-placed entity. */
   beginMove(entityId: string): void;
+  /** Move an already-placed entity's *label*, leaving the entity where it is. */
+  beginLabelMove(entityId: string): void;
   isActive(): boolean;
   /**
    * Commit notifications, so the viewer can turn an in-canvas marker drag into
@@ -271,10 +273,12 @@ export interface IPlacementController extends Subsystem {
     event: 'placement-commit',
     cb: (payload: {
       entityId: string;
-      mode: 'add' | 'move';
+      mode: 'add' | 'move' | 'label';
       result: PlacementResult;
     }) => void,
   ): () => void;
+  /** A label dragged clear of its anchor; the offset is in metres. */
+  on(event: 'label-commit', cb: (payload: { entityId: string; offset: Vec3 }) => void): () => void;
 }
 
 /* ------------------------------------------------------------------ store */

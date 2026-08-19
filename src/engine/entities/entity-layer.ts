@@ -40,6 +40,8 @@ export interface PickOptions {
 
 /** Seconds between occlusion sweeps. */
 const OCCLUSION_INTERVAL = 0.2;
+
+const _point = { x: 0, y: 0, depth: 0 };
 /** Markers tested per sweep; the rest wait their turn. */
 const OCCLUSION_BUDGET = 8;
 /** Ignore hits this close to the marker — the surface it sits on is not an
@@ -341,6 +343,60 @@ export class EntityLayer implements IEntityLayer {
    * is exactly as accurate — but it also lets the hit rectangle be *inflated*
    * to a 44 px finger target, which a ray through the sprite quad cannot do.
    */
+  /**
+   * Which part of a marker is under `ndc`: the anchor, or the label.
+   *
+   * The anchor is the entity itself — where a lamp hangs and where its light
+   * comes from. The label is the thing you read, and it may have been pushed
+   * aside to somewhere legible. One gesture cannot mean both, so the answer to
+   * "what did I just grab" has to come from the geometry.
+   *
+   * The anchor wins ties: it is the smaller target of the two and sits under the
+   * label when nothing has been pushed anywhere, so the label would otherwise
+   * take every hit.
+   */
+  pickPart(
+    ndc: { x: number; y: number },
+    options?: PickOptions,
+  ): { entityId: string; part: 'anchor' | 'label' } | null {
+    const ctx = this.ctx;
+    if (!ctx || this.markers.size === 0 || !this.markersVisible) return null;
+    const { width, height } = ctx.size;
+    if (width <= 0 || height <= 0) return null;
+
+    const pointerX = (ndc.x * 0.5 + 0.5) * width;
+    const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * height;
+    const touch = options?.pointerType === 'touch';
+    const reach = touch ? 20 : 12;
+
+    const camera = ctx.activeCamera;
+    camera.updateMatrixWorld();
+
+    let best: string | null = null;
+    let bestDepth = Infinity;
+    for (const [entityId, marker] of this.markers) {
+      if (!marker.getAnchorScreenPoint(camera, width, height, _point)) continue;
+      if (Math.hypot(pointerX - _point.x, pointerY - _point.y) > reach) continue;
+      if (_point.depth >= bestDepth) continue;
+      bestDepth = _point.depth;
+      best = entityId;
+    }
+    if (best) return { entityId: best, part: 'anchor' };
+
+    const label = this.pick(ndc, options);
+    return label ? { entityId: label, part: 'label' } : null;
+  }
+
+  /** Live label drag; the placed entity is only rewritten once it is dropped. */
+  setLabelOffset(entityId: string, offset: Vec3): void {
+    this.markers.get(entityId)?.setLabelOffset(offset);
+    this.ctx?.invalidate();
+  }
+
+  getLabelOffset(entityId: string): Vec3 | null {
+    return this.markers.get(entityId)?.getLabelOffset() ?? null;
+  }
+
   pick(ndc: { x: number; y: number }, options?: PickOptions): string | null {
     const ctx = this.ctx;
     if (!ctx || this.markers.size === 0 || !this.markersVisible) return null;

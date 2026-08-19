@@ -238,6 +238,45 @@ export class EntityMarker {
     this.rebuildArt();
   }
 
+  /**
+   * Move the label alone, in metres from the anchor.
+   *
+   * The anchor is the entity — where the lamp hangs, what the light comes from.
+   * The label is a thing you read, and a plan is full of places it fits better
+   * than directly over what it names. Dragging one used to drag the other.
+   */
+  setLabelOffset(offset: Vec3): void {
+    this.baseLift = offset[1];
+    this.body.position.set(offset[0], offset[1], offset[2]);
+  }
+
+  /** Where the label currently sits, relative to the anchor. */
+  getLabelOffset(): Vec3 {
+    return [this.body.position.x, this.baseLift, this.body.position.z];
+  }
+
+  /**
+   * The anchor's own screen position, for telling "grab the entity" apart from
+   * "grab its label". Returns false when it is not on screen.
+   */
+  getAnchorScreenPoint(
+    camera: THREE.Camera,
+    width: number,
+    height: number,
+    out: { x: number; y: number; depth: number },
+  ): boolean {
+    if (!this.isPickable()) return false;
+    this.object.updateMatrixWorld();
+    _proj.setFromMatrixPosition(this.object.matrixWorld);
+    const depth = -_view.copy(_proj).applyMatrix4(camera.matrixWorldInverse).z;
+    _proj.project(camera);
+    if (!Number.isFinite(_proj.x) || _proj.z > 1) return false;
+    out.x = (_proj.x * 0.5 + 0.5) * width;
+    out.y = (1 - (_proj.y * 0.5 + 0.5)) * height;
+    out.depth = depth;
+    return true;
+  }
+
   /** The room this marker labels, for the layer's anchor lookup. */
   get roomName(): string | undefined {
     return this.placedEntity.room;
@@ -412,13 +451,22 @@ export class EntityMarker {
     // which on a dark ground is close to nothing at all.
     const showLabel = !this.crowded || this.hovered || this.selected;
     this.body.visible = showLabel;
-    this.leader.visible = showLabel ? lift > 0.03 || this.roomAnchor !== null : this.roomAnchor !== null;
+    const pushed = Math.hypot(this.body.position.x, this.body.position.z) > 0.03;
+    this.leader.visible = showLabel
+      ? lift > 0.03 || pushed || this.roomAnchor !== null
+      : this.roomAnchor !== null;
 
     // Hidden label, so the leader stops at the anchor rather than running up to
-    // a pill that is not being drawn.
-    const tip = showLabel ? lift : 0;
-    if (this.leaderPositions[7] !== tip) {
-      this.leaderPositions[7] = tip;
+    // a pill that is not being drawn. Sideways too: a label dragged out of the
+    // way is only readable if the line still says which anchor it belongs to.
+    const tipX = showLabel ? this.body.position.x : 0;
+    const tipY = showLabel ? lift : 0;
+    const tipZ = showLabel ? this.body.position.z : 0;
+    const p = this.leaderPositions;
+    if (p[6] !== tipX || p[7] !== tipY || p[8] !== tipZ) {
+      p[6] = tipX;
+      p[7] = tipY;
+      p[8] = tipZ;
       this.leaderGeometry.attributes.position.needsUpdate = true;
     }
 

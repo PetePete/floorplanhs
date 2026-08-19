@@ -104,6 +104,8 @@ export class DropIndicator {
   private readonly accent: string;
   private readonly invalidColor: string;
 
+  /** See `setGhostVisible`. */
+  private ghostAllowed = true;
   private ghostCell: AtlasCell | null = null;
   private chipCell: AtlasCell | null = null;
   private ghostSpec: DropGhost = {};
@@ -233,6 +235,18 @@ export class DropIndicator {
   /* --------------------------------------------------------------- content */
 
   /** What the ghost pill shows. Call once per placement, not per move. */
+  /**
+   * Whether the ghost chip is drawn at all.
+   *
+   * Off while dragging a marker that already exists: the marker itself follows
+   * the cursor, and the ghost put a second, identical chip right beside it —
+   * which read as a rendering fault rather than as a preview.
+   */
+  setGhostVisible(visible: boolean): void {
+    this.ghostAllowed = visible;
+    if (!visible) this.ghost.visible = false;
+  }
+
   setGhost(ghost: DropGhost): void {
     if (
       this.ghostSpec.icon === ghost.icon &&
@@ -266,7 +280,7 @@ export class DropIndicator {
     this.ringMaterial.opacity = feedback.valid ? 0.95 : 0.7;
     this.discMaterial.opacity = feedback.valid ? 0.16 : 0.1;
     // A refused drop shows no ghost at all: nothing is going to be placed.
-    this.ghost.visible = feedback.valid;
+    this.ghost.visible = feedback.valid && this.ghostAllowed;
 
     // Nudged off the surface so the decal never z-fights with the wall it is
     // lying on, and oriented so it lies flush rather than floating.
