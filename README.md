@@ -1,5 +1,7 @@
 # Floorplan 3D Card
 
+![Three storeys pulled apart, with the view navigator, toolbar and orientation cube](https://raw.githubusercontent.com/PetePete/floorplanhs/main/docs/images/exploded-view.png)
+
 An interactive 3D floorplan for your Home Assistant dashboard. Point it at a
 **Sweet Home 3D `.sh3d` file** of your own house and the card turns it into a
 live view: lights that actually light the room they are in, cross-sections that
