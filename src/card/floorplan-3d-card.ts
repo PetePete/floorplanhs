@@ -60,6 +60,14 @@ import { vRound } from '@/util/math';
 import type { CardError } from '@/ui/error-panel';
 import { recallView, rememberView } from '@/card/view-memory';
 import { configKey } from '@/util/config-key';
+import {
+  authorToolsVisible,
+  explodeAvailable,
+  levelSelectorVisible,
+  sectionButtonVisible,
+  sectionPanelVisible,
+  toolbarVisible,
+} from '@/card/chrome-rules';
 import { ancestorsAcrossShadow } from '@/util/dom-chain';
 import type { Fp3dHud } from '@/ui/hud';
 import type { UiSize } from '@/ui/base-element';
@@ -651,10 +659,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * tapping a lamp would select it for the inspector instead of switching it on.
    */
   private get showAuthorTools(): boolean {
-    const mode = this.authorMode;
-    if (mode === 'never') return false;
-    if (mode === 'always') return true;
-    return this.editing;
+    return authorToolsVisible(this.authorMode, this.editing);
   }
 
   private prefersReducedMotion(): boolean {
@@ -1881,7 +1886,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * read by the config schema, so setting it did nothing at all.
    */
   private toolbarVisible(ui: NonNullable<Floorplan3dCardConfig['ui']>): boolean {
-    return ui.showToolbar !== false;
+    return toolbarVisible(ui);
   }
 
   /**
@@ -1890,16 +1895,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * there both wasted the corner and had it sitting on top of the zoom control,
    * which reserves its strip in the chrome grid from the same two numbers.
    */
-  /**
-   * Pulling the storeys apart says something about a building, and nothing at
-   * all about one storey on its own — in a level view the button moved the one
-   * visible floor up and down for no reason.
-   */
   private get canExplode(): boolean {
-    if (this.levels.length < 2) return false;
-    if (this.section.mode === 'level') return false;
-    const visible = this.visibleLevels;
-    return visible === null || visible.length > 1;
+    return explodeAvailable(this.levels.length, this.section, this.visibleLevels);
   }
 
   private placeViewCube(): void {
@@ -1921,9 +1918,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     // hierarchy the user asked us to remove.
     // On unless switched off: this panel *is* the card's navigation now — the
     // building, its storeys and your own saved views, in one list.
-    const showLevels = ui.showLevelSelector !== false;
+    const showLevels = levelSelectorVisible(ui);
     const showPalette = this.editing && this.panel === 'palette';
-    const canSection = mode !== 'never' && (ui.showSectionControls === true || author);
+    const canSection = sectionButtonVisible(ui, mode, this.editing);
 
     return html`
       <div
@@ -2067,9 +2064,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     }
 
     if (this.panel !== 'section') return nothing;
-    const ui = config?.ui ?? {};
-    if (this.authorMode === 'never') return nothing;
-    if (ui.showSectionControls !== true && !this.showAuthorTools) return nothing;
+    // The same rule as the button that opens it: a panel with no way to close it
+    // is worse than no panel.
+    if (!sectionPanelVisible(config?.ui ?? {}, this.authorMode, this.editing)) return nothing;
     return html`<div class="at-right sheet">
       <fp3d-section-panel
         data-hass
