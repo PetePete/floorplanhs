@@ -1451,16 +1451,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   /**
-   * The whole house, as the first thing in the bar.
+   * The whole house, and it stays put.
    *
    * Generated like the storey views and for the same reason: it is derived from
-   * the model, so it is right about a house nobody has configured yet — and
-   * without it the bar offers every storey and no way back to the building.
-   * A saved view of your own sits earlier in the bar and takes over the job.
+   * the model, so it is right about a house nobody has configured yet. It used
+   * to step aside as soon as you saved a view of your own, on the theory that
+   * your view was the better one — which took away the way back to the building
+   * exactly when you had started collecting storey views.
    */
   private overviewPreset(): CameraPreset[] {
     if (this.config?.ui?.levelPresets === false) return [];
-    if ((this.config?.presets ?? []).length > 0) return [];
 
     const bounds = this.bounds;
     const spanX = bounds ? bounds.max[0] - bounds.min[0] : 12;
