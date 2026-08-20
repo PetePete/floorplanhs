@@ -154,6 +154,14 @@ export class PlacementController implements IPlacementController {
   private originalPosition: Vec3 | null = null;
   /** Where the label sat when this drag started; restored on cancel. */
   private originalOffset: Vec3 | null = null;
+  /**
+   * The pile this drag is carrying, and where each of its markers started.
+   *
+   * A stack moves as one thing, so every row has to follow the cursor — waiting
+   * for the drop means dragging a frame away from its own contents and hoping
+   * they catch up.
+   */
+  private carrying: Array<{ entityId: string; from: Vec3 }> = [];
   /** Anchor the label is being dragged around, in world metres. */
   private labelAnchor: Vec3 | null = null;
   private labelOffset: Vec3 | null = null;
@@ -279,6 +287,7 @@ export class PlacementController implements IPlacementController {
     this.mode = 'move';
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
+    this.carrying = this.pileUnder(entityId);
     this.freePlacement = false;
     this.lastHitLevel = null;
     this.lastResult = null;
@@ -400,6 +409,10 @@ export class PlacementController implements IPlacementController {
     // duplicate it.
     if (this.mode === 'move' && this.entityId) {
       this.entities.moveEntity(this.entityId, resolved.position);
+      for (const member of this.carrying) {
+        if (member.entityId === this.entityId) continue;
+        this.entities.moveEntity(member.entityId, resolved.position);
+      }
     }
     this.emitter.emit('placement-update', {
       entityId: this.entityId ?? '',
@@ -669,6 +682,17 @@ export class PlacementController implements IPlacementController {
    * width the drop gives up its own spot and takes the other marker's, so the
    * gesture succeeds by intention rather than by aim.
    */
+  /** Everyone sharing this marker's anchor, with the spot they started from. */
+  private pileUnder(entityId: string): Array<{ entityId: string; from: Vec3 }> {
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const placed = extras.getPlacedEntities?.() ?? [];
+    const self = placed.find((entry) => entry.entity === entityId);
+    if (!self?.stack) return [];
+    return placed
+      .filter((entry) => entry.stack === self.stack)
+      .map((entry) => ({ entityId: entry.entity, from: [...entry.position] as Vec3 }));
+  }
+
   /** The marker under the pointer, ignoring the one being dragged and its pile. */
   private markerUnderPointer(): string | null {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
@@ -940,7 +964,12 @@ export class PlacementController implements IPlacementController {
 
     if (reason && mode === 'move' && entityId && this.originalPosition) {
       this.entities.moveEntity(entityId, this.originalPosition);
+      for (const member of this.carrying) {
+        if (member.entityId === entityId) continue;
+        this.entities.moveEntity(member.entityId, member.from);
+      }
     }
+    this.carrying = [];
     if (reason && mode === 'label' && entityId && this.originalOffset) {
       (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(
         entityId,

@@ -508,3 +508,64 @@ describe('starting a fresh placement', () => {
     placement.dispose();
   });
 });
+
+/**
+ * A stack moves as one thing. Waiting for the drop means dragging a frame away
+ * from its own contents and hoping they catch up.
+ */
+describe('carrying a stack', () => {
+  function pile(): {
+    placement: PlacementController;
+    moves: Array<[string, Vec3]>;
+  } {
+    const moves: Array<[string, Vec3]> = [];
+    const members = [
+      { entity: 'light.a', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      { entity: 'switch.b', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      { entity: 'sensor.c', position: [3, 0.02, 3] as Vec3, level: 'ground' },
+    ];
+    const entities = {
+      moveEntity: (entityId: string, position: Vec3) => moves.push([entityId, position]),
+      setEntities: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      pick: () => null,
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    return { placement, moves };
+  }
+
+  it('moves every member while the drag is still going', () => {
+    const { placement, moves } = pile();
+    placement.beginMove('light.a');
+    placement.updatePlacement(...screen(1, 1));
+
+    expect(moves.map(([id]) => id)).toContain('light.a');
+    expect(moves.map(([id]) => id), 'the other row follows too').toContain('switch.b');
+    expect(moves.map(([id]) => id), 'a marker outside the pile stays put').not.toContain('sensor.c');
+    placement.dispose();
+  });
+
+  it('puts the whole pile back when the drag is cancelled', () => {
+    const { placement, moves } = pile();
+    placement.beginMove('light.a');
+    placement.updatePlacement(...screen(1.5, 1.5));
+    moves.length = 0;
+    placement.cancelPlacement();
+
+    const restored = new Map(moves);
+    expect(restored.get('switch.b')).toEqual([0, 0.02, 0]);
+    placement.dispose();
+  });
+
+  it('leaves a lone marker to move alone', () => {
+    const { placement, moves } = pile();
+    placement.beginMove('sensor.c');
+    placement.updatePlacement(...screen(1, 1));
+    expect(new Set(moves.map(([id]) => id))).toEqual(new Set(['sensor.c']));
+    placement.dispose();
+  });
+});
