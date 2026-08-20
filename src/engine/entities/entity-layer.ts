@@ -528,10 +528,8 @@ export class EntityLayer implements IEntityLayer {
     const pointerX = (ndc.x * 0.5 + 0.5) * width;
     const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * height;
     const touch = options?.pointerType === 'touch';
-    // The anchor is the handle that moves a marker — and a whole stack, when it
-    // carries one — so it has to be catchable. It is drawn as a small dot
-    // because a big one would clutter the plan, which makes the target a matter
-    // of hit testing rather than of paint.
+    // The anchor is drawn as a small dot, because a big one would clutter the
+    // plan — so its target is a matter of hit testing rather than of paint.
     const reach = touch ? 26 : 18;
 
     const camera = ctx.activeCamera;
@@ -546,19 +544,24 @@ export class EntityLayer implements IEntityLayer {
       return { entityId: rect.base, part: 'anchor' };
     }
 
+    // The label wins a tie. From some angles the anchor sits behind its own
+    // chip, and then aiming at the chip — the thing you can see — would pick up
+    // the entity instead of its caption. What you point at is what you get; the
+    // dot is reachable everywhere the chip is not, which is most of the plan.
+    const label = this.pick(ndc, options);
+    if (label) return { entityId: label, part: 'label' };
+
     let best: string | null = null;
     let bestDepth = Infinity;
     for (const [entityId, marker] of this.markers) {
+      if (entityId === options?.ignore) continue;
       if (!marker.getAnchorScreenPoint(camera, width, height, _point)) continue;
       if (Math.hypot(pointerX - _point.x, pointerY - _point.y) > reach) continue;
       if (_point.depth >= bestDepth) continue;
       bestDepth = _point.depth;
       best = entityId;
     }
-    if (best) return { entityId: best, part: 'anchor' };
-
-    const label = this.pick(ndc, options);
-    return label ? { entityId: label, part: 'label' } : null;
+    return best ? { entityId: best, part: 'anchor' } : null;
   }
 
   /** Live label drag; the placed entity is only rewritten once it is dropped. */
