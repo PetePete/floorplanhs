@@ -69,6 +69,8 @@ const RENDER_ORDER_PILL = 3003;
 
 /** Reused across every marker; nothing here survives a call. */
 const _worldBody = new THREE.Vector3();
+/** The world direction that points up the screen; see the stack rows. */
+const _screenUp = new THREE.Vector3();
 const _camPos = new THREE.Vector3();
 const _proj = new THREE.Vector3();
 const _view = new THREE.Vector3();
@@ -485,16 +487,21 @@ export class EntityMarker {
     this.object.visible = visible;
     if (!visible) return this.popT < 1;
 
-    // A stack is read as a list, so the gap between its labels is a screen
-    // distance and not a distance in the house: in metres it would open and
-    // close with the zoom and lean over with the perspective, which is exactly
-    // what a list must not do.
-    const stackLift =
-      this.stackIndex > 0
-        ? this.stackIndex * this.stackSpacing * this.pixelUnit(ctx, this.object.position)
-        : 0;
-    const lift = this.baseLift + HOVER_LIFT * this.hoverAmt + stackLift;
+    const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
     this.body.position.y = lift;
+
+    // A stack is read as a list, so its rows are spaced on the *screen* — and
+    // that means straight up the screen, not straight up the house. A world-Y
+    // offset is foreshortened by the cosine of the camera's elevation: 36 px of
+    // pitch became 29 px at the isometric default, against 30 px chips, so the
+    // rows overlapped in exactly the view the card ships with, and collapsed
+    // into one another as you tilted further over. Offsetting along the
+    // camera's own up axis is the same number of pixels at any angle.
+    if (this.stackIndex > 0) {
+      const unit = this.pixelUnit(ctx, this.object.position);
+      _screenUp.setFromMatrixColumn(ctx.activeCamera.matrixWorld, 1).normalize();
+      this.body.position.addScaledVector(_screenUp, this.stackIndex * this.stackSpacing * unit);
+    }
     // Crowded markers give up the label that was covering a neighbour, but not
     // the leader: the line is what says something is there and, when it points
     // at a room, which room that is. Dropping both leaves a bare crosshair,

@@ -236,3 +236,62 @@ describe('the pitch of a pile', () => {
     m.dispose();
   });
 });
+
+/**
+ * The rows of a pile are spaced on the *screen*, so they must be spaced up the
+ * screen — not up the house. A world-Y offset is foreshortened by the cosine of
+ * the camera's elevation: at the isometric view this card ships with, 36 px of
+ * pitch arrived as 29 px against 30 px chips, so the rows overlapped in the one
+ * view everybody sees, and collapsed entirely as the camera tilted further.
+ */
+describe('a pile seen from above', () => {
+  /** Camera on a 12 m orbit at this elevation, looking at the origin. */
+  function cameraAt(elevationDeg: number): THREE.PerspectiveCamera {
+    const camera = new THREE.PerspectiveCamera(50, 900 / 640, 0.1, 200);
+    const phi = THREE.MathUtils.degToRad(90 - elevationDeg);
+    camera.position.set(
+      12 * Math.sin(phi) * Math.cos(Math.PI / 4),
+      12 * Math.cos(phi),
+      12 * Math.sin(phi) * Math.sin(Math.PI / 4),
+    );
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    return camera;
+  }
+
+  /** World position of the label after one frame at this camera. */
+  function labelAt(m: EntityMarker, camera: THREE.PerspectiveCamera): THREE.Vector3 {
+    m.update(1 / 60, {
+      size: { width: 900, height: 640 },
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1]);
+    m.object.updateMatrixWorld(true);
+    const body = (m as unknown as { body: THREE.Group }).body;
+    return new THREE.Vector3().setFromMatrixPosition(body.matrixWorld);
+  }
+
+  it('offsets a row along the screen, not along world Y', () => {
+    for (const elevation of [20, 35.26, 55, 80]) {
+      const camera = cameraAt(elevation);
+      const row = marker({ position: [0, 0, 0] });
+      row.setStackIndex(1, 2, 36);
+      const base = marker({ position: [0, 0, 0] });
+      base.setStackIndex(0, 2, 36);
+
+      const delta = labelAt(row, camera).sub(labelAt(base, camera)).normalize();
+      const forward = camera.getWorldDirection(new THREE.Vector3());
+
+      // Perpendicular to the view direction is what "up the screen" means, and
+      // it is what keeps the pitch the same number of pixels at any angle. A
+      // world-Y offset would tip towards the camera as it rises.
+      expect(Math.abs(delta.dot(forward)), `elevation ${elevation}`).toBeLessThan(0.02);
+      // And upwards, not down.
+      expect(delta.dot(camera.up), `elevation ${elevation}`).toBeGreaterThan(0);
+
+      row.dispose();
+      base.dispose();
+    }
+  });
+});

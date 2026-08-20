@@ -142,14 +142,20 @@ export class StackFrame {
    * Put the frame around a box of `size` whose centre is at `centre`, with
    * `unit` world units to the screen pixel.
    */
-  update(centre: THREE.Vector3, size: StackFrameSize, unit: number, color: string, dpr: number): void {
+  update(
+    centre: THREE.Vector3,
+    size: StackFrameSize,
+    unit: number,
+    color: string,
+    dpr: number,
+    screenUp: THREE.Vector3,
+  ): void {
     this.paint(size, color, dpr);
     const width = this.drawn.width;
     const height = this.drawn.height;
     // The header sits above the rows, so the whole thing rides that much higher
-    // and the chips stay where they were.
-    this.sprite.position.copy(centre);
-    this.sprite.position.y += (HEADER_PX / 2) * unit;
+    // — up the screen, the way the rows themselves are spaced.
+    this.sprite.position.copy(centre).addScaledVector(screenUp, (HEADER_PX / 2) * unit);
     this.sprite.scale.set(width * unit, height * unit, 1);
     this.sprite.visible = width > 0 && height > 0;
   }

@@ -30,6 +30,7 @@ const STACK_ROW_GAP_PX = 6;
 const STACK_ROW_MIN_PX = 30;
 const _framePoint = new THREE.Vector3();
 const _frameProject = new THREE.Vector3();
+const _frameUp = new THREE.Vector3();
 
 /** Slack around a stack's frame, so the pile catches a near miss. */
 const STACK_FRAME_PAD_PX = 6;
@@ -330,9 +331,19 @@ export class EntityLayer implements IEntityLayer {
         this.frames.set(id, frame);
         this.group.add(frame.sprite);
       }
-      // Centre of the box: half the spread above the first row.
-      _framePoint.y += (spread / 2) * unit;
-      frame.update(_framePoint, { width, height }, unit, this.options.accent ?? '#03a9f4', ctx.size.pixelRatio);
+      // Centre of the box: half the spread above the first row, up the screen
+      // rather than up the house — the rows travel that way, so the frame must
+      // too, or it stands taller than its own contents and lists to one side.
+      _frameUp.setFromMatrixColumn(ctx.activeCamera.matrixWorld, 1).normalize();
+      _framePoint.addScaledVector(_frameUp, (spread / 2) * unit);
+      frame.update(
+        _framePoint,
+        { width, height },
+        unit,
+        this.options.accent ?? '#03a9f4',
+        ctx.size.pixelRatio,
+        _frameUp,
+      );
       alive.add(id);
 
       // The frame is also the pile's drop area: everything inside it belongs to
