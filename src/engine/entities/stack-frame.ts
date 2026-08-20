@@ -12,11 +12,22 @@
 
 import * as THREE from 'three';
 
+import { roundRect, withAlpha } from '@/engine/entities/marker-texture';
+
 /** Air between the chips and the frame, in screen pixels. */
 const PADDING_PX = 5;
 const RADIUS_PX = 4;
 const DASH_PX = 5;
 const GAP_PX = 4;
+
+/**
+ * The bar along the top, in screen pixels.
+ *
+ * A pile needs somewhere to take hold of that is not one of its rows — a row
+ * means "this one marker", and the anchor dot is a dot. This is the part you
+ * grab to move the whole thing, so it is drawn as something you would grab.
+ */
+export const HEADER_PX = 16;
 
 export interface StackFrameSize {
   /** Widest chip in the stack, in CSS pixels. */
@@ -61,7 +72,7 @@ export class StackFrame {
    */
   private paint(size: StackFrameSize, color: string, dpr: number): void {
     const width = Math.ceil(size.width + PADDING_PX * 2);
-    const height = Math.ceil(size.height + PADDING_PX * 2);
+    const height = Math.ceil(size.height + PADDING_PX * 2) + HEADER_PX;
     if (
       this.drawn.width === width &&
       this.drawn.height === height &&
@@ -79,15 +90,36 @@ export class StackFrame {
 
     c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
     c2d.clearRect(0, 0, width, height);
+
+    // The grab bar, along the top and solid: the dashes say "these belong
+    // together", and a solid bar says "take hold here".
+    const barWidth = Math.max(28, Math.min(width, 64));
+    const barX = (width - barWidth) / 2;
+    c2d.save();
+    c2d.fillStyle = withAlpha(color, 0.85);
+    roundRect(c2d, barX, 0.5, barWidth, HEADER_PX - 2, 3);
+    c2d.fill();
+    // Three lines, the grip every window in the world uses.
+    c2d.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    c2d.lineWidth = 1;
+    for (let i = 0; i < 3; i += 1) {
+      const gy = 3.5 + i * 3.5;
+      c2d.beginPath();
+      c2d.moveTo(width / 2 - 7, gy);
+      c2d.lineTo(width / 2 + 7, gy);
+      c2d.stroke();
+    }
+    c2d.restore();
+
     c2d.strokeStyle = color;
     c2d.lineWidth = 1;
     c2d.setLineDash([DASH_PX, GAP_PX]);
 
     const inset = 0.5;
     const x = inset;
-    const y = inset;
+    const y = HEADER_PX + inset;
     const w = width - inset * 2;
-    const h = height - inset * 2;
+    const h = height - HEADER_PX - inset * 2;
     const r = Math.min(RADIUS_PX, w / 2, h / 2);
 
     c2d.beginPath();
@@ -114,7 +146,10 @@ export class StackFrame {
     this.paint(size, color, dpr);
     const width = this.drawn.width;
     const height = this.drawn.height;
+    // The header sits above the rows, so the whole thing rides that much higher
+    // and the chips stay where they were.
     this.sprite.position.copy(centre);
+    this.sprite.position.y += (HEADER_PX / 2) * unit;
     this.sprite.scale.set(width * unit, height * unit, 1);
     this.sprite.visible = width > 0 && height > 0;
   }

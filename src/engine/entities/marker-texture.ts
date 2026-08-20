@@ -747,7 +747,7 @@ function drawIcon(c2d: Ctx2D, name: string, x: number, y: number, size: number, 
 
 /* -------------------------------------------------------------- utilities */
 
-function roundRect(c2d: Ctx2D, x: number, y: number, w: number, h: number, r: number): void {
+export function roundRect(c2d: Ctx2D, x: number, y: number, w: number, h: number, r: number): void {
   const radius = Math.max(0, Math.min(r, w / 2, h / 2));
   // Hand-rolled rather than `c2d.roundRect`, which the Android WebView shipped
   // with older HA companion builds does not have.
@@ -786,7 +786,7 @@ function ellipsise(c2d: Ctx2D, text: string, maxWidth: number): string {
   return low > 0 ? text.slice(0, low) + ellipsis : '';
 }
 
-function withAlpha(css: string, alpha: number): string {
+export function withAlpha(css: string, alpha: number): string {
   const rgb = parseCssColor(css);
   if (!rgb) return `rgba(255,255,255,${alpha})`;
   return `rgba(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])},${alpha})`;

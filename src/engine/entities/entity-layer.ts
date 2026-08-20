@@ -19,7 +19,7 @@ import { EntityMarker, type ScreenRect } from '@/engine/entities/marker';
 import { MarkerAtlas } from '@/engine/entities/marker-texture';
 
 import { CELL_PADDING } from '@/engine/entities/marker-texture';
-import { StackFrame } from '@/engine/entities/stack-frame';
+import { HEADER_PX, StackFrame } from '@/engine/entities/stack-frame';
 import { worldUnitsPerPixel } from '@/engine/entities/marker';
 
 /** Matches the marker's own resting lift; see `EntityMarker`. */
@@ -96,7 +96,15 @@ export class EntityLayer implements IEntityLayer {
   /** Screen box of each stack's frame, refreshed per frame; see `pick`. */
   private readonly frameRects = new Map<
     string,
-    { base: string; x: number; y: number; halfWidth: number; halfHeight: number }
+    {
+      base: string;
+      x: number;
+      y: number;
+      halfWidth: number;
+      halfHeight: number;
+      headerY: number;
+      headerHalfHeight: number;
+    }
   >();
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
@@ -313,12 +321,18 @@ export class EntityLayer implements IEntityLayer {
       // the stack, including the air between the rows. Aiming at a row when you
       // mean "onto this pile" is aiming at the wrong thing.
       _frameProject.copy(_framePoint).project(ctx.activeCamera);
+      const screenX = (_frameProject.x * 0.5 + 0.5) * ctx.size.width;
+      const screenY = (1 - (_frameProject.y * 0.5 + 0.5)) * ctx.size.height;
       this.frameRects.set(id, {
         base: visible[0],
-        x: (_frameProject.x * 0.5 + 0.5) * ctx.size.width,
-        y: (1 - (_frameProject.y * 0.5 + 0.5)) * ctx.size.height,
+        x: screenX,
+        y: screenY,
         halfWidth: width / 2 + STACK_FRAME_PAD_PX,
         halfHeight: height / 2 + STACK_FRAME_PAD_PX,
+        // The grab bar, in the same screen coordinates: it sits directly above
+        // the rows, which is where the frame's own top edge is.
+        headerY: screenY - height / 2 - STACK_FRAME_PAD_PX - HEADER_PX / 2,
+        headerHalfHeight: HEADER_PX / 2 + 3,
       });
     }
 
@@ -514,6 +528,15 @@ export class EntityLayer implements IEntityLayer {
 
     const camera = ctx.activeCamera;
     camera.updateMatrixWorld();
+
+    // The pile's grab bar first: it is drawn as a handle, so it behaves as the
+    // handle — the same answer as taking hold of the anchor, which is what
+    // moves a whole stack.
+    for (const rect of this.frameRects.values()) {
+      if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
+      if (Math.abs(pointerY - rect.headerY) > rect.headerHalfHeight) continue;
+      return { entityId: rect.base, part: 'anchor' };
+    }
 
     let best: string | null = null;
     let bestDepth = Infinity;
