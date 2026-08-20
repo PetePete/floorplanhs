@@ -47,7 +47,7 @@ const ROOM_LEADER_MIN_M = 0.6;
 /** Metres the pill floats above its anchor when no offset is configured. */
 const DEFAULT_LIFT = 0.34;
 
-/** Screen pixels between the labels of one stack: a chip and a hair of air. */
+/** Fallback row pitch until the layer has measured the chips in the pile. */
 const STACK_ROW_PX = 34;
 
 /** A stack's anchor is a handle, so it is drawn as one. */
@@ -139,6 +139,14 @@ export class EntityMarker {
   private stackIndex = 0;
   /** How many markers share this anchor. 1 means it stands alone. */
   private stackCount = 1;
+  /**
+   * Screen pixels from one row of the pile to the next.
+   *
+   * Measured by the layer from the chips actually in the stack rather than
+   * assumed: a name can be long, a state can be two lines' worth of words, and
+   * a row that is taller than the gap sits on top of the one above it.
+   */
+  private stackSpacing = STACK_ROW_PX;
 
   private baseLift = DEFAULT_LIFT;
   /** World point of the room this entity names, if it names one. */
@@ -424,10 +432,13 @@ export class EntityMarker {
    * Only the bottom one keeps its leader line: three lines fanning out of one
    * dot say nothing that the list above it does not already say.
    */
-  setStackIndex(index: number, count = 1): void {
-    if (this.stackIndex === index && this.stackCount === count) return;
+  setStackIndex(index: number, count = 1, spacingPx = STACK_ROW_PX): void {
+    if (this.stackIndex === index && this.stackCount === count && this.stackSpacing === spacingPx) {
+      return;
+    }
     this.stackIndex = index;
     this.stackCount = count;
+    this.stackSpacing = spacingPx;
     this.syncRoomLeader();
   }
 
@@ -479,7 +490,9 @@ export class EntityMarker {
     // close with the zoom and lean over with the perspective, which is exactly
     // what a list must not do.
     const stackLift =
-      this.stackIndex > 0 ? this.stackIndex * STACK_ROW_PX * this.pixelUnit(ctx, this.object.position) : 0;
+      this.stackIndex > 0
+        ? this.stackIndex * this.stackSpacing * this.pixelUnit(ctx, this.object.position)
+        : 0;
     const lift = this.baseLift + HOVER_LIFT * this.hoverAmt + stackLift;
     this.body.position.y = lift;
     // Crowded markers give up the label that was covering a neighbour, but not

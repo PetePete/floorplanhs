@@ -193,3 +193,46 @@ describe('a stacked label', () => {
     m.dispose();
   });
 });
+
+/**
+ * Rows of a pile are spaced by the tallest chip in it, so a long name or a
+ * wordy state cannot make one row sit on the one above it.
+ */
+describe('the pitch of a pile', () => {
+  function liftOf(m: EntityMarker): number {
+    const camera = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 100);
+    camera.position.set(0, 6, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    m.update(1 / 60, {
+      size: { width: 800, height: 600 },
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1]);
+    return (m as unknown as { body: THREE.Group }).body.position.y;
+  }
+
+  it('lifts a row by the pitch it was given', () => {
+    const one = marker({ position: [0, 0, 0] });
+    one.setStackIndex(1, 2, 30);
+    const tight = liftOf(one);
+
+    const other = marker({ position: [0, 0, 0] });
+    other.setStackIndex(1, 2, 60);
+    const loose = liftOf(other);
+
+    expect(loose).toBeGreaterThan(tight);
+    // Twice the pitch, twice the gap above the anchor's own lift.
+    expect(loose - 0.34).toBeCloseTo((tight - 0.34) * 2, 4);
+    one.dispose();
+    other.dispose();
+  });
+
+  it('leaves a marker that stands alone at its resting lift', () => {
+    const m = marker({ position: [0, 0, 0] });
+    m.setStackIndex(0, 1, 40);
+    expect(liftOf(m)).toBeCloseTo(0.34, 5);
+    m.dispose();
+  });
+});

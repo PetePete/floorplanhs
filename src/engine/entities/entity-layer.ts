@@ -24,8 +24,10 @@ import { worldUnitsPerPixel } from '@/engine/entities/marker';
 
 /** Matches the marker's own resting lift; see `EntityMarker`. */
 const DEFAULT_LABEL_LIFT_M = 0.34;
-/** Matches `STACK_ROW_PX` in the marker: one row of the list. */
-const STACK_ROW_PX = 34;
+/** Air between two rows of a pile, in screen pixels. */
+const STACK_ROW_GAP_PX = 6;
+/** However small the chips, the rows keep a finger's worth of pitch. */
+const STACK_ROW_MIN_PX = 30;
 const _framePoint = new THREE.Vector3();
 const _frameProject = new THREE.Vector3();
 
@@ -303,11 +305,19 @@ export class EntityLayer implements IEntityLayer {
       }
       if (!anchor || width <= 0) continue;
 
+      // The pitch is the tallest chip in this pile plus a hair of air, measured
+      // rather than assumed: a long name or a wordy state makes a taller chip,
+      // and a fixed pitch then has the rows sitting on one another.
+      const pitch = Math.max(STACK_ROW_MIN_PX, rows + STACK_ROW_GAP_PX);
+      visible.forEach((entityId, index) => {
+        this.markers.get(entityId)?.setStackIndex(index, visible.length, pitch);
+      });
+
       const marker = this.markers.get(visible[0]);
       if (!marker) continue;
 
       // The rows run from the first label up; the box covers all of them.
-      const spread = STACK_ROW_PX * (visible.length - 1);
+      const spread = pitch * (visible.length - 1);
       const height = rows + spread;
       const unit = worldUnitsPerPixel(ctx.activeCamera, marker.getBodyWorldPosition(_framePoint), ctx.size.height);
 
