@@ -685,26 +685,23 @@ export class PlacementController implements IPlacementController {
     return hit;
   }
 
+  /**
+   * The marker this drop would stack with — without moving the drop.
+   *
+   * Screen space, and deliberately: a stack is markers that *look* like one
+   * pile, and whether the two points are a metre apart in the model is
+   * invisible from where you are sitting. This is the same hit test that
+   * decides what a tap lands on.
+   *
+   * The indicator stays under the cursor. Pulling it onto the target instead
+   * made the ring jump to wherever that marker happened to be — which, with
+   * chips as wide as they are, is most of the time, and reads as the cursor
+   * having a mind of its own. Where the entity ends up is settled on the drop,
+   * by the join, not by dragging the pointer's own feedback away from it.
+   */
   private snapToMarker(): string | null {
     if (this.mode === null) return null;
-    const extras = this.entities as IEntityLayer & EntityLayerExtras;
-
-    // Screen space, not world space, and deliberately: a stack is markers that
-    // *look* like one pile. Whether the two points are a metre apart in the
-    // model is invisible from where you are sitting, and aiming at a chip a few
-    // pixels wide through a perspective projection is not a gesture anyone can
-    // repeat. This is the same hit test that decides what a tap lands on, so
-    // "it looks like I am on it" and "I am on it" are the same question.
-    // `pick` is part of the layer contract, but a stub layer in a test need not
-    // provide it, and a placement that throws is worse than one that does not
-    // stack.
-    const hit = this.markerUnderPointer();
-    if (!hit) return null;
-    const target = extras.getPlacedEntity?.(hit) ?? null;
-    if (!target) return null;
-
-    this.anchor.set(target.position[0], target.position[1], target.position[2]);
-    return hit;
+    return this.markerUnderPointer();
   }
 
   /**

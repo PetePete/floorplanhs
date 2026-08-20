@@ -549,6 +549,14 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
   roundRect(c2d, x, y, w, h, radius);
   c2d.fillStyle = muted ? ink.bgMuted : hovered ? ink.bgHover : ink.bg;
   c2d.fill();
+  // A lamp that is on should say so from across the room. The accent hairline
+  // alone did not: one pixel of colour on a dark chip is a detail you find
+  // when you already know where to look, and the whole point of a lit room on
+  // a floorplan is that you do not have to look.
+  if (spec.active && !muted) {
+    c2d.fillStyle = withAlpha(accent, 0.24);
+    c2d.fill();
+  }
   c2d.restore();
 
   // One rectangle, whatever the state. Selection used to add a second one
@@ -556,7 +564,7 @@ function drawPill(c2d: Ctx2D, spec: MarkerSpec, x: number, y: number, w: number,
   // hairline carries it instead, in the accent and a shade heavier.
   c2d.save();
   roundRect(c2d, x + 0.5, y + 0.5, w - 1, h - 1, radius);
-  c2d.lineWidth = selected ? 1.8 : 1;
+  c2d.lineWidth = selected ? 1.8 : spec.active ? 1.4 : 1;
   if (muted && !selected) {
     // A dashed outline is legible even at a glance and does not rely on colour.
     c2d.setLineDash([4, 3]);

@@ -18,8 +18,15 @@ import type { PlacedEntity, Vec3 } from '@/types/config';
 import { EntityMarker, type ScreenRect } from '@/engine/entities/marker';
 import { MarkerAtlas } from '@/engine/entities/marker-texture';
 
+import { CELL_PADDING } from '@/engine/entities/marker-texture';
+import { StackFrame } from '@/engine/entities/stack-frame';
+import { worldUnitsPerPixel } from '@/engine/entities/marker';
+
 /** Matches the marker's own resting lift; see `EntityMarker`. */
 const DEFAULT_LABEL_LIFT_M = 0.34;
+/** Matches `STACK_ROW_PX` in the marker: one row of the list. */
+const STACK_ROW_PX = 34;
+const _framePoint = new THREE.Vector3();
 
 export interface EntityLayerOptions {
   /** Fallback accent when neither the config nor HA supplies a colour. */
@@ -79,6 +86,9 @@ function isClipped(point: THREE.Vector3, planes: readonly THREE.Plane[]): boolea
 
 export class EntityLayer implements IEntityLayer {
   private readonly markers = new Map<string, EntityMarker>();
+  /** Members per stack id, in list order; see `fanStacks`. */
+  private readonly stacks = new Map<string, string[]>();
+  private readonly frames = new Map<string, StackFrame>();
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
   private readonly group = new THREE.Group();
@@ -160,6 +170,7 @@ export class EntityLayer implements IEntityLayer {
     }
 
     this.tickOcclusion(dt, ctx);
+    this.updateStackFrames(ctx);
 
     // Rule 4: hold a continuous lease only while something actually moves.
     if (animating && !this.releaseContinuous) {
@@ -240,6 +251,64 @@ export class EntityLayer implements IEntityLayer {
   }
 
   /**
+   * Draw the dashed rectangle around each stack.
+   *
+   * After the markers have updated, so their rows and pixel footprints are the
+   * ones on screen this frame. The frame is what tells you a stack is a stack:
+   * chips near each other look like chips near each other, and the one thing
+   * you want to know after dragging two together is whether it took.
+   */
+  private updateStackFrames(ctx: RenderContext): void {
+    const alive = new Set<string>();
+
+    for (const [id, members] of this.stacks) {
+      const visible = members.filter((entityId) => this.markers.get(entityId)?.object.visible);
+      if (visible.length < 2) continue;
+
+      let width = 0;
+      let rows = 0;
+      let anchor: THREE.Vector3 | null = null;
+      for (const entityId of visible) {
+        const marker = this.markers.get(entityId);
+        if (!marker) continue;
+        const size = marker.labelSizePx;
+        width = Math.max(width, size.width - CELL_PADDING * 2);
+        rows = Math.max(rows, size.height - CELL_PADDING * 2);
+        if (!anchor) anchor = marker.object.position;
+      }
+      if (!anchor || width <= 0) continue;
+
+      const marker = this.markers.get(visible[0]);
+      if (!marker) continue;
+
+      // The rows run from the first label up; the box covers all of them.
+      const spread = STACK_ROW_PX * (visible.length - 1);
+      const height = rows + spread;
+      const unit = worldUnitsPerPixel(ctx.activeCamera, marker.getBodyWorldPosition(_framePoint), ctx.size.height);
+
+      let frame = this.frames.get(id);
+      // A canvas is the only way to paint a dashed rectangle here, and a node
+      // harness has none. No frame is better than no card.
+      if (!frame && typeof document === 'undefined') continue;
+      if (!frame) {
+        frame = new StackFrame(this.options.accent ?? '#03a9f4');
+        this.frames.set(id, frame);
+        this.group.add(frame.sprite);
+      }
+      // Centre of the box: half the spread above the first row.
+      _framePoint.y += (spread / 2) * unit;
+      frame.update(_framePoint, { width, height }, unit, this.options.accent ?? '#03a9f4', ctx.size.pixelRatio);
+      alive.add(id);
+    }
+
+    for (const [id, frame] of [...this.frames]) {
+      if (alive.has(id)) continue;
+      frame.dispose();
+      this.frames.delete(id);
+    }
+  }
+
+  /**
    * Number the labels of a stack, so each draws itself one row higher.
    *
    * A stack is several markers in one spot, so without this they draw one on
@@ -251,6 +320,7 @@ export class EntityLayer implements IEntityLayer {
    */
   private fanStacks(entities: PlacedEntity[]): void {
     const counted = new Map<string, number>();
+    this.stacks.clear();
     for (const placed of entities) {
       const marker = this.markers.get(placed.entity);
       if (!marker) continue;
@@ -268,6 +338,9 @@ export class EntityLayer implements IEntityLayer {
       counted.set(stack, index + 1);
       marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
       marker.setStackIndex(index);
+      const members = this.stacks.get(stack) ?? [];
+      members.push(placed.entity);
+      this.stacks.set(stack, members);
     }
   }
 
