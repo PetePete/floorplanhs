@@ -141,6 +141,9 @@ export class EntityMarker {
   private stackIndex = 0;
   /** How many markers share this anchor. 1 means it stands alone. */
   private stackCount = 1;
+  /** The label's own offset from the anchor, in metres; see `update`. */
+  private labelX = 0;
+  private labelZ = 0;
   /**
    * Screen pixels from one row of the pile to the next.
    *
@@ -253,7 +256,9 @@ export class EntityMarker {
     const marker: MarkerConfig = placed.marker ?? {};
     const offset = marker.offset;
     this.baseLift = offset ? offset[1] : DEFAULT_LIFT;
-    this.body.position.set(offset ? offset[0] : 0, this.baseLift, offset ? offset[2] : 0);
+    this.labelX = offset ? offset[0] : 0;
+    this.labelZ = offset ? offset[2] : 0;
+    this.body.position.set(this.labelX, this.baseLift, this.labelZ);
 
     this.setPosition(placed.position);
     this.rebuildArt();
@@ -268,12 +273,14 @@ export class EntityMarker {
    */
   setLabelOffset(offset: Vec3): void {
     this.baseLift = offset[1];
-    this.body.position.set(offset[0], offset[1], offset[2]);
+    this.labelX = offset[0];
+    this.labelZ = offset[2];
+    this.body.position.set(this.labelX, offset[1], this.labelZ);
   }
 
   /** Where the label currently sits, relative to the anchor. */
   getLabelOffset(): Vec3 {
-    return [this.body.position.x, this.baseLift, this.body.position.z];
+    return [this.labelX, this.baseLift, this.labelZ];
   }
 
   /**
@@ -487,8 +494,12 @@ export class EntityMarker {
     this.object.visible = visible;
     if (!visible) return this.popT < 1;
 
+    // Rebuilt from the configured offset every frame, never adjusted in place:
+    // the stack term below depends on the camera, so adding it to last frame's
+    // position walks the label a little further with every frame — which sends
+    // it off into the sky in about a second.
     const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
-    this.body.position.y = lift;
+    this.body.position.set(this.labelX, lift, this.labelZ);
 
     // A stack is read as a list, so its rows are spaced on the *screen* — and
     // that means straight up the screen, not straight up the house. A world-Y

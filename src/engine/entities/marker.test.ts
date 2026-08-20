@@ -295,3 +295,36 @@ describe('a pile seen from above', () => {
     }
   });
 });
+
+/**
+ * The stack offset depends on the camera, so it has to be rebuilt each frame
+ * rather than added to what is already there. Added, it walks the label a
+ * little further every frame — which sends it into the sky in about a second.
+ */
+describe('a row across many frames', () => {
+  it('stands still while the camera does', () => {
+    const camera = new THREE.PerspectiveCamera(50, 900 / 640, 0.1, 200);
+    camera.position.set(8, 8, 8);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+
+    const ctx = {
+      size: { width: 900, height: 640 },
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1];
+
+    const row = marker({ position: [0, 0, 0] });
+    row.setStackIndex(2, 3, 36);
+
+    row.update(1 / 60, ctx);
+    row.object.updateMatrixWorld(true);
+    const body = (row as unknown as { body: THREE.Group }).body;
+    const first = body.position.clone();
+
+    for (let i = 0; i < 120; i += 1) row.update(1 / 60, ctx);
+    expect(body.position.distanceTo(first)).toBeLessThan(1e-6);
+    row.dispose();
+  });
+});
