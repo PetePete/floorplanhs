@@ -478,16 +478,25 @@ export class Viewer implements IViewer {
           // part of the marker was in the hand.
           if (stackWith) {
             const entities = this.config.entities ?? [];
+            const self = entities.find((entry) => entry.entity === entityId);
             const target = entities.find((entry) => entry.entity === stackWith);
-            if (target) {
+            if (self && target) {
+              // Where the two labels met: the label was dragged there, and that
+              // is the spot the user pointed at. Its height stays the marker's
+              // own — the drag ran across the plan, not up a wall.
+              const meeting = vRound([
+                self.position[0] + offset[0],
+                self.position[1],
+                self.position[2] + offset[2],
+              ]);
               this.emit('edit-intent', {
                 kind: 'move-entity',
                 entityId,
-                position: target.position,
-                level: target.level ?? null,
+                position: meeting,
+                level: self.level ?? null,
                 stackWith,
               });
-              this.adoptMove(entityId, target.position, target.level ?? null, undefined, stackWith);
+              this.adoptMove(entityId, meeting, self.level ?? null, undefined, stackWith);
               return;
             }
           }
@@ -556,7 +565,7 @@ export class Viewer implements IViewer {
     // leaving the others behind would be moving a thing out of its own place.
     const stack = stackFor(entities, entityId);
     if (stack) {
-      const moved = moveStack(entities, stack.id, position, level);
+      const moved = moveStack(entities, stack.id, position, level, room);
       this.config = { ...this.config, entities: moved };
       this.guard('entities', this._entities, (e) => e.setEntities(moved));
       return;
@@ -574,7 +583,10 @@ export class Viewer implements IViewer {
     // to fan them apart, so one sits invisibly inside the other until the
     // config comes back round — which looks exactly like the marker vanishing.
     const target = stackWith ? next.find((entry) => entry.entity === stackWith) : undefined;
-    const stacked = target ? joinStack(next, entityId, target) : next;
+    const joined = target ? joinStack(next, entityId, target) : next;
+    // Same as the card: the pile lands where the drop was.
+    const pileId = target ? joined.find((entry) => entry.entity === entityId)?.stack : undefined;
+    const stacked = pileId ? moveStack(joined, pileId, position, level, room) : joined;
 
     this.config = { ...this.config, entities: stacked };
     this.guard('entities', this._entities, (e) => e.setEntities(stacked));

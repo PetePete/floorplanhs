@@ -27,6 +27,10 @@ const DEFAULT_LABEL_LIFT_M = 0.34;
 /** Matches `STACK_ROW_PX` in the marker: one row of the list. */
 const STACK_ROW_PX = 34;
 const _framePoint = new THREE.Vector3();
+const _frameProject = new THREE.Vector3();
+
+/** Slack around a stack's frame, so the pile catches a near miss. */
+const STACK_FRAME_PAD_PX = 6;
 
 export interface EntityLayerOptions {
   /** Fallback accent when neither the config nor HA supplies a colour. */
@@ -89,6 +93,11 @@ export class EntityLayer implements IEntityLayer {
   /** Members per stack id, in list order; see `fanStacks`. */
   private readonly stacks = new Map<string, string[]>();
   private readonly frames = new Map<string, StackFrame>();
+  /** Screen box of each stack's frame, refreshed per frame; see `pick`. */
+  private readonly frameRects = new Map<
+    string,
+    { base: string; x: number; y: number; halfWidth: number; halfHeight: number }
+  >();
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
   private readonly group = new THREE.Group();
@@ -299,12 +308,28 @@ export class EntityLayer implements IEntityLayer {
       _framePoint.y += (spread / 2) * unit;
       frame.update(_framePoint, { width, height }, unit, this.options.accent ?? '#03a9f4', ctx.size.pixelRatio);
       alive.add(id);
+
+      // The frame is also the pile's drop area: everything inside it belongs to
+      // the stack, including the air between the rows. Aiming at a row when you
+      // mean "onto this pile" is aiming at the wrong thing.
+      _frameProject.copy(_framePoint).project(ctx.activeCamera);
+      this.frameRects.set(id, {
+        base: visible[0],
+        x: (_frameProject.x * 0.5 + 0.5) * ctx.size.width,
+        y: (1 - (_frameProject.y * 0.5 + 0.5)) * ctx.size.height,
+        halfWidth: width / 2 + STACK_FRAME_PAD_PX,
+        halfHeight: height / 2 + STACK_FRAME_PAD_PX,
+      });
     }
 
     for (const [id, frame] of [...this.frames]) {
       if (alive.has(id)) continue;
       frame.dispose();
       this.frames.delete(id);
+      this.frameRects.delete(id);
+    }
+    for (const id of [...this.frameRects.keys()]) {
+      if (!alive.has(id)) this.frameRects.delete(id);
     }
   }
 
@@ -321,6 +346,11 @@ export class EntityLayer implements IEntityLayer {
   private fanStacks(entities: PlacedEntity[]): void {
     const counted = new Map<string, number>();
     this.stacks.clear();
+    const sizes = new Map<string, number>();
+    for (const placed of entities) {
+      if (!placed.stack) continue;
+      sizes.set(placed.stack, (sizes.get(placed.stack) ?? 0) + 1);
+    }
     for (const placed of entities) {
       const marker = this.markers.get(placed.entity);
       if (!marker) continue;
@@ -331,13 +361,13 @@ export class EntityLayer implements IEntityLayer {
       const stack = placed.stack;
       if (!stack) {
         marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
-        marker.setStackIndex(0);
+        marker.setStackIndex(0, 1);
         continue;
       }
       const index = counted.get(stack) ?? 0;
       counted.set(stack, index + 1);
       marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
-      marker.setStackIndex(index);
+      marker.setStackIndex(index, sizes.get(stack) ?? 1);
       const members = this.stacks.get(stack) ?? [];
       members.push(placed.entity);
       this.stacks.set(stack, members);
@@ -476,7 +506,11 @@ export class EntityLayer implements IEntityLayer {
     const pointerX = (ndc.x * 0.5 + 0.5) * width;
     const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * height;
     const touch = options?.pointerType === 'touch';
-    const reach = touch ? 20 : 12;
+    // The anchor is the handle that moves a marker — and a whole stack, when it
+    // carries one — so it has to be catchable. It is drawn as a small dot
+    // because a big one would clutter the plan, which makes the target a matter
+    // of hit testing rather than of paint.
+    const reach = touch ? 26 : 18;
 
     const camera = ctx.activeCamera;
     camera.updateMatrixWorld();
@@ -536,8 +570,18 @@ export class EntityLayer implements IEntityLayer {
       bestDepth = _rect.depth;
       best = entityId;
     }
+    if (best) return best;
 
-    return best;
+    // Nothing under the pointer, but it may still be inside a pile's frame —
+    // the air between the rows is part of the pile, and that is where anyone
+    // aims when they mean "onto this stack".
+    for (const rect of this.frameRects.values()) {
+      if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
+      if (Math.abs(pointerY - rect.y) > rect.halfHeight) continue;
+      return rect.base;
+    }
+
+    return null;
   }
 
   /* ------------------------------------------------------------ inspection */

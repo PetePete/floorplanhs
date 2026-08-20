@@ -188,3 +188,32 @@ describe('joining from where the labels were dragged', () => {
     expect(next[0].marker).toEqual({ icon: 'mdi:lamp' });
   });
 });
+
+/**
+ * A pile keeps its room, so the line back to it survives the move. Without
+ * this a stack dragged out of a room lost the one thing that said which room
+ * it belonged to — the statement a single marker makes in the same situation.
+ */
+describe('a stack and its room', () => {
+  const pile = [
+    at('light.a', 1, 1, { stack: 's', room: 'kitchen' }),
+    at('switch.b', 1, 1, { stack: 's', room: 'kitchen' }),
+  ];
+
+  it('records the room it was dragged out of, on every member', () => {
+    const next = moveStack(pile, 's', [9, 2.5, 9], 'ground', 'kitchen');
+    expect(next.map((entry) => entry.room)).toEqual(['kitchen', 'kitchen']);
+  });
+
+  it('drops the override when the pile lands inside a room again', () => {
+    const next = moveStack(pile, 's', [2, 2.5, 2], 'ground', undefined);
+    expect(next.every((entry) => entry.room === undefined)).toBe(true);
+  });
+
+  it('leaves markers outside the pile alone', () => {
+    const mixed = [...pile, at('sensor.c', 8, 8, { room: 'hall' })];
+    const next = moveStack(mixed, 's', [4, 2.5, 4], 'ground', 'kitchen');
+    expect(next[2].room).toBe('hall');
+    expect(next[2].position).toEqual([8, 2.5, 8]);
+  });
+});

@@ -151,14 +151,26 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
   });
 }
 
-/** Move every member of a stack by the same delta. */
+/**
+ * Move every member of a stack to one spot.
+ *
+ * `room` follows the same rule as a single marker: a name is the room the pile
+ * was dragged *out of*, and it is what the leader line points back at;
+ * `undefined` means the drop landed inside a room, where the position already
+ * says which, so any old override is dropped rather than left to go stale.
+ */
 export function moveStack(
   entities: readonly PlacedEntity[],
   stackId: string,
   position: Vec3,
   level: string | null,
+  room?: string,
 ): PlacedEntity[] {
-  return entities.map((entry) =>
-    entry.stack === stackId ? { ...entry, position: [...position] as Vec3, level } : entry,
-  );
+  return entities.map((entry) => {
+    if (entry.stack !== stackId) return entry;
+    const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+    if (room) moved.room = room;
+    else delete moved.room;
+    return moved;
+  });
 }

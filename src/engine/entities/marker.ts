@@ -49,6 +49,9 @@ const DEFAULT_LIFT = 0.34;
 
 /** Screen pixels between the labels of one stack: a chip and a hair of air. */
 const STACK_ROW_PX = 34;
+
+/** A stack's anchor is a handle, so it is drawn as one. */
+const STACK_ANCHOR_SCALE = 1.5;
 /** Extra lift while hovered — the marker "pops off" the surface. */
 const HOVER_LIFT = 0.05;
 const POP_DURATION = 0.3;
@@ -134,6 +137,8 @@ export class EntityMarker {
   private crowded = false;
   /** Place in its stack, top-down; 0 is the one sitting on the anchor. */
   private stackIndex = 0;
+  /** How many markers share this anchor. 1 means it stands alone. */
+  private stackCount = 1;
 
   private baseLift = DEFAULT_LIFT;
   /** World point of the room this entity names, if it names one. */
@@ -419,9 +424,10 @@ export class EntityMarker {
    * Only the bottom one keeps its leader line: three lines fanning out of one
    * dot say nothing that the list above it does not already say.
    */
-  setStackIndex(index: number): void {
-    if (this.stackIndex === index) return;
+  setStackIndex(index: number, count = 1): void {
+    if (this.stackIndex === index && this.stackCount === count) return;
     this.stackIndex = index;
+    this.stackCount = count;
     this.syncRoomLeader();
   }
 
@@ -516,7 +522,17 @@ export class EntityMarker {
     this.pillPxWidth = this.pillCell.width * configScale;
     this.pillPxHeight = this.pillCell.height * configScale;
     this.pill.scale.set(this.pillCell.width * unit * scale, this.pillCell.height * unit * scale, 1);
-    this.anchor.scale.set(this.anchorCell.width * unit, this.anchorCell.height * unit, 1);
+    // One dot for the pile, and a bigger one: it is the handle that carries the
+    // whole stack, and the labels above it each carry only themselves. Several
+    // dots in the same spot would be one dot that happens to be drawn four
+    // times, and a heavier stroke for no reason.
+    this.anchor.visible = this.stackIndex === 0;
+    const anchorScale = this.stackCount > 1 ? STACK_ANCHOR_SCALE : 1;
+    this.anchor.scale.set(
+      this.anchorCell.width * unit * anchorScale,
+      this.anchorCell.height * unit * anchorScale,
+      1,
+    );
 
     const alpha = this.computeAlpha(ctx, _worldBody, pop);
     this.pillMaterial.opacity = alpha;

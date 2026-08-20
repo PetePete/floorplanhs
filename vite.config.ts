@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // Home Assistant loads a custom card as a single ES module from /local or
 // /hacsfiles. Everything (three.js included) must be inlined into one file.
@@ -27,11 +29,12 @@ const LEGAL_NOTICE = `/*!
  */`;
 
 export default defineConfig({
-  // Keep the dependency cache out of the project tree. This repository may sit
-  // in a synced folder (OneDrive, Dropbox); the sync client holds handles on
-  // `node_modules/.vite/deps` and Vite then fails to clear it with EPERM
-  // whenever the lockfile changes.
-  cacheDir: fileURLToPath(new URL('./.vite-cache', import.meta.url)),
+  // Out of the project tree entirely, and not for tidiness: this repository sits
+  // in a synced folder (OneDrive), the sync client holds handles on whatever is
+  // inside it, and Vite then fails to clear its dependency cache with EPERM —
+  // which stops the dev server before it starts. A folder under the OS temp
+  // directory is per-machine, unsynced, and nobody's business but Vite's.
+  cacheDir: join(tmpdir(), 'floorplan-3d-card-vite'),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

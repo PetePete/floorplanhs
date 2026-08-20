@@ -1078,7 +1078,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         // leaving the others behind would be moving a thing out of its place.
         const pile = stackFor(entities, intent.entityId);
         if (pile) {
-          next.entities = moveStack(entities, pile.id, position, intent.level);
+          // The room travels with the pile, so a stack dragged out of a room
+          // keeps its line back to it — the same statement a single marker
+          // makes, and the reason the room is recorded on the way out at all.
+          next.entities = moveStack(entities, pile.id, position, intent.level, intent.room);
           break;
         }
 
@@ -1096,7 +1099,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         const target = intent.stackWith
           ? entities.find((entry) => entry.entity === intent.stackWith)
           : undefined;
-        next.entities = target ? joinStack(entities, intent.entityId, target) : entities;
+        if (!target) {
+          next.entities = entities;
+          break;
+        }
+        // The pile goes where the two met, not where the marker underneath
+        // happened to be standing: dragging one onto the other is a placement,
+        // and the place is the one you dropped them in.
+        const joined = joinStack(entities, intent.entityId, target);
+        const pileId = joined.find((entry) => entry.entity === intent.entityId)?.stack;
+        next.entities = pileId
+          ? moveStack(joined, pileId, position, intent.level, intent.room)
+          : joined;
         break;
       }
       case 'unstack-entity': {
