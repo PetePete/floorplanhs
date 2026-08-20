@@ -133,3 +133,25 @@ describe('the stack as a whole', () => {
     expect(fanLift(2, 0.34)).toBeCloseTo(1.18, 5);
   });
 });
+
+describe('a stack being carried', () => {
+  /** Dragging a pile by its anchor must not snap back onto its own members. */
+  it('does not offer its own stack as a target', () => {
+    const pile = [
+      at('light.a', 1, 1, { stack: 's' }),
+      at('switch.b', 1, 1, { stack: 's' }),
+      at('sensor.c', 6, 6),
+    ];
+    expect(stackTarget(pile, 'light.a', [1.05, 2.5, 1], 'ground')).toBeNull();
+  });
+
+  it('still offers a different pile to join', () => {
+    const two = [
+      at('light.a', 1, 1, { stack: 's' }),
+      at('switch.b', 1, 1, { stack: 's' }),
+      at('sensor.c', 6, 6, { stack: 't' }),
+      at('cover.d', 6, 6, { stack: 't' }),
+    ];
+    expect(stackTarget(two, 'light.a', [6, 2.5, 6], 'ground')?.stack).toBe('t');
+  });
+});

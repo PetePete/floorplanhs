@@ -470,6 +470,11 @@ export class EntityLayer implements IEntityLayer {
     return this.atlas;
   }
 
+  /** Every placed entity as configured; the placement controller stacks with it. */
+  getPlacedEntities(): PlacedEntity[] {
+    return [...this.markers.values()].map((marker) => marker.placed);
+  }
+
   getEntityIds(): string[] {
     return [...this.markers.keys()];
   }

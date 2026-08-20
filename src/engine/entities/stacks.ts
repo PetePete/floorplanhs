@@ -67,9 +67,13 @@ export function stackTarget(
 ): PlacedEntity | null {
   let best: PlacedEntity | null = null;
   let bestDistance = radius;
+  // The pile it is already on is not a target: dragging a stack by its anchor
+  // would otherwise snap straight back onto the mates it is carrying.
+  const own = stackOf(entities.find((entry) => entry.entity === moved));
 
   for (const entry of entities) {
     if (entry.entity === moved) continue;
+    if (own && entry.stack === own) continue;
     if ((entry.level ?? null) !== level) continue;
     const distance = distanceXZ(entry.position, position);
     if (distance > bestDistance) continue;

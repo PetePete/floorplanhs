@@ -330,6 +330,7 @@ on load.
 | Two fingers, pinch | Zoom |
 | Two fingers, drag | Pan |
 | Press and hold on a marker | Pick it up (edit mode) |
+| Drop a marker on another | Stack them; a drop within 35 cm snaps onto it |
 
 Stated in the card rather than inherited from the 3D library, so it cannot
 change under you on a dependency upgrade. A phone has no modifier keys, so the
@@ -362,10 +363,13 @@ nothing to maintain by hand.
 
 **Anchor and label are two things.** The dot is the entity — where the lamp
 hangs, where its light comes from. The chip is a caption, and a plan is full of
-places a caption reads better than directly on top of what it names. So drag the
-**dot** to move the entity, and drag the **chip** to move only the label; a
-leader line keeps saying which dot the chip belongs to. Nothing is lost either
-way: the entity keeps its room and its level while its label goes wandering.
+places a caption reads better than directly on top of what it names.
+
+Dragging a marker moves the *marker*, whichever part you grab: that is the
+thing you do constantly, so it gets the whole target rather than an
+eight-pixel dot. **Shift + drag on the chip** moves the caption alone, and a
+leader line keeps saying which dot it belongs to. The entity keeps its room and
+its level while its label goes wandering.
 
 **Where it sticks.** In the dashboard's edit mode, where you placed it. Home
 Assistant gives every view a `lovelace` object that owns the dashboard config

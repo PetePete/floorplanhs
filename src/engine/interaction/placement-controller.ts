@@ -32,6 +32,7 @@ import { Emitter } from '@/util/events';
 import { vRound } from '@/util/math';
 import { humaniseEntityId, resolveIcon, roleForEntityId } from '@/engine/entities/icons';
 import { DropIndicator, snapToGrid, type DropFeedback } from '@/engine/interaction/drop-indicator';
+import { stackTarget } from '@/engine/entities/stacks';
 
 /** MIME type the entity palette must put on `dataTransfer`. */
 export const ENTITY_DRAG_MIME = 'application/x-ha-entity';
@@ -67,6 +68,7 @@ export interface PlacementEvents {
 interface EntityLayerExtras {
   getEntityPosition?(entityId: string): Vec3 | null;
   getPlacedEntity?(entityId: string): PlacedEntity | null;
+  getPlacedEntities?(): PlacedEntity[];
   setLabelOffset?(entityId: string, offset: Vec3): void;
   getLabelOffset?(entityId: string): Vec3 | null;
 }
@@ -575,6 +577,7 @@ export class PlacementController implements IPlacementController {
 
     this.applyRoleOffset(level);
     snapToGrid(this.anchor);
+    this.snapToMarker(level?.id ?? null);
 
     this.feedback.point.copy(this.point);
     this.feedback.normal.copy(this.normal);
@@ -641,6 +644,31 @@ export class PlacementController implements IPlacementController {
       levelId: level?.id ?? null,
       room: this.resolveRoom(level),
     };
+  }
+
+  /**
+   * Land exactly on a marker that is almost under the pointer.
+   *
+   * Stacking is "drop this one on that one", and without a snap that is a
+   * shooting exercise: the target is a chip a few pixels wide, seen in
+   * perspective, and the drop is aimed at the floor beneath it. Within a hand's
+   * width the drop gives up its own spot and takes the other marker's, so the
+   * gesture succeeds by intention rather than by aim.
+   */
+  private snapToMarker(levelId: string | null): void {
+    if (this.mode === null) return;
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const placed = extras.getPlacedEntities?.() ?? [];
+    if (placed.length === 0) return;
+
+    const target = stackTarget(
+      placed,
+      this.entityId ?? '',
+      [this.anchor.x, this.anchor.y, this.anchor.z],
+      levelId,
+    );
+    if (!target) return;
+    this.anchor.set(target.position[0], target.position[1], target.position[2]);
   }
 
   /**

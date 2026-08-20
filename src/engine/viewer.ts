@@ -44,7 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
-import { leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
+import { joinStack, leaveStack, moveStack, stackFor, stackTarget } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -549,8 +549,16 @@ export class Viewer implements IViewer {
 
     const next = [...entities];
     next[index] = moved;
-    this.config = { ...this.config, entities: next };
-    this.guard('entities', this._entities, (e) => e.setEntities(next));
+
+    // Dropped onto another marker: the same rule the card applies, applied here
+    // too. Without it the engine holds two markers at one point with no stack
+    // to fan them apart, so one sits invisibly inside the other until the
+    // config comes back round — which looks exactly like the marker vanishing.
+    const target = stackTarget(next, entityId, position, level);
+    const stacked = target ? joinStack(next, entityId, target) : next;
+
+    this.config = { ...this.config, entities: stacked };
+    this.guard('entities', this._entities, (e) => e.setEntities(stacked));
   }
 
   /**

@@ -453,7 +453,7 @@ export class PointerRouter implements Subsystem {
       if (!this.editMode || this.placement.isActive()) return;
       const entityId = this.primary?.entityId;
       if (!entityId) return;
-      this.pickUp(entityId);
+      this.pickUp(entityId, ev.shiftKey);
       this.placement.updatePlacement(ev.clientX, ev.clientY);
       ev.claim();
     },
@@ -466,7 +466,7 @@ export class PointerRouter implements Subsystem {
       if (!this.editMode) return;
       const entityId = this.primary?.entityId;
       if (!entityId) return;
-      this.pickUp(entityId);
+      this.pickUp(entityId, ev.shiftKey);
       this.placement.updatePlacement(ev.clientX, ev.clientY);
       ev.claim();
     },
@@ -594,14 +594,17 @@ export class PointerRouter implements Subsystem {
   }
 
   /**
-   * Grab the anchor, move the entity; grab the label, move the label.
+   * Dragging a marker moves the marker.
    *
    * Two things live at one marker — where the lamp is, and where its caption is
-   * — and one drag gesture has to serve both. What the pointer went down on is
-   * the only honest way to tell them apart.
+   * — and for a while the label was the thing you got by dragging the chip, the
+   * only target big enough to hit. Moving a lamp then meant catching an
+   * eight-pixel dot, which is not placing, it is aiming. So the plain drag is
+   * the common one again, and the caption moves with Shift held: rare, precise,
+   * and out of the way of the gesture you make all the time.
    */
-  private pickUp(entityId: string): void {
-    if (this.grabbedPart === 'label') this.placement.beginLabelMove(entityId);
+  private pickUp(entityId: string, labelOnly: boolean): void {
+    if (labelOnly && this.grabbedPart === 'label') this.placement.beginLabelMove(entityId);
     else this.placement.beginMove(entityId);
   }
 
