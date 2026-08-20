@@ -64,6 +64,12 @@ export class Fp3dActionDock extends FpBaseElement {
         background: var(--fp3d-divider);
       }
 
+      /* The fold sits after the rule, at the end of the row. */
+      .label .fold {
+        order: 3;
+        margin: -2px -4px -2px 2px;
+      }
+
       .row {
         position: relative;
         display: flex;
@@ -130,6 +136,59 @@ export class Fp3dActionDock extends FpBaseElement {
         color: var(--fp3d-text-dim);
       }
 
+      /* Finger-sized, with a ground of its own: a bare chevron in a corner is
+         not a control anyone finds on a phone. */
+      .fold {
+        min-width: 34px;
+        min-height: 26px;
+        display: grid;
+        place-items: center;
+        border: none;
+        border-radius: var(--fp3d-chrome-radius);
+        background: var(--fp3d-hover);
+        color: var(--fp3d-text-dim);
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .fold:hover {
+        color: var(--fp3d-text);
+      }
+
+      .fold .fp-icon {
+        width: 17px;
+        height: 17px;
+      }
+
+      /* Folded: still says what it is and how much is in it. */
+      .peek {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px;
+        min-height: 34px;
+        max-width: 190px;
+        border: none;
+        border-radius: var(--fp3d-chrome-radius);
+        color: var(--fp3d-text);
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .peek:hover {
+        background: var(--fp3d-hover);
+      }
+
+      .peek .fp-icon {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        opacity: 0.8;
+      }
+
       .drop {
         outline: 1px dashed var(--fp3d-accent);
         outline-offset: -3px;
@@ -166,12 +225,29 @@ export class Fp3dActionDock extends FpBaseElement {
   /** Live state per entity, keyed by id; the card feeds this from `hass`. */
   @property({ attribute: false }) visuals: Record<string, EntityVisualState> = {};
   @property({ type: Boolean }) editMode = false;
+  /** Folded to a chip. Held by the card, like the navigator's. */
+  @property({ type: Boolean }) collapsed = false;
 
   @state() private dropping = false;
 
   protected override render(): TemplateResult | typeof nothing {
     // Nothing to show and nothing to drop: the shelf is not a decoration.
     if (this.items.length === 0 && !this.editMode) return nothing;
+
+    if (this.collapsed) {
+      return html`
+        <button
+          class="surface peek"
+          title=${this.t('ui.dock.expand', 'Show actions')}
+          aria-expanded="false"
+          @click=${() => this.emit('fp3d-dock-collapse', { collapsed: false })}
+        >
+          ${icon('play')}
+          <span class="name">${this.t('ui.dock.title', 'Actions')}</span>
+          ${this.items.length > 0 ? html`<span class="state">${this.items.length}</span>` : nothing}
+        </button>
+      `;
+    }
 
     return html`
       <div
@@ -182,7 +258,17 @@ export class Fp3dActionDock extends FpBaseElement {
         @dragleave=${this.onDragLeave}
         @drop=${this.onDrop}
       >
-        <div class="label">${this.t('ui.dock.title', 'Actions')}</div>
+        <div class="label">
+          ${this.t('ui.dock.title', 'Actions')}
+          <button
+            class="fold"
+            title=${this.t('ui.dock.collapse', 'Hide actions')}
+            aria-expanded="true"
+            @click=${() => this.emit('fp3d-dock-collapse', { collapsed: true })}
+          >
+            ${icon('chevronLeft')}
+          </button>
+        </div>
         ${this.items.map((item) => this.renderItem(item))}
         ${this.items.length === 0
           ? html`<p class="hint">

@@ -804,6 +804,21 @@ export const cardStyles = css`
     min-height: 0;
     max-height: 100%;
   }
+
+  /*
+   * The panels down the side, stacked. The rail is one column so the palette
+   * opens *beside* all of them rather than between them — picking an entity and
+   * seeing where you are belong side by side, and the navigator and the shelf
+   * below it are one thing that happens to have two parts.
+   */
+  .rail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--fp3d-gap);
+    min-height: 0;
+    max-height: 100%;
+  }
   .at-right {
     grid-area: right;
     justify-self: end;

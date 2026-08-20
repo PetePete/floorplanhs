@@ -49,6 +49,8 @@ const EN = {
   'ui.preset.whole_house': 'Building',
   'ui.preset.saved_group': 'Saved views',
   'ui.dock.title': 'Actions',
+  'ui.dock.collapse': 'Hide actions',
+  'ui.dock.expand': 'Show actions',
   'ui.dock.empty':
     'Drop a script or scene here — things that happen, rather than things that sit somewhere.',
   'ui.preset.title': 'Camera views',
@@ -138,6 +140,8 @@ const DE: Table = {
   'ui.section.handles': 'Griffe anzeigen',
 
   'ui.dock.title': 'Aktionen',
+  'ui.dock.collapse': 'Aktionen ausblenden',
+  'ui.dock.expand': 'Aktionen einblenden',
   'ui.dock.empty':
     'Skript oder Szene hierher ziehen — Dinge, die passieren, statt Dinge, die irgendwo stehen.',
   'ui.preset.title': 'Kameraansichten',

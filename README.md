@@ -591,6 +591,9 @@ shortcuts:
     icon: mdi:movie
 ```
 
+The panel sits under the navigator and folds away like it does — on a narrow
+card both start folded, since between them they would be half a phone screen.
+
 Drag one there from the entity palette in edit mode, or write it by hand. A tap
 runs it — `script.turn_on`, not `toggle`, so a running script is not stopped
 half way. Anything can go there, not only scripts: a scene, a switch you reach

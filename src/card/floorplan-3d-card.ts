@@ -216,6 +216,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * the card is resized.
    */
   private collapseChosen = false;
+  /** The shelf folds on its own account; see `levelsCollapsed` for the why. */
+  @state() private dockCollapsed = false;
+  private dockCollapseChosen = false;
 
   @query('.canvas-host') private canvasHost?: HTMLDivElement;
   @query('.card') private cardRoot?: HTMLDivElement;
@@ -440,6 +443,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       // Anything but a wide card: the panel is around 200 px, which is a third
       // of a phone in portrait and most of what you came to look at.
       if (!this.collapseChosen) this.levelsCollapsed = this.layout !== 'wide';
+      if (!this.dockCollapseChosen) this.dockCollapsed = this.layout !== 'wide';
     }
     // Every update, not just when `config` or `isPanel` changed. Home Assistant
     // sets `isPanel` on its own schedule — sometimes before the module that
@@ -804,6 +808,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         activePreset: this.activePreset,
         collapsed: this.levelsCollapsed,
         collapseChosen: this.collapseChosen,
+        dockCollapsed: this.dockCollapsed,
+        dockCollapseChosen: this.dockCollapseChosen,
       });
     } catch {
       // Camera subsystem already gone; nothing worth keeping.
@@ -823,6 +829,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.visibleLevels = memory.visibleLevels;
     this.levelsCollapsed = memory.collapsed;
     this.collapseChosen = memory.collapseChosen;
+    this.dockCollapsed = memory.dockCollapsed;
+    this.dockCollapseChosen = memory.dockCollapseChosen;
     viewer.setVisibleLevels(memory.visibleLevels);
     if (memory.explode > 0) {
       viewer.setExplode(memory.explode, false);
@@ -2115,7 +2123,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
               </div>`
             : nothing}
           ${showLevels && !(showPalette && this.layout === 'narrow')
-            ? html`<fp3d-level-selector
+            ? html`<div class="rail">
+              <fp3d-level-selector
                 data-hass
                 .dark=${this.dark}
                 .size=${this.layout}
@@ -2146,16 +2155,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                         { kind: 'remove-preset', presetId: event.detail.presetId },
                         false,
                       )}
-              ></fp3d-level-selector>`
-            : nothing}
-          ${showLevels && !(showPalette && this.layout === 'narrow')
-            ? html`<fp3d-action-dock
+              ></fp3d-level-selector>
+              <fp3d-action-dock
                 data-hass
                 .dark=${this.dark}
                 .size=${this.layout}
                 .items=${config?.shortcuts ?? []}
                 .visuals=${this.shortcutVisuals()}
                 .editMode=${this.editing}
+                .collapsed=${this.dockCollapsed}
+                @fp3d-dock-collapse=${(event: CustomEvent<{ collapsed: boolean }>) => {
+                  this.dockCollapsed = event.detail.collapsed;
+                  this.dockCollapseChosen = true;
+                }}
                 @fp3d-shortcut-add=${(event: CustomEvent<{ entityId: string }>) =>
                   this.applyIntent({ kind: 'add-shortcut', entityId: event.detail.entityId }, false)}
                 @fp3d-shortcut-remove=${(event: CustomEvent<{ entityId: string }>) =>
@@ -2165,7 +2177,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                   )}
                 @fp3d-shortcut-run=${(event: CustomEvent<{ entityId: string }>) =>
                   this.runShortcut(event.detail.entityId)}
-              ></fp3d-action-dock>`
+              ></fp3d-action-dock>
+            </div>`
             : nothing}
         </div>
         ${this.renderRightSheet(selected)}

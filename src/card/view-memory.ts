@@ -25,6 +25,8 @@ export interface ViewMemory {
   collapsed: boolean;
   /** Whether that was the user's doing rather than the card's width rule. */
   collapseChosen: boolean;
+  dockCollapsed: boolean;
+  dockCollapseChosen: boolean;
   at: number;
 }
 
