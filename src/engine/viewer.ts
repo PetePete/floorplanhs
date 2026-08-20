@@ -44,6 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
+import { leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -472,6 +473,29 @@ export class Viewer implements IViewer {
           this.adoptMove(entityId, position, result.levelId, room);
         }),
         placement.on('label-commit', ({ entityId, offset }) => {
+          // On a stacked marker the label is the handle for that one entity:
+          // dragging it out is how you take it off the pile, and where it lands
+          // is where it goes. Everywhere else it moves the caption alone.
+          const entities = this.config.entities ?? [];
+          const stack = stackFor(entities, entityId);
+          if (stack) {
+            const self = entities.find((entry) => entry.entity === entityId);
+            if (self) {
+              const position = vRound([
+                self.position[0] + offset[0],
+                self.position[1],
+                self.position[2] + offset[2],
+              ]);
+              this.emit('edit-intent', {
+                kind: 'unstack-entity',
+                entityId,
+                position,
+                level: self.level ?? null,
+              });
+              this.adoptUnstack(entityId, position);
+            }
+            return;
+          }
           this.adoptLabelOffset(entityId, offset);
         }),
       );
@@ -490,6 +514,15 @@ export class Viewer implements IViewer {
    * no line is exactly the thing the gesture is for. So the layer is told now,
    * with the same values the dashboard will confirm later.
    */
+  /** A marker taken off its stack, in our own copy; see the card for the config. */
+  private adoptUnstack(entityId: string, position: Vec3): void {
+    const entities = leaveStack(this.config.entities ?? [], entityId).map((entry) =>
+      entry.entity === entityId ? { ...entry, position } : entry,
+    );
+    this.config = { ...this.config, entities };
+    this.guard('entities', this._entities, (e) => e.setEntities(entities));
+  }
+
   private adoptMove(
     entityId: string,
     position: Vec3,
@@ -499,6 +532,16 @@ export class Viewer implements IViewer {
     const entities = this.config.entities ?? [];
     const index = entities.findIndex((entry) => entry.entity === entityId);
     if (index < 0) return;
+
+    // Grabbing one marker of a pile moves the pile: the anchor is shared, and
+    // leaving the others behind would be moving a thing out of its own place.
+    const stack = stackFor(entities, entityId);
+    if (stack) {
+      const moved = moveStack(entities, stack.id, position, level);
+      this.config = { ...this.config, entities: moved };
+      this.guard('entities', this._entities, (e) => e.setEntities(moved));
+      return;
+    }
 
     const moved: PlacedEntity = { ...entities[index], position, level };
     if (room) moved.room = room;

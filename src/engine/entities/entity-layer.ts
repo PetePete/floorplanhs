@@ -17,6 +17,10 @@ import type {
 import type { PlacedEntity, Vec3 } from '@/types/config';
 import { EntityMarker, type ScreenRect } from '@/engine/entities/marker';
 import { MarkerAtlas } from '@/engine/entities/marker-texture';
+import { fanLift } from '@/engine/entities/stacks';
+
+/** Matches the marker's own resting lift; see `EntityMarker`. */
+const DEFAULT_LABEL_LIFT_M = 0.34;
 
 export interface EntityLayerOptions {
   /** Fallback accent when neither the config nor HA supplies a colour. */
@@ -229,10 +233,39 @@ export class EntityLayer implements IEntityLayer {
       if (this.selected === entityId) this.selected = null;
     }
 
+    this.fanStacks(entities);
     this.occlusionOrder = [...this.markers.keys()];
     this.occlusionCursor = 0;
     this.applyVisibility();
     this.ctx?.invalidate();
+  }
+
+  /**
+   * Spread the labels of a stack up from their shared anchor.
+   *
+   * A stack is several markers in one spot, so without this they draw one on
+   * top of another and the pile reads as a single marker with a suspiciously
+   * bold outline. The lift is display only — the config says which markers are
+   * stacked, and how they are drawn is ours to decide. A label the user has
+   * dragged somewhere keeps its own offset: that was a deliberate placement and
+   * outranks our tidying.
+   */
+  private fanStacks(entities: PlacedEntity[]): void {
+    const counted = new Map<string, number>();
+    for (const placed of entities) {
+      const marker = this.markers.get(placed.entity);
+      if (!marker) continue;
+      if (placed.marker?.offset) continue;
+
+      const stack = placed.stack;
+      if (!stack) {
+        marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
+        continue;
+      }
+      const index = counted.get(stack) ?? 0;
+      counted.set(stack, index + 1);
+      marker.setLabelOffset([0, fanLift(index, DEFAULT_LABEL_LIFT_M), 0]);
+    }
   }
 
   updateVisual(entityId: string, visual: EntityVisualState): void {

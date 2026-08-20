@@ -717,6 +717,8 @@ function readEntities(raw: unknown[], path: string): PlacedEntity[] {
     if (role) placed.role = role;
     const room = readString(obj, 'room', here);
     if (room) placed.room = room;
+    const stack = readString(obj, 'stack', here);
+    if (stack) placed.stack = stack;
     if (obj.light !== undefined && obj.light !== null) {
       placed.light = readLightVisual(obj.light, child(here, 'light'));
     }

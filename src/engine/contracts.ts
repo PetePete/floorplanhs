@@ -303,6 +303,8 @@ export type EditIntent =
   | { kind: 'update-preset'; presetId: string; patch: Partial<CameraPreset> }
   | { kind: 'remove-preset'; presetId: string }
   /** Entities that live in the panel rather than on the plan. */
+  /** A label dragged clear of the pile: this marker leaves it, and lands here. */
+  | { kind: 'unstack-entity'; entityId: string; position: Vec3; level: string | null }
   | { kind: 'add-shortcut'; entityId: string }
   | { kind: 'remove-shortcut'; entityId: string }
   | { kind: 'set-section'; section: SectionState };

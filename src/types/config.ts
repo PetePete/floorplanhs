@@ -22,7 +22,7 @@ export interface CardEditDetail {
 }
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.3.4';
+export const CARD_VERSION = '0.4.0';
 
 export type Vec3 = [number, number, number];
 
@@ -260,6 +260,12 @@ export interface PlacedEntity {
   name?: string;
   /** Overrides the auto-derived visual role (light/sensor/cover/...). */
   role?: EntityRole;
+  /**
+   * Markers sharing this id share one spot: a lamp, its switch and the sensor
+   * that drives them are one place in the house. Written by dropping a marker
+   * onto another, cleared by dragging its label back out.
+   */
+  stack?: string;
   light?: LightVisualConfig;
   /**
    * The room this entity belongs to.

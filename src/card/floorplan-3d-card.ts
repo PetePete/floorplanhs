@@ -30,6 +30,7 @@ import type {
   ModelLoadProgress,
 } from '@/engine/contracts';
 import { toEntityVisual } from '@/ha/state-mapper';
+import { joinStack, leaveStack, moveStack, stackFor, stackTarget } from '@/engine/entities/stacks';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
@@ -1063,17 +1064,39 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'move-entity': {
         const index = entities.findIndex((entry) => entry.entity === intent.entityId);
         if (index < 0) return;
-        const moved: PlacedEntity = {
-          ...entities[index],
-          position: vRound(intent.position),
-          level: intent.level,
-        };
+        const position = vRound(intent.position);
+
+        // One marker of a pile carries the pile: the anchor is shared, so
+        // leaving the others behind would be moving a thing out of its place.
+        const pile = stackFor(entities, intent.entityId);
+        if (pile) {
+          next.entities = moveStack(entities, pile.id, position, intent.level);
+          break;
+        }
+
+        const moved: PlacedEntity = { ...entities[index], position, level: intent.level };
         // `undefined` means the drop landed inside a room and the position
         // speaks for itself, so the old override is dropped rather than kept.
         if (intent.room === undefined) delete moved.room;
         else if (intent.room) moved.room = intent.room;
         entities[index] = moved;
-        next.entities = entities;
+
+        // Dropped on top of another marker: that is how a stack starts, and it
+        // is the only way one does — no menu, no mode.
+        const target = stackTarget(entities, intent.entityId, position, intent.level);
+        next.entities = target ? joinStack(entities, intent.entityId, target) : entities;
+        break;
+      }
+      case 'unstack-entity': {
+        const index = entities.findIndex((entry) => entry.entity === intent.entityId);
+        if (index < 0) return;
+        const freed = leaveStack(entities, intent.entityId).map((entry) =>
+          entry.entity === intent.entityId
+            ? { ...entry, position: vRound(intent.position), level: intent.level }
+            : entry,
+        );
+        next.entities = freed;
+        label = this.entityLabel(intent.entityId);
         break;
       }
       case 'update-entity': {

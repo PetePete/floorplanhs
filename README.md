@@ -344,6 +344,22 @@ finger, gets the storey it fell into, and its position is rounded to millimetres
 before being written back through `config-changed`. Touch is a first-class path —
 this works with a finger, not just a mouse.
 
+**Markers stack.** A lamp, its switch and the motion sensor that drives them
+are one place in the house, and three chips fighting over the same square metre
+is what that looks like otherwise. Drop one marker on another and they become a
+stack: one anchor, the labels fanned up from it so the pile can be read. No
+menu and no mode — landing on another marker *is* the gesture.
+
+| Gesture | Result |
+| --- | --- |
+| Drop a marker on another | They stack |
+| Drag the stack's **anchor dot** | The whole pile moves |
+| Drag one **label** off the pile | That marker leaves the stack and lands where you dropped it |
+
+Taking the second-to-last marker out dissolves the stack, because a stack of
+one is a marker. In the YAML it is one field, `stack:`, shared by the members —
+nothing to maintain by hand.
+
 **Anchor and label are two things.** The dot is the entity — where the lamp
 hangs, where its light comes from. The chip is a caption, and a plan is full of
 places a caption reads better than directly on top of what it names. So drag the
@@ -529,6 +545,7 @@ tour:
 | `level` | string \| null | auto | Storey id. Hidden when that level is hidden. `null` = derive from height. |
 | `name` | string | friendly name | Label override. |
 | `role` | see below | derived from the domain | Forces the visual treatment. |
+| `stack` | string | — | Markers sharing this id share one spot. Written by dropping one marker onto another, cleared by dragging a label back out; nothing to maintain by hand. |
 | `light` | [`LightVisualConfig`](#light-options) | — | Only meaningful for the `light` role. |
 | `marker` | [`MarkerConfig`](#marker-options) | — | Marker appearance. |
 | `tap_action` | `ActionConfig` | `toggle`, or nothing | What a tap does. Entities that can be operated (lights, switches, covers, …) toggle; entities you can only read do nothing, because a floorplan on a wall gets touched by people walking past and a sensor is not a control. Set `more-info` to open the dialog on tap. |
