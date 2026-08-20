@@ -418,6 +418,13 @@ export function isActiveState(
     return false;
   }
 
+  // A television that is on is on, whether or not something is playing through
+  // it. Most TV integrations report `idle` for "switched on, no media session",
+  // and `paused` is a film you are still watching — both were reading as off,
+  // so the one screen in the house nobody can miss was the one the plan showed
+  // as dark.
+  if (domain === 'media_player') return state !== 'off' && state !== 'standby';
+
   if (domain === 'person' || domain === 'device_tracker') return state === 'home';
   if (domain === 'cover') return state !== 'closed' && state !== 'closing';
   if (domain === 'climate' || domain === 'water_heater') return state !== 'off';

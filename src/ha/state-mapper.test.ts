@@ -335,7 +335,9 @@ describe('role and active derivation', () => {
     expect(isActiveState('person.a', 'home', {})).toBe(true);
     expect(isActiveState('person.a', 'not_home', {})).toBe(false);
     expect(isActiveState('media_player.a', 'playing', {})).toBe(true);
-    expect(isActiveState('media_player.a', 'idle', {})).toBe(false);
+    // `idle` is a player switched on with nothing playing through it, which is
+    // most of what a television reports. See the media-player group below.
+    expect(isActiveState('media_player.a', 'idle', {})).toBe(true);
     expect(isActiveState('media_player.a', 'standby', {})).toBe(false);
     expect(isActiveState('climate.a', 'heat', {})).toBe(true);
     expect(isActiveState('climate.a', 'cool', {})).toBe(true);
@@ -633,5 +635,32 @@ describe('amber belongs to lights', () => {
   it('leaves a heating thermostat its warning colour', () => {
     expect(colourOf('climate.living_room', 'heat')).toBe(theme.warning);
     expect(colourOf('climate.living_room', 'cool')).toBe(theme.primary);
+  });
+});
+
+/**
+ * A television that is on is on. Integrations report `idle` for "switched on,
+ * nothing playing" and `paused` for a film you are still watching; both read
+ * as off, so the one screen in the house nobody can miss showed as dark.
+ */
+describe('a media player that is running', () => {
+  const id = 'media_player.living_room_tv';
+
+  it('counts idle and paused as on', () => {
+    for (const state of ['on', 'playing', 'paused', 'idle', 'buffering']) {
+      expect(isActiveState(id, state, {}), state).toBe(true);
+    }
+  });
+
+  it('counts off and standby as off', () => {
+    for (const state of ['off', 'standby']) {
+      expect(isActiveState(id, state, {}), state).toBe(false);
+    }
+  });
+
+  it('counts an unavailable player as off', () => {
+    for (const state of ['unavailable', 'unknown']) {
+      expect(isActiveState(id, state, {}), state).toBe(false);
+    }
   });
 });
