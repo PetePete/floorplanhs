@@ -219,6 +219,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   /** The shelf folds on its own account; see `levelsCollapsed` for the why. */
   @state() private dockCollapsed = false;
   private dockCollapseChosen = false;
+  /**
+   * The picker folds rather than closes.
+   *
+   * Closing it left the toolbar button as the only way back, which is a hunt on
+   * a phone; and while you are placing things the list is the tool you are
+   * using, not a dialog in the way. Folding keeps it where you left it.
+   */
+  @state() private paletteCollapsed = false;
 
   @query('.canvas-host') private canvasHost?: HTMLDivElement;
   @query('.card') private cardRoot?: HTMLDivElement;
@@ -2114,8 +2122,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .size=${this.layout}
                 .placed=${config?.entities ?? []}
                 .canPersist=${this.configWritable()}
-                @fp3d-palette-close=${() => {
-                  this.panel = 'none';
+                .collapsed=${this.paletteCollapsed}
+                @fp3d-palette-collapse=${(event: CustomEvent<{ collapsed: boolean }>) => {
+                  this.paletteCollapsed = event.detail.collapsed;
                 }}
                 @fp3d-placement-begin=${(event: CustomEvent<{ entityId: string }>) =>
                   this.beginPlacement(event.detail.entityId)}

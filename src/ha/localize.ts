@@ -70,6 +70,8 @@ const EN = {
   'ui.preset.saved': 'View "{name}" saved',
 
   /* ------------------------------------------------------------ placement */
+  'ui.placement.collapse': 'Hide entities',
+  'ui.placement.expand': 'Show entities',
   'ui.placement.hint_drag': 'Drag an entity onto the model to place it.',
   'ui.placement.hint_volatile':
     'Not saved. Placements are written to the dashboard while it is in edit mode — a YAML dashboard has to be edited by hand.',
@@ -160,6 +162,8 @@ const DE: Table = {
   'ui.preset.empty': 'Noch keine Ansichten gespeichert. Kamera bewegen und speichern.',
   'ui.preset.saved': 'Ansicht "{name}" gespeichert',
 
+  'ui.placement.collapse': 'Entitäten ausblenden',
+  'ui.placement.expand': 'Entitäten einblenden',
   'ui.placement.hint_drag': 'Entität auf das Modell ziehen, um sie zu platzieren.',
   'ui.placement.hint_volatile':
     'Nicht gespeichert. Platzierungen werden geschrieben, solange das Dashboard im Bearbeitungsmodus ist — ein YAML-Dashboard muss von Hand bearbeitet werden.',

@@ -194,6 +194,42 @@ export class Fp3dEntityPalette extends FpBaseElement {
         }
       }
 
+      /* Folded: the same chip the navigator and the shelf fold into. */
+      .peek {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px;
+        min-height: 34px;
+        max-width: 190px;
+        border: none;
+        border-radius: var(--fp3d-chrome-radius);
+        color: var(--fp3d-text);
+        font: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        cursor: pointer;
+        pointer-events: auto;
+        align-self: flex-start;
+      }
+
+      .peek:hover {
+        background: var(--fp3d-hover);
+      }
+
+      .peek .fp-icon {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        opacity: 0.8;
+      }
+
+      .peek-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .list {
         position: relative;
         flex: 1 1 auto;
@@ -339,6 +375,8 @@ export class Fp3dEntityPalette extends FpBaseElement {
   @property({ attribute: false }) placed: PlacedEntity[] = [];
   /** False on a live dashboard, where Lovelace ignores a card's config change. */
   @property({ type: Boolean }) canPersist = false;
+  /** Folded to a chip, like the panels beside it. Held by the card. */
+  @property({ type: Boolean }) collapsed = false;
 
   @state() private query = LAST_FILTER.query;
   @state() private domain: string | null = LAST_FILTER.domain;
@@ -699,6 +737,21 @@ export class Fp3dEntityPalette extends FpBaseElement {
     const rows = this.rows();
     const { items, total } = this.windowed(rows);
 
+    if (this.collapsed) {
+      return html`
+        <button
+          class="surface peek"
+          title=${this.t("ui.placement.expand", "Show entities")}
+          aria-expanded="false"
+          @click=${() => this.emit("fp3d-palette-collapse", { collapsed: false })}
+        >
+          ${icon("list")}
+          <span class="peek-name">${this.t("ui.placement.title", "Place entities")}</span>
+          ${icon("chevronRight")}
+        </button>
+      `;
+    }
+
     return html`
       <div
         class="panel surface solid"
@@ -712,10 +765,11 @@ export class Fp3dEntityPalette extends FpBaseElement {
             <span class="spacer"></span>
             <button
               class="icon-btn"
-              aria-label=${this.t("ui.action.close", "Close")}
-              @click=${() => this.emit("fp3d-palette-close", {})}
+              aria-label=${this.t("ui.placement.collapse", "Hide entities")}
+              aria-expanded="true"
+              @click=${() => this.emit("fp3d-palette-collapse", { collapsed: true })}
             >
-              ${icon("close")}
+              ${icon("chevronLeft")}
             </button>
           </div>
 

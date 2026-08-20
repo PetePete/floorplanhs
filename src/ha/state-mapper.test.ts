@@ -604,3 +604,34 @@ describe('a role that matches the domain', () => {
     );
   });
 });
+
+/**
+ * Amber is a lit lamp. Home Assistant's own `--accent-color` is amber too, so
+ * anything that borrowed it read as a light to whoever glanced at the plan.
+ */
+describe('amber belongs to lights', () => {
+  const hass = createMockHass();
+  const theme = FALLBACK_THEME_DARK;
+
+  function colourOf(id: string, state: string, attributes: Record<string, unknown> = {}): string {
+    return toEntityVisual(entity(id, state, attributes), placed(id), hass, theme).color;
+  }
+
+  it('does not paint a motion sensor like a lamp', () => {
+    const colour = colourOf('binary_sensor.hall_motion', 'on', { device_class: 'motion' });
+    expect(colour).not.toBe(theme.stateActive);
+    expect(colour).not.toBe(theme.accent);
+    expect(colour).toBe(theme.primary);
+  });
+
+  it('keeps the alarm classes alarming', () => {
+    expect(colourOf('binary_sensor.kitchen_smoke', 'on', { device_class: 'smoke' })).toBe(
+      theme.error,
+    );
+  });
+
+  it('leaves a heating thermostat its warning colour', () => {
+    expect(colourOf('climate.living_room', 'heat')).toBe(theme.warning);
+    expect(colourOf('climate.living_room', 'cool')).toBe(theme.primary);
+  });
+});

@@ -693,6 +693,12 @@ const ALARM_CLASSES = new Set([
   'tamper',
 ]);
 
+/**
+ * `theme.accent` is deliberately absent below. In Home Assistant's own palette
+ * `--accent-color` is amber, which is the colour of a lit lamp — a motion
+ * sensor wearing it says "light" to anyone glancing at the plan. Amber belongs
+ * to `stateActive`, and `stateActive` belongs to lights.
+ */
 function accentFor(
   role: EntityRole,
   state: string,
@@ -709,12 +715,11 @@ function accentFor(
       return theme.success;
     case 'binary_sensor': {
       const deviceClass = stringAttr(attrs, 'device_class');
-      return deviceClass && ALARM_CLASSES.has(deviceClass) ? theme.error : theme.accent;
+      return deviceClass && ALARM_CLASSES.has(deviceClass) ? theme.error : theme.primary;
     }
     case 'climate':
       if (state === 'heat' || state === 'heat_cool') return theme.warning;
-      if (state === 'cool' || state === 'dry') return theme.primary;
-      return theme.accent;
+      return theme.primary;
     case 'person':
       return theme.success;
     case 'cover':

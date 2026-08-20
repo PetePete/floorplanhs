@@ -661,6 +661,14 @@ export class Viewer implements IViewer {
 
     if (entitiesChanged || modelChanged) {
       this.applyEntities(previous.entities ?? [], next.entities ?? []);
+      // A marker just created has no state yet, so it shows its entity id until
+      // the next push from Home Assistant — which may be a minute away. Replay
+      // what we already know instead of letting a fresh drop sit there labelled
+      // `light.dusche_shelly_dusche_lavabo`.
+      if (this.hass) {
+        this.prevStates.clear();
+        this.updateHass(this.hass);
+      }
     }
 
     this.core.invalidate();
