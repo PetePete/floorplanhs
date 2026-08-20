@@ -551,12 +551,16 @@ export class CameraController implements ICameraController {
    * so the mapping is already correct when the button goes down — OrbitControls
    * reads `mouseButtons` once per gesture and ignores later changes.
    *
-   * Touch is deliberately untouched — a tablet has no middle button, and the
-   * one-finger-orbit / two-finger-pan mapping is already the right one there.
+   * Touch is the same in both modes and stated rather than inherited: one
+   * finger turns the house, two fingers pinch to zoom. A phone has no modifier
+   * keys to tell the two apart, so the gesture has to, and leaving it to the
+   * library's defaults means it can change under us on an upgrade.
    */
   private applyNavigationMode(): void {
     const controls = this.orbit;
     if (!controls) return;
+
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
     if (this.cfg.navigation === 'orbit') {
       controls.mouseButtons = {

@@ -2000,6 +2000,19 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     return explodeAvailable(this.levels.length, this.section, this.visibleLevels);
   }
 
+  /**
+   * The zoom slider, and not on a phone unless asked for.
+   *
+   * It stands at the right edge, exactly where a thumb swipes to turn the
+   * house, and a swipe that lands on it zooms instead — which reads as the card
+   * doing something different every time. A pinch is the gesture there anyway.
+   * `showZoomSlider: true` puts it back.
+   */
+  private zoomSliderVisible(ui: NonNullable<Floorplan3dCardConfig['ui']>): boolean {
+    if (ui.showZoomSlider !== undefined) return ui.showZoomSlider;
+    return this.layout !== 'narrow';
+  }
+
   private placeViewCube(): void {
     const camera = this.viewer?.cameraCtl;
     if (!camera) return;
@@ -2076,7 +2089,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                   this.onToolbarAction(event.detail.action)}
               ></fp3d-toolbar>`
             : nothing}
-          ${ui.showZoomSlider !== false
+          ${this.zoomSliderVisible(ui)
             ? html`
                 ${ui.showViewCube !== false ? html`<div class="cube-gap"></div>` : nothing}
                 <div class="cube-column">

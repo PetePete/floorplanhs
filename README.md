@@ -322,6 +322,19 @@ preset is written into your dashboard YAML. Presets with `inTour: true` are
 included in the auto-rotate slideshow; the one with `default: true` is applied
 on load.
 
+### Touch
+
+| Gesture | Action |
+| --- | --- |
+| One finger | Turn the house |
+| Two fingers, pinch | Zoom |
+| Two fingers, drag | Pan |
+| Press and hold on a marker | Pick it up (edit mode) |
+
+Stated in the card rather than inherited from the 3D library, so it cannot
+change under you on a dependency upgrade. A phone has no modifier keys, so the
+gesture itself has to carry the meaning.
+
 ### Drag & drop
 
 The card follows the dashboard: put the dashboard in edit mode and the placement
@@ -638,7 +651,7 @@ for constantly. What decides is whether it belongs *somewhere*.
 | `showToolbar` | boolean | `true` | Top toolbar. |
 | `showPresetBar` | boolean | `false` | The old saved-views strip along the bottom. The side panel carries the same views; this brings the strip back for its drag-reordering and per-view tour toggle. |
 | `showViewCube` | boolean | `true` | Orientation cube, top right. Click a face/edge/corner to snap, drag to orbit. |
-| `showZoomSlider` | boolean | `true` | Vertical zoom control under the cube. |
+| `showZoomSlider` | boolean | `true`, except on a narrow card | Vertical zoom control under the cube. Left out on a phone-sized card unless you set it: it stands where a thumb swipes to turn the house, and a swipe that lands on it zooms instead. Pinch is the gesture there anyway. |
 | `levelPresets` | boolean | `true` | Add one generated isometric view per detected storey to the view bar. They follow the model, so they are not editable and never written to the config; saved views come first. |
 | `showLevelSelector` | boolean | `true` | The navigator down the side: the building, its storeys, and your saved views. This is the card's navigation. The chevron in its corner folds it down to a single chip showing where you are, for when it is over the part of the house you are looking at. On a narrow card it starts folded, since the panel is a third of a phone screen; unfold it once and that choice stands. The fold lasts the session, not the config. |
 | `showSectionControls` | boolean | `false` | Cross-section controls. Shown anyway while author tools are visible. |
