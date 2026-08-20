@@ -294,7 +294,12 @@ export interface IPlacementController extends Subsystem {
 export type SectionChangeOrigin = 'user' | 'apply';
 
 export type EditIntent =
-  | { kind: 'add-entity'; entity: PlacedEntity }
+  | {
+      kind: 'add-entity';
+      entity: PlacedEntity;
+      /** Marker the drop landed on; the new one joins its stack. */
+      stackWith?: string | null;
+    }
   | {
       kind: 'move-entity';
       /** Marker the drop landed on; the two become a stack. */

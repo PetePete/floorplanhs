@@ -348,8 +348,10 @@ this works with a finger, not just a mouse.
 **Markers stack.** A lamp, its switch and the motion sensor that drives them
 are one place in the house, and three chips fighting over the same square metre
 is what that looks like otherwise. Drop one marker on another and they become a
-stack: one anchor, the labels fanned up from it so the pile can be read. No
-menu and no mode — landing on another marker *is* the gesture.
+stack: one anchor, and the labels listed above it one per row, like the
+actions panel. The rows are spaced in screen pixels rather than in metres, so
+the list stays a list at any zoom. No menu and no mode — landing on another
+marker *is* the gesture, and that is decided by what overlaps on screen.
 
 | Gesture | Result |
 | --- | --- |

@@ -1049,7 +1049,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'add-entity': {
         if (entities.some((entry) => entry.entity === intent.entity.entity)) return;
         entities.push(intent.entity);
-        next.entities = entities;
+        // Dropped onto a marker that is already there. Without this the new one
+        // lands at exactly the same point and is simply invisible underneath —
+        // which is what "placing does not work" looks like from the outside.
+        const onto = intent.stackWith
+          ? entities.find((entry) => entry.entity === intent.stackWith)
+          : undefined;
+        next.entities = onto
+          ? joinStack(entities, intent.entity.entity, onto)
+          : entities;
         this.recentAdds.set(intent.entity.entity, Date.now());
         label = this.entityLabel(intent.entity.entity);
         // Select it immediately. Dropping a marker into a 3D scene and getting
@@ -1462,6 +1470,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       {
         kind: 'add-entity',
         entity: this.newPlacement(entityId, result.position, result.levelId, result.room),
+        stackWith: result.stackWith ?? null,
       },
       false,
     );

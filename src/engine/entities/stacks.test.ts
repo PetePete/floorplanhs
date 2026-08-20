@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  fanLift,
   joinStack,
   leaveStack,
   moveStack,
@@ -127,11 +126,7 @@ describe('the stack as a whole', () => {
     expect(next[2].position).toEqual([8, 2.5, 8]);
   });
 
-  it('fans the labels apart so the pile can be read', () => {
-    expect(fanLift(0, 0.34)).toBeCloseTo(0.34, 5);
-    expect(fanLift(1, 0.34)).toBeCloseTo(0.76, 5);
-    expect(fanLift(2, 0.34)).toBeCloseTo(1.18, 5);
-  });
+
 });
 
 describe('a stack being carried', () => {

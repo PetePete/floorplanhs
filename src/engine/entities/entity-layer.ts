@@ -17,7 +17,6 @@ import type {
 import type { PlacedEntity, Vec3 } from '@/types/config';
 import { EntityMarker, type ScreenRect } from '@/engine/entities/marker';
 import { MarkerAtlas } from '@/engine/entities/marker-texture';
-import { fanLift } from '@/engine/entities/stacks';
 
 /** Matches the marker's own resting lift; see `EntityMarker`. */
 const DEFAULT_LABEL_LIFT_M = 0.34;
@@ -241,7 +240,7 @@ export class EntityLayer implements IEntityLayer {
   }
 
   /**
-   * Spread the labels of a stack up from their shared anchor.
+   * Number the labels of a stack, so each draws itself one row higher.
    *
    * A stack is several markers in one spot, so without this they draw one on
    * top of another and the pile reads as a single marker with a suspiciously
@@ -260,11 +259,13 @@ export class EntityLayer implements IEntityLayer {
       const stack = placed.stack;
       if (!stack) {
         marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
+        marker.setStackIndex(0);
         continue;
       }
       const index = counted.get(stack) ?? 0;
       counted.set(stack, index + 1);
-      marker.setLabelOffset([0, fanLift(index, DEFAULT_LABEL_LIFT_M), 0]);
+      marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
+      marker.setStackIndex(index);
     }
   }
 

@@ -22,8 +22,7 @@ import type { PlacedEntity, Vec3 } from '@/types/config';
  */
 export const STACK_RADIUS_M = 0.35;
 
-/** Metres each further label is lifted above the one below it. */
-export const STACK_FAN_M = 0.42;
+
 
 export function stackOf(entity: PlacedEntity | undefined): string | null {
   return entity?.stack ?? null;
@@ -142,13 +141,4 @@ export function moveStack(
   return entities.map((entry) =>
     entry.stack === stackId ? { ...entry, position: [...position] as Vec3, level } : entry,
   );
-}
-
-/**
- * How far above the anchor each label sits, by its place in the stack.
- *
- * The first keeps the ordinary lift, so a stack of one looks like what it is.
- */
-export function fanLift(index: number, baseLift: number): number {
-  return baseLift + index * STACK_FAN_M;
 }

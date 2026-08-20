@@ -46,6 +46,9 @@ const ROOM_LEADER_MIN_M = 0.6;
 
 /** Metres the pill floats above its anchor when no offset is configured. */
 const DEFAULT_LIFT = 0.34;
+
+/** Screen pixels between the labels of one stack: a chip and a hair of air. */
+const STACK_ROW_PX = 34;
 /** Extra lift while hovered — the marker "pops off" the surface. */
 const HOVER_LIFT = 0.05;
 const POP_DURATION = 0.3;
@@ -129,6 +132,8 @@ export class EntityMarker {
   private levelVisible = true;
   private layerVisible = true;
   private crowded = false;
+  /** Place in its stack, top-down; 0 is the one sitting on the anchor. */
+  private stackIndex = 0;
 
   private baseLift = DEFAULT_LIFT;
   /** World point of the room this entity names, if it names one. */
@@ -408,6 +413,18 @@ export class EntityMarker {
     }
   }
 
+  /**
+   * Which row of the pile this marker is.
+   *
+   * Only the bottom one keeps its leader line: three lines fanning out of one
+   * dot say nothing that the list above it does not already say.
+   */
+  setStackIndex(index: number): void {
+    if (this.stackIndex === index) return;
+    this.stackIndex = index;
+    this.syncRoomLeader();
+  }
+
   setCrowded(crowded: boolean): boolean {
     if (this.crowded === crowded) return false;
     this.crowded = crowded;
@@ -451,7 +468,13 @@ export class EntityMarker {
     this.object.visible = visible;
     if (!visible) return this.popT < 1;
 
-    const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
+    // A stack is read as a list, so the gap between its labels is a screen
+    // distance and not a distance in the house: in metres it would open and
+    // close with the zoom and lean over with the perspective, which is exactly
+    // what a list must not do.
+    const stackLift =
+      this.stackIndex > 0 ? this.stackIndex * STACK_ROW_PX * this.pixelUnit(ctx, this.object.position) : 0;
+    const lift = this.baseLift + HOVER_LIFT * this.hoverAmt + stackLift;
     this.body.position.y = lift;
     // Crowded markers give up the label that was covering a neighbour, but not
     // the leader: the line is what says something is there and, when it points
@@ -460,9 +483,12 @@ export class EntityMarker {
     const showLabel = !this.crowded || this.hovered || this.selected;
     this.body.visible = showLabel;
     const pushed = Math.hypot(this.body.position.x, this.body.position.z) > 0.03;
-    this.leader.visible = showLabel
-      ? lift > 0.03 || pushed || this.roomAnchor !== null
-      : this.roomAnchor !== null;
+    this.leader.visible =
+      this.stackIndex > 0
+        ? false
+        : showLabel
+          ? lift > 0.03 || pushed || this.roomAnchor !== null
+          : this.roomAnchor !== null;
 
     // Hidden label, so the leader stops at the anchor rather than running up to
     // a pill that is not being drawn. Sideways too: a label dragged out of the
