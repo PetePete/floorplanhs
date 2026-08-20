@@ -151,3 +151,45 @@ describe('label offset', () => {
     m.dispose();
   });
 });
+
+/**
+ * A pile's rows were arranged on purpose — that is what a stack is. Hiding one
+ * because its neighbour is close by is the declutter fighting the arrangement
+ * it is looking at.
+ */
+describe('a stacked label', () => {
+  function frame(m: EntityMarker): void {
+    const camera = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 100);
+    camera.position.set(0, 6, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld();
+    m.update(1 / 60, {
+      size: { width: 800, height: 600 },
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1]);
+  }
+
+  /** The body group carries the label; crowding is what hides it. */
+  function labelVisible(m: EntityMarker): boolean {
+    return (m as unknown as { body: THREE.Group }).body.visible;
+  }
+
+  it('stays visible when a lone marker would give way', () => {
+    const m = marker({ position: [0, 0, 0] });
+    m.setStackIndex(1, 3);
+    m.setCrowded(true);
+    frame(m);
+    expect(labelVisible(m)).toBe(true);
+    m.dispose();
+  });
+
+  it('still gives way when it stands alone', () => {
+    const m = marker({ position: [0, 0, 0] });
+    m.setCrowded(true);
+    frame(m);
+    expect(labelVisible(m)).toBe(false);
+    m.dispose();
+  });
+});

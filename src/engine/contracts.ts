@@ -78,6 +78,12 @@ export interface LoadedModel {
   /** World-space bounds of the whole house. */
   bounds: THREE.Box3;
   levels: LevelDefinition[];
+  /**
+   * Rooms the model declares, by storey. The card offers these when you point
+   * a marker's leader line at a room by hand rather than by dragging it out of
+   * one.
+   */
+  rooms?: Array<{ id: string; level: string | null }>;
   /** Node name -> object, for bindNode lookups. */
   nodes: Map<string, THREE.Object3D>;
   /** Meshes that should receive light and shadows. */
@@ -215,7 +221,7 @@ export interface IEntityLayer extends Subsystem {
   setEntities(entities: PlacedEntity[]): void;
   updateVisual(entityId: string, visual: EntityVisualState): void;
   /** Raycast for hover/click; returns the entity id under the pointer. */
-  pick(ndc: { x: number; y: number }): string | null;
+  pick(ndc: { x: number; y: number }, options?: { ignore?: string }): string | null;
   setHovered(entityId: string | null): void;
   setSelected(entityId: string | null): void;
   /** Live position update while dragging. */

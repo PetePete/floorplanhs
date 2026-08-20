@@ -48,6 +48,14 @@ export interface EntityLayerOptions {
 export interface PickOptions {
   /** Fingers are imprecise; touch gets a ~44 px effective target. */
   pointerType?: 'mouse' | 'touch' | 'pen';
+  /**
+   * Entity to look past.
+   *
+   * A marker being dragged sits under the cursor by definition, so without this
+   * it wins every hit test and hides whatever you are dragging it onto — which
+   * is the one thing the test is being asked about.
+   */
+  ignore?: string;
   /** Explicit extra hit padding in CSS px, overriding the pointer default. */
   padding?: number;
 }
@@ -584,6 +592,7 @@ export class EntityLayer implements IEntityLayer {
     let bestDepth = Infinity;
 
     for (const [entityId, marker] of this.markers) {
+      if (entityId === options?.ignore) continue;
       if (!marker.getScreenRect(camera, width, height, _rect)) continue;
       const halfWidth = Math.max(_rect.halfWidth, minHalf) + padding;
       const halfHeight = Math.max(_rect.halfHeight, minHalf) + padding;
@@ -598,7 +607,8 @@ export class EntityLayer implements IEntityLayer {
     // Nothing under the pointer, but it may still be inside a pile's frame —
     // the air between the rows is part of the pile, and that is where anyone
     // aims when they mean "onto this stack".
-    for (const rect of this.frameRects.values()) {
+    for (const [id, rect] of this.frameRects) {
+      if (options?.ignore && this.stacks.get(id)?.includes(options.ignore)) continue;
       if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
       if (Math.abs(pointerY - rect.y) > rect.halfHeight) continue;
       return rect.base;

@@ -486,7 +486,10 @@ export class EntityMarker {
     // the leader: the line is what says something is there and, when it points
     // at a room, which room that is. Dropping both leaves a bare crosshair,
     // which on a dark ground is close to nothing at all.
-    const showLabel = !this.crowded || this.hovered || this.selected;
+    // A pile's rows stay put. They were arranged on purpose — that is what a
+    // stack is — and hiding one because its neighbour is close by would be the
+    // declutter fighting the arrangement it is looking at.
+    const showLabel = !this.crowded || this.hovered || this.selected || this.stackCount > 1;
     this.body.visible = showLabel;
     const pushed = Math.hypot(this.body.position.x, this.body.position.z) > 0.03;
     this.leader.visible =

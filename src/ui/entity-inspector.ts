@@ -156,6 +156,8 @@ export class Fp3dEntityInspector extends FpBaseElement {
 
   @property({ attribute: false }) entity: PlacedEntity | null = null;
   @property({ attribute: false }) levels: LevelDefinition[] = [];
+  /** Rooms the model declares, for pointing the leader line at one by hand. */
+  @property({ attribute: false }) rooms: Array<{ id: string; level: string | null }> = [];
   @property({ attribute: false }) presets: CameraPreset[] = [];
 
   /** Local echo so typing is not undone by the config round-trip. */
@@ -505,6 +507,28 @@ export class Fp3dEntityInspector extends FpBaseElement {
                         ${level.name}
                       </option>`,
                   )}
+                </select>
+              </div>`
+            : nothing}
+
+          ${this.rooms.length > 0
+            ? html`<div class="field">
+                <span class="field-label">${this.t('ui.inspector.room', 'Room')}</span>
+                <select
+                  aria-label=${this.t('ui.inspector.room', 'Room')}
+                  @change=${(event: Event) =>
+                    this.queuePatch({ room: (event.target as HTMLSelectElement).value || undefined })}
+                >
+                  <option value="" ?selected=${!placed.room}>
+                    ${this.t('ui.inspector.room_none', 'wherever it stands')}
+                  </option>
+                  ${this.rooms
+                    .filter((room) => !placed.level || !room.level || room.level === placed.level)
+                    .map(
+                      (room) => html`<option value=${room.id} ?selected=${placed.room === room.id}>
+                        ${room.id}
+                      </option>`,
+                    )}
                 </select>
               </div>`
             : nothing}

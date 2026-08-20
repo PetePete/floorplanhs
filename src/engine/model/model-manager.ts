@@ -209,7 +209,7 @@ export class ModelManager implements IModelManager {
     const receivers = this.applyShadowsAndGlass(root, config?.glassNodes);
 
     this.root = root;
-    this.loaded = { root, bounds, levels, nodes, receivers };
+    this.loaded = { root, bounds, levels, nodes, receivers, rooms: collectRooms(root) };
     this.visibleLevels = null;
     this.pickDirty = true;
     if (!this.ceilingsVisible) {
@@ -405,6 +405,28 @@ function asMesh(object: THREE.Object3D): THREE.Mesh | null {
  * Recursion stops at invisible nodes, which is both faster than filtering
  * afterwards and the only way to respect a hidden *ancestor*.
  */
+/**
+ * Every room the model names, by storey, in the order the file lists them.
+ *
+ * Read off the floor meshes, which are the same thing the room fill and the
+ * leader anchors are built from — one source for "which rooms are there".
+ */
+function collectRooms(root: THREE.Object3D): Array<{ id: string; level: string | null }> {
+  const seen = new Set<string>();
+  const rooms: Array<{ id: string; level: string | null }> = [];
+  root.traverse((object) => {
+    if (object.userData.part !== 'floor') return;
+    const id = object.userData.room;
+    if (typeof id !== 'string' || !id || id === 'structure') return;
+    const level = typeof object.userData.level === 'string' ? object.userData.level : null;
+    const key = `${level ?? ''}|${id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rooms.push({ id, level });
+  });
+  return rooms;
+}
+
 function collectPickTargets(object: THREE.Object3D, out: THREE.Object3D[]): void {
   if (!object.visible) return;
   const mesh = asMesh(object);

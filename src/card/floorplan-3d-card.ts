@@ -187,6 +187,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private layout: UiSize = 'wide';
   @state() private levels: LevelDefinition[] = [];
   @state() private visibleLevels: string[] | null = null;
+  /** Rooms the model declares; offered by the inspector for the leader line. */
+  @state() private rooms: Array<{ id: string; level: string | null }> = [];
   @state() private section: SectionState = { ...DEFAULT_SECTION_STATE };
   @state() private activePreset: string | null = null;
   @state() private selectedEntity: string | null = null;
@@ -904,6 +906,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   private onModelLoaded(model: LoadedModel): void {
     this.levels = model.levels.length ? model.levels : (this.config?.model?.levels ?? []);
+    this.rooms = model.rooms ?? [];
     this.bounds = {
       min: [model.bounds.min.x, model.bounds.min.y, model.bounds.min.z],
       max: [model.bounds.max.x, model.bounds.max.y, model.bounds.max.z],
@@ -2277,6 +2280,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
           .size=${this.layout}
           .entity=${selected}
           .levels=${this.levels}
+          .rooms=${this.rooms}
           .presets=${this.allPresets()}
           @fp3d-entity-patch=${(event: CustomEvent<{ entityId: string; patch: Partial<PlacedEntity> }>) =>
             this.onEntityPatch(event.detail.entityId, event.detail.patch)}

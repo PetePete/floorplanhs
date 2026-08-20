@@ -698,7 +698,7 @@ export class PlacementController implements IPlacementController {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
     const hit =
       typeof this.entities.pick === 'function'
-        ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y })
+        ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y }, { ignore: this.entityId ?? undefined })
         : null;
     if (!hit || hit === this.entityId) return null;
 
