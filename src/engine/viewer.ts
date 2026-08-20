@@ -44,7 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
-import { joinStack, leaveStack, moveStack, stackFor, stackTarget } from '@/engine/entities/stacks';
+import { joinStack, leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -469,8 +469,9 @@ export class Viewer implements IViewer {
             position,
             level: result.levelId,
             room,
+            stackWith: result.stackWith ?? null,
           });
-          this.adoptMove(entityId, position, result.levelId, room);
+          this.adoptMove(entityId, position, result.levelId, room, result.stackWith ?? null);
         }),
         placement.on('label-commit', ({ entityId, offset }) => {
           // On a stacked marker the label is the handle for that one entity:
@@ -528,6 +529,7 @@ export class Viewer implements IViewer {
     position: Vec3,
     level: string | null,
     room: string | undefined,
+    stackWith: string | null = null,
   ): void {
     const entities = this.config.entities ?? [];
     const index = entities.findIndex((entry) => entry.entity === entityId);
@@ -554,7 +556,7 @@ export class Viewer implements IViewer {
     // too. Without it the engine holds two markers at one point with no stack
     // to fan them apart, so one sits invisibly inside the other until the
     // config comes back round — which looks exactly like the marker vanishing.
-    const target = stackTarget(next, entityId, position, level);
+    const target = stackWith ? next.find((entry) => entry.entity === stackWith) : undefined;
     const stacked = target ? joinStack(next, entityId, target) : next;
 
     this.config = { ...this.config, entities: stacked };

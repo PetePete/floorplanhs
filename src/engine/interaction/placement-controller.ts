@@ -32,7 +32,6 @@ import { Emitter } from '@/util/events';
 import { vRound } from '@/util/math';
 import { humaniseEntityId, resolveIcon, roleForEntityId } from '@/engine/entities/icons';
 import { DropIndicator, snapToGrid, type DropFeedback } from '@/engine/interaction/drop-indicator';
-import { stackTarget } from '@/engine/entities/stacks';
 
 /** MIME type the entity palette must put on `dataTransfer`. */
 export const ENTITY_DRAG_MIME = 'application/x-ha-entity';
@@ -256,6 +255,13 @@ export class PlacementController implements IPlacementController {
     this.role = entityId ? roleForEntityId(entityId) : 'marker';
     this.originalPosition = null;
     this.lastResult = null;
+    // A fresh gesture starts fresh. The free-placement latch is meant to hold
+    // for the length of one drag — without this it held for the life of the
+    // card: one drag that strayed off the building, and every placement after
+    // it ignored every surface and landed on a plane at the lowest storey. The
+    // move path always reset it; the add path never did.
+    this.freePlacement = false;
+    this.lastHitLevel = null;
     this.indicator.setGhostVisible(true);
     this.applyPreview(this.defaultPreview(entityId));
     this.start();
@@ -577,7 +583,7 @@ export class PlacementController implements IPlacementController {
 
     this.applyRoleOffset(level);
     snapToGrid(this.anchor);
-    this.snapToMarker(level?.id ?? null);
+    const stackWith = this.snapToMarker();
 
     this.feedback.point.copy(this.point);
     this.feedback.normal.copy(this.normal);
@@ -593,6 +599,7 @@ export class PlacementController implements IPlacementController {
       levelId: level?.id ?? null,
       nodeName: hit.object.name || undefined,
       room: this.resolveRoom(level),
+      stackWith,
     };
   }
 
@@ -629,6 +636,7 @@ export class PlacementController implements IPlacementController {
     this.anchor.copy(this.point);
     this.anchor.y += FLOOR_LIFT;
     snapToGrid(this.anchor);
+    const stackWith = this.snapToMarker();
 
     this.feedback.point.copy(this.point);
     this.feedback.normal.copy(this.normal);
@@ -643,6 +651,7 @@ export class PlacementController implements IPlacementController {
       normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
       levelId: level?.id ?? null,
       room: this.resolveRoom(level),
+      stackWith,
     };
   }
 
@@ -655,20 +664,35 @@ export class PlacementController implements IPlacementController {
    * width the drop gives up its own spot and takes the other marker's, so the
    * gesture succeeds by intention rather than by aim.
    */
-  private snapToMarker(levelId: string | null): void {
-    if (this.mode === null) return;
+  private snapToMarker(): string | null {
+    if (this.mode === null) return null;
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
-    const placed = extras.getPlacedEntities?.() ?? [];
-    if (placed.length === 0) return;
 
-    const target = stackTarget(
-      placed,
-      this.entityId ?? '',
-      [this.anchor.x, this.anchor.y, this.anchor.z],
-      levelId,
-    );
-    if (!target) return;
+    // Screen space, not world space, and deliberately: a stack is markers that
+    // *look* like one pile. Whether the two points are a metre apart in the
+    // model is invisible from where you are sitting, and aiming at a chip a few
+    // pixels wide through a perspective projection is not a gesture anyone can
+    // repeat. This is the same hit test that decides what a tap lands on, so
+    // "it looks like I am on it" and "I am on it" are the same question.
+    // `pick` is part of the layer contract, but a stub layer in a test need not
+    // provide it, and a placement that throws is worse than one that does not
+    // stack.
+    const hit =
+      typeof this.entities.pick === 'function'
+        ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y })
+        : null;
+    if (!hit || hit === this.entityId) return null;
+
+    const target = extras.getPlacedEntity?.(hit) ?? null;
+    if (!target) return null;
+
+    // Its own pile: dragging a stack by the anchor would snap back onto the
+    // mates it is carrying.
+    const self = this.entityId ? extras.getPlacedEntity?.(this.entityId) : null;
+    if (self?.stack && target.stack === self.stack) return null;
+
     this.anchor.set(target.position[0], target.position[1], target.position[2]);
+    return hit;
   }
 
   /**

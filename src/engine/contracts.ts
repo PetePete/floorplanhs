@@ -250,6 +250,12 @@ export interface PlacementResult {
    * draws a leader back to it.
    */
   room?: string | null;
+  /**
+   * The marker this drop landed on, if any — the drop is over its chip on
+   * screen, whatever the distance between them in the model. Stacking is about
+   * what looks like one pile from where you are sitting.
+   */
+  stackWith?: string | null;
 }
 
 export interface IPlacementController extends Subsystem {
@@ -291,6 +297,8 @@ export type EditIntent =
   | { kind: 'add-entity'; entity: PlacedEntity }
   | {
       kind: 'move-entity';
+      /** Marker the drop landed on; the two become a stack. */
+      stackWith?: string | null;
       entityId: string;
       position: Vec3;
       level: string | null;

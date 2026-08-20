@@ -458,3 +458,53 @@ describe('dragging the label', () => {
     placement.dispose();
   });
 });
+
+/**
+ * The free-placement latch belongs to one gesture.
+ *
+ * It exists so that dragging a marker out of a window does not keep snapping
+ * back onto the wall it is passing. Held across gestures it does something
+ * else entirely: one drag that strays off the building, and every placement
+ * after it ignores every surface and lands on a plane at the lowest storey.
+ * Measured on a real house, that was 594 of 600 screen points.
+ */
+describe('starting a fresh placement', () => {
+  it('forgets that the last gesture wandered off the house', () => {
+    const built = house();
+    // `nodeName` is the tell: it is only set when a real surface was hit.
+    built.floor.name = 'ground/living/floor';
+    const placement = new PlacementController(stubModel(built), noopEntities, noopCamera);
+    placement.init(stubContext());
+
+    // A drag that leaves the building latches free placement...
+    placement.beginPlacement('sensor.a');
+    placement.updatePlacement(...screen(40, 40));
+    placement.commitPlacement(...screen(40, 40));
+
+    // ...and the next one must still see the floor under the pointer.
+    placement.beginPlacement('light.b');
+    const result = placement.commitPlacement(...screen(0, 0));
+    expect(result?.nodeName, 'a surface, not the fallback plane').toBeTruthy();
+    placement.dispose();
+  });
+
+  it('does the same for a move', () => {
+    const built = house();
+    built.floor.name = 'ground/living/floor';
+    const entities = {
+      moveEntity: () => {},
+      setEntities: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: () => null,
+    } as unknown as IEntityLayer;
+    const placement = new PlacementController(stubModel(built), entities, noopCamera);
+    placement.init(stubContext());
+
+    placement.beginPlacement('sensor.a');
+    placement.commitPlacement(...screen(40, 40));
+
+    placement.beginMove('sensor.a');
+    expect(placement.commitPlacement(...screen(0, 0))?.nodeName).toBeTruthy();
+    placement.dispose();
+  });
+});

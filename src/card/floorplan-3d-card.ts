@@ -30,7 +30,7 @@ import type {
   ModelLoadProgress,
 } from '@/engine/contracts';
 import { toEntityVisual } from '@/ha/state-mapper';
-import { joinStack, leaveStack, moveStack, stackFor, stackTarget } from '@/engine/entities/stacks';
+import { joinStack, leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
@@ -1082,8 +1082,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         entities[index] = moved;
 
         // Dropped on top of another marker: that is how a stack starts, and it
-        // is the only way one does — no menu, no mode.
-        const target = stackTarget(entities, intent.entityId, position, intent.level);
+        // is the only way one does — no menu, no mode. Which marker that was is
+        // decided where the drop happened, on screen, not re-derived here from
+        // world coordinates that know nothing about the camera.
+        const target = intent.stackWith
+          ? entities.find((entry) => entry.entity === intent.stackWith)
+          : undefined;
         next.entities = target ? joinStack(entities, intent.entityId, target) : entities;
         break;
       }

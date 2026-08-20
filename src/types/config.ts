@@ -22,7 +22,7 @@ export interface CardEditDetail {
 }
 export const CARD_TAG = 'floorplan-3d-card';
 export const EDITOR_TAG = 'floorplan-3d-card-editor';
-export const CARD_VERSION = '0.4.1';
+export const CARD_VERSION = '0.4.2';
 
 export type Vec3 = [number, number, number];
 
