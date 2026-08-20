@@ -356,6 +356,7 @@ marker *is* the gesture, and that is decided by what overlaps on screen.
 | Gesture | Result |
 | --- | --- |
 | Drop a marker on another | They stack |
+| Drag one **label** onto another | The same: labels are what you can see and grab |
 | Drag the stack's **anchor dot** | The whole pile moves |
 | Drag one **label** off the pile | That marker leaves the stack and lands where you dropped it |
 

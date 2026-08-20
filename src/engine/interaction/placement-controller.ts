@@ -57,7 +57,7 @@ export interface PlacementEvents {
   'placement-commit': { entityId: string; mode: PlacementMode; result: PlacementResult };
   'placement-cancel': { entityId: string; mode: PlacementMode; reason: PlacementCancelReason };
   /** A label was dragged to a new spot beside its anchor. */
-  'label-commit': { entityId: string; offset: Vec3 };
+  'label-commit': { entityId: string; offset: Vec3; stackWith?: string };
 }
 
 /**
@@ -420,8 +420,13 @@ export class PlacementController implements IPlacementController {
     if (mode === 'label') {
       this.updateLabel(clientX, clientY);
       const offset = this.labelOffset;
+      // Dropped on another marker's chip. Dragging labels together is how
+      // anyone would say "put these two in one place" — they are the parts you
+      // can see and grab — so it means what it looks like.
+      const onto = this.markerUnderPointer();
       this.finish(null);
-      if (entityId && offset) this.emitter.emit('label-commit', { entityId, offset });
+      if (entityId && onto) this.emitter.emit('label-commit', { entityId, offset: offset ?? [0, 0, 0], stackWith: onto });
+      else if (entityId && offset) this.emitter.emit('label-commit', { entityId, offset });
       return null;
     }
 
@@ -664,6 +669,22 @@ export class PlacementController implements IPlacementController {
    * width the drop gives up its own spot and takes the other marker's, so the
    * gesture succeeds by intention rather than by aim.
    */
+  /** The marker under the pointer, ignoring the one being dragged and its pile. */
+  private markerUnderPointer(): string | null {
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const hit =
+      typeof this.entities.pick === 'function'
+        ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y })
+        : null;
+    if (!hit || hit === this.entityId) return null;
+
+    const target = extras.getPlacedEntity?.(hit) ?? null;
+    if (!target) return null;
+    const self = this.entityId ? extras.getPlacedEntity?.(this.entityId) : null;
+    if (self?.stack && target.stack === self.stack) return null;
+    return hit;
+  }
+
   private snapToMarker(): string | null {
     if (this.mode === null) return null;
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
@@ -677,19 +698,10 @@ export class PlacementController implements IPlacementController {
     // `pick` is part of the layer contract, but a stub layer in a test need not
     // provide it, and a placement that throws is worse than one that does not
     // stack.
-    const hit =
-      typeof this.entities.pick === 'function'
-        ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y })
-        : null;
-    if (!hit || hit === this.entityId) return null;
-
+    const hit = this.markerUnderPointer();
+    if (!hit) return null;
     const target = extras.getPlacedEntity?.(hit) ?? null;
     if (!target) return null;
-
-    // Its own pile: dragging a stack by the anchor would snap back onto the
-    // mates it is carrying.
-    const self = this.entityId ? extras.getPlacedEntity?.(this.entityId) : null;
-    if (self?.stack && target.stack === self.stack) return null;
 
     this.anchor.set(target.position[0], target.position[1], target.position[2]);
     return hit;

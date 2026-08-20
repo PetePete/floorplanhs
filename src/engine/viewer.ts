@@ -473,7 +473,24 @@ export class Viewer implements IViewer {
           });
           this.adoptMove(entityId, position, result.levelId, room, result.stackWith ?? null);
         }),
-        placement.on('label-commit', ({ entityId, offset }) => {
+        placement.on('label-commit', ({ entityId, offset, stackWith }) => {
+          // Two chips dragged together: the pile is what was meant, whichever
+          // part of the marker was in the hand.
+          if (stackWith) {
+            const entities = this.config.entities ?? [];
+            const target = entities.find((entry) => entry.entity === stackWith);
+            if (target) {
+              this.emit('edit-intent', {
+                kind: 'move-entity',
+                entityId,
+                position: target.position,
+                level: target.level ?? null,
+                stackWith,
+              });
+              this.adoptMove(entityId, target.position, target.level ?? null, undefined, stackWith);
+              return;
+            }
+          }
           // On a stacked marker the label is the handle for that one entity:
           // dragging it out is how you take it off the pile, and where it lands
           // is where it goes. Everywhere else it moves the caption alone.

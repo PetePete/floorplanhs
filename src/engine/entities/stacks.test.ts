@@ -150,3 +150,41 @@ describe('a stack being carried', () => {
     expect(stackTarget(two, 'light.a', [6, 2.5, 6], 'ground')?.stack).toBe('t');
   });
 });
+
+/**
+ * Labels are the parts you can see and grab, so dragging two of them together
+ * is how anyone says "put these in one place". Joining then has to clear the
+ * offsets that got them there, or the rows of the list stand apart.
+ */
+describe('joining from where the labels were dragged', () => {
+  it('drops the label offset of the marker that joins', () => {
+    const house = [
+      at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
+      at('media_player.room', 4, 4, { marker: { offset: [-5.8, 0.34, -2.1] } }),
+    ];
+    const next = joinStack(house, 'media_player.room', house[0]);
+
+    expect(next[1].stack).toBe('stack_1');
+    expect(next[1].marker?.offset).toBeUndefined();
+    expect(next[1].position).toEqual([1, 2.5, 1]);
+  });
+
+  it('drops it on the marker that was landed on as well', () => {
+    const house = [
+      at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
+      at('media_player.room', 4, 4),
+    ];
+    const next = joinStack(house, 'media_player.room', house[0]);
+    expect(next[0].marker?.offset).toBeUndefined();
+    expect(next[0].stack).toBe('stack_1');
+  });
+
+  it('keeps the rest of the marker config while doing it', () => {
+    const house = [
+      at('light.a', 1, 1, { marker: { icon: 'mdi:lamp', offset: [1, 0.34, 1] } }),
+      at('light.b', 4, 4),
+    ];
+    const next = joinStack(house, 'light.b', house[0]);
+    expect(next[0].marker).toEqual({ icon: 'mdi:lamp' });
+  });
+});

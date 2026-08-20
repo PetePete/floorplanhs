@@ -104,10 +104,30 @@ export function joinStack(
 ): PlacedEntity[] {
   const id = target.stack ?? nextStackId(entities);
   return entities.map((entry) => {
-    if (entry.entity === target.entity) return entry.stack ? entry : { ...entry, stack: id };
+    if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.entity !== moved) return entry;
-    return { ...entry, stack: id, position: [...target.position] as Vec3, level: target.level ?? null };
+    return {
+      ...withStack(entry, id),
+      position: [...target.position] as Vec3,
+      level: target.level ?? null,
+    };
   });
+}
+
+/**
+ * On the pile, and without a label offset of its own.
+ *
+ * The rows of a stack are placed by their position in the list; a leftover
+ * offset from when the marker stood alone would drag one row off sideways and
+ * the list would stop being one.
+ */
+function withStack(entry: PlacedEntity, id: string): PlacedEntity {
+  const next: PlacedEntity = entry.stack === id ? { ...entry } : { ...entry, stack: id };
+  if (!next.marker?.offset) return next;
+  const { offset: _offset, ...marker } = next.marker;
+  next.marker = Object.keys(marker).length > 0 ? marker : undefined;
+  if (next.marker === undefined) delete next.marker;
+  return next;
 }
 
 /**

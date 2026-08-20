@@ -285,7 +285,10 @@ export interface IPlacementController extends Subsystem {
     }) => void,
   ): () => void;
   /** A label dragged clear of its anchor; the offset is in metres. */
-  on(event: 'label-commit', cb: (payload: { entityId: string; offset: Vec3 }) => void): () => void;
+  on(
+    event: 'label-commit',
+    cb: (payload: { entityId: string; offset: Vec3; stackWith?: string }) => void,
+  ): () => void;
 }
 
 /* ------------------------------------------------------------------ store */

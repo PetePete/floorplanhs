@@ -254,7 +254,9 @@ export class EntityLayer implements IEntityLayer {
     for (const placed of entities) {
       const marker = this.markers.get(placed.entity);
       if (!marker) continue;
-      if (placed.marker?.offset) continue;
+      // A member of a stack is placed by its row, not by an offset it may still
+      // carry from when it stood on its own.
+      if (placed.marker?.offset && !placed.stack) continue;
 
       const stack = placed.stack;
       if (!stack) {
