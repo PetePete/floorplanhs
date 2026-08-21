@@ -576,3 +576,66 @@ describe('carrying a stack', () => {
     placement.dispose();
   });
 });
+
+/**
+ * Dragging one chip onto another is the gesture people reach for — the chips
+ * are the parts you can see. The controller has to ask the rules what the
+ * pointer is over; when it assumed the answer instead, stacking by dragging
+ * labels together stopped working and every test still passed.
+ */
+describe('a caption dropped on another marker', () => {
+  function withTarget(targetId: string | null): {
+    placement: PlacementController;
+    labels: Array<{ entityId: string; offset: Vec3; stackWith?: string }>;
+  } {
+    const labels: Array<{ entityId: string; offset: Vec3; stackWith?: string }> = [];
+    const members = [
+      { entity: 'sensor.a', position: [0, 0.02, 0] as Vec3, level: 'ground' },
+      { entity: 'light.b', position: [2, 0.02, 2] as Vec3, level: 'ground', name: 'Kitchen' },
+    ];
+    const entities = {
+      moveEntity: () => {},
+      setEntities: () => {},
+      setHovered: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      setLabelOffset: () => {},
+      getLabelOffset: (): Vec3 => [0, 0.34, 0],
+      pick: () => targetId,
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    placement.on('label-commit', (payload) => labels.push(payload));
+    return { placement, labels };
+  }
+
+  it('says so on the way, and joins on release', () => {
+    const { placement, labels } = withTarget('light.b');
+    placement.beginLabelMove('sensor.a');
+    placement.updatePlacement(...screen(2, 2));
+
+    const caption = (placement as unknown as { decision: { action: string; caption: string } })
+      .decision;
+    expect(caption.action, 'the cursor promises a join').toBe('join');
+    expect(caption.caption).toContain('Kitchen');
+
+    placement.commitPlacement(...screen(2, 2));
+    expect(labels).toHaveLength(1);
+    expect(labels[0].stackWith).toBe('light.b');
+    placement.dispose();
+  });
+
+  it('moves the caption alone when there is nothing under it', () => {
+    const { placement, labels } = withTarget(null);
+    placement.beginLabelMove('sensor.a');
+    placement.updatePlacement(...screen(2, 2));
+    placement.commitPlacement(...screen(2, 2));
+
+    expect(labels).toHaveLength(1);
+    expect(labels[0].stackWith).toBeUndefined();
+    expect(labels[0].offset[0]).toBeCloseTo(2, 1);
+    placement.dispose();
+  });
+});

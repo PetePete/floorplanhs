@@ -446,9 +446,6 @@ export class PlacementController implements IPlacementController {
     this.labelOffset = offset;
     (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(entityId, offset);
 
-    // The caption is the only thing this gesture can do, and saying so is what
-    // stops a user waiting for a join that is never going to happen.
-    this.decision = decideDrop({ ...this.blankSituation(), mode: 'label' }, this.strings);
     this.point.set(point[0], point[1], point[2]);
     this.normal.copy(UP);
     this.anchor.copy(this.point);
@@ -459,6 +456,13 @@ export class PlacementController implements IPlacementController {
     this.feedback.levelName = null;
     this.feedback.levelElevation = null;
     this.feedback.reason = undefined;
+
+    // Asked, not assumed. Hard-coding "this can only move a caption" here meant
+    // the rules never saw what the pointer was over, so a chip dropped on
+    // another marker fell through to a plain caption move — and stacking by
+    // dragging labels together, which is the gesture people actually reach for,
+    // silently stopped working.
+    this.decision = this.decide(true);
     this.applyDecision();
     this.indicator.set(this.feedback);
     this.ctx?.invalidate();
