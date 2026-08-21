@@ -19,6 +19,13 @@ import type { RenderContext } from '@/engine/contracts';
 import { worldUnitsPerPixel } from '@/engine/entities/marker';
 import { MarkerAtlas, type AtlasCell } from '@/engine/entities/marker-texture';
 
+/**
+ * What kind of release is being previewed. It picks the ink, and the ink is
+ * half of the message: joining a pile and landing on the floor are different
+ * outcomes and must not look the same from the corner of your eye.
+ */
+export type DropTone = 'place' | 'join' | 'detach' | 'stay' | 'label' | 'invalid';
+
 export interface DropFeedback {
   /** Surface point under the cursor. */
   point: THREE.Vector3;
@@ -33,6 +40,9 @@ export interface DropFeedback {
   levelElevation: number | null;
   /** Shown instead of the level name when the drop is refused. */
   reason?: string;
+  tone?: DropTone;
+  /** Overrides the chip text: what the release will do, in words. */
+  caption?: string;
 }
 
 export interface DropGhost {
@@ -46,6 +56,25 @@ export interface DropIndicatorOptions {
   invalid?: string;
   /** Ring radius in metres. */
   radius?: number;
+}
+
+/**
+ * Ink per outcome. Green is "these two become one", amber is "this one comes
+ * out", red is "no". Colour alone never carries the message — the chip says it
+ * in words as well — but it is what you read without looking.
+ */
+const TONE_COLORS: Record<DropTone, string | null> = {
+  place: null,
+  join: '#3fa65a',
+  detach: '#e08a2e',
+  stay: null,
+  label: null,
+  invalid: null,
+};
+
+/** Tones that name a spot on a surface. The others are about the marker itself. */
+function marksASpot(tone: DropTone): boolean {
+  return tone !== 'label' && tone !== 'stay';
 }
 
 const RENDER_ORDER = 3500;
@@ -110,6 +139,8 @@ export class DropIndicator {
   private chipCell: AtlasCell | null = null;
   private ghostSpec: DropGhost = {};
   private chipText = '';
+  /** Ink the chip was last drawn in; the tone changes it without the words. */
+  private chipTint = '';
 
   private ctx: RenderContext | null = null;
   private unsubscribeAtlas: (() => void) | null = null;
@@ -270,8 +301,16 @@ export class DropIndicator {
   set(feedback: DropFeedback): void {
     if (this.disposed) return;
     this.valid = feedback.valid;
+    const tone: DropTone = feedback.tone ?? (feedback.valid ? 'place' : 'invalid');
 
-    const tint = feedback.valid ? this.accent : this.invalidColor;
+    // A caption drag has no surface under it — the label travels on a plane
+    // through its own anchor — and a release that changes nothing has no spot
+    // to name either. Either way a ring would be pointing at nothing.
+    const surface = marksASpot(tone);
+    this.ring.visible = surface;
+    this.disc.visible = surface;
+
+    const tint = feedback.valid ? (TONE_COLORS[tone] ?? this.accent) : this.invalidColor;
     _color.set(tint);
     this.ringMaterial.color.copy(_color);
     this.discMaterial.color.copy(_color);
@@ -302,14 +341,16 @@ export class DropIndicator {
     this.lineGeometry.attributes.position.needsUpdate = true;
     this.lineGeometry.computeBoundingSphere();
     this.line.computeLineDistances();
-    this.line.visible = Math.abs(feedback.anchor.y - baseY) > 0.02;
+    this.line.visible = surface && Math.abs(feedback.anchor.y - baseY) > 0.02;
 
     this.ghost.position.copy(feedback.anchor);
     this.chip.position.copy(feedback.anchor);
 
-    const text = feedback.valid ? feedback.levelName ?? '' : feedback.reason ?? 'Cannot drop here';
-    if (text !== this.chipText) {
+    const text =
+      feedback.caption ?? (feedback.valid ? feedback.levelName ?? '' : feedback.reason ?? '');
+    if (text !== this.chipText || tint !== this.chipTint) {
       this.chipText = text;
+      this.chipTint = tint;
       this.chipCell = text
         ? this.atlas.cell({ variant: 'chip', title: text, color: tint, muted: !feedback.valid })
         : null;
@@ -369,7 +410,7 @@ export class DropIndicator {
       this.chipCell = this.atlas.cell({
         variant: 'chip',
         title: this.chipText,
-        color: this.valid ? this.accent : this.invalidColor,
+        color: this.chipTint || (this.valid ? this.accent : this.invalidColor),
         muted: !this.valid,
       });
       this.atlas.applyTo(this.chipTexture, this.chipCell);

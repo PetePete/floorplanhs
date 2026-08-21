@@ -31,7 +31,21 @@ import type { EntityRole, LevelDefinition, PlacedEntity, Vec3 } from '@/types/co
 import { Emitter } from '@/util/events';
 import { vRound } from '@/util/math';
 import { humaniseEntityId, resolveIcon, roleForEntityId } from '@/engine/entities/icons';
-import { DropIndicator, snapToGrid, type DropFeedback } from '@/engine/interaction/drop-indicator';
+import {
+  DropIndicator,
+  snapToGrid,
+  type DropFeedback,
+  type DropTone,
+} from '@/engine/interaction/drop-indicator';
+import {
+  DEFAULT_DROP_STRINGS,
+  decideDrop,
+  fillTemplate,
+  isCommittable,
+  type DropDecision,
+  type DropStrings,
+  type DropTarget,
+} from '@/engine/interaction/drop-intent';
 
 /** MIME type the entity palette must put on `dataTransfer`. */
 export const ENTITY_DRAG_MIME = 'application/x-ha-entity';
@@ -53,10 +67,20 @@ export interface PlacementEvents {
     result: PlacementResult | null;
     valid: boolean;
     reason?: string;
+    /** What a release would do right now; the same thing the indicator shows. */
+    intent: DropDecision;
   };
-  'placement-commit': { entityId: string; mode: PlacementMode; result: PlacementResult };
+  'placement-commit': {
+    entityId: string;
+    mode: PlacementMode;
+    result: PlacementResult;
+    /** Place, join a pile, or leave one — decided before the pointer came up. */
+    intent: DropDecision;
+  };
   'placement-cancel': { entityId: string; mode: PlacementMode; reason: PlacementCancelReason };
   /** A label was dragged to a new spot beside its anchor. */
+  /** A caption let go of. `stackWith` when it landed on another marker: the
+   *  two become a pile, and the offset is where the drag ended. */
   'label-commit': { entityId: string; offset: Vec3; stackWith?: string };
 }
 
@@ -70,6 +94,16 @@ interface EntityLayerExtras {
   getPlacedEntities?(): PlacedEntity[];
   setLabelOffset?(entityId: string, offset: Vec3): void;
   getLabelOffset?(entityId: string): Vec3 | null;
+  /** Screen test for the hysteresis that keeps a pile from falling apart. */
+  overStack?(
+    ndc: { x: number; y: number },
+    stackId: string,
+    options?: { ignore?: string },
+  ): boolean;
+  /** Draw a pile as the thing this release would land on. */
+  setStackHighlight?(stackId: string | null): void;
+  /** Draw a marker as already out of its pile, for the length of the drag. */
+  setDraggedOut?(entityId: string | null): void;
 }
 
 /* ----------------------------------------------------------------- tuning */
@@ -120,6 +154,16 @@ const DEFAULT_LABEL_LIFT = 0.34;
 
 const round3 = (value: number): number => Math.round(value * 1000) / 1000;
 
+/** Which ink the cursor takes for each outcome; see `DropIndicator`. */
+const TONE_BY_ACTION: Record<DropDecision['action'], DropTone> = {
+  place: 'place',
+  join: 'join',
+  detach: 'detach',
+  stay: 'stay',
+  label: 'label',
+  invalid: 'invalid',
+};
+
 export class PlacementController implements IPlacementController {
   private readonly emitter = new Emitter<PlacementEvents>();
   private readonly indicator: DropIndicator;
@@ -162,6 +206,18 @@ export class PlacementController implements IPlacementController {
    * they catch up.
    */
   private carrying: Array<{ entityId: string; from: Vec3 }> = [];
+  /**
+   * Whether this gesture carries the whole pile or one marker off it.
+   *
+   * The grab decides it, not the drop: taking hold of the grab bar or the
+   * shared anchor is "all of this", taking hold of a row is "this one". A drag
+   * cannot be asked to mean both, and the answer has to be settled while the
+   * user can still see what they took hold of.
+   */
+  private carryStack = true;
+  /** What a release would do right now; recomputed on every pointer move. */
+  private decision: DropDecision = { action: 'place', target: null, caption: '' };
+  private strings: DropStrings = DEFAULT_DROP_STRINGS;
   /** Anchor the label is being dragged around, in world metres. */
   private labelAnchor: Vec3 | null = null;
   private labelOffset: Vec3 | null = null;
@@ -260,6 +316,7 @@ export class PlacementController implements IPlacementController {
 
     this.entityId = entityId;
     this.mode = 'add';
+    this.carryStack = true;
     this.role = entityId ? roleForEntityId(entityId) : 'marker';
     this.originalPosition = null;
     this.lastResult = null;
@@ -275,8 +332,14 @@ export class PlacementController implements IPlacementController {
     this.start();
   }
 
-  /** Pick an already-placed marker up. */
-  beginMove(entityId: string): void {
+  /**
+   * Pick an already-placed marker up.
+   *
+   * `carryStack` is what the pointer took hold of: the pile's grab bar and its
+   * shared anchor carry everything on it, a single row carries only itself and
+   * may therefore leave the pile behind.
+   */
+  beginMove(entityId: string, options?: { carryStack?: boolean }): void {
     if (this.disposed || !entityId) return;
     if (this.mode !== null) this.finish('user');
 
@@ -285,9 +348,10 @@ export class PlacementController implements IPlacementController {
 
     this.entityId = entityId;
     this.mode = 'move';
+    this.carryStack = options?.carryStack !== false;
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
-    this.carrying = this.pileUnder(entityId);
+    this.carrying = this.carryStack ? this.pileUnder(entityId) : [];
     this.freePlacement = false;
     this.lastHitLevel = null;
     this.lastResult = null;
@@ -319,13 +383,16 @@ export class PlacementController implements IPlacementController {
 
     this.entityId = entityId;
     this.mode = 'label';
+    this.carryStack = true;
     this.role = extras.getPlacedEntity?.(entityId)?.role ?? roleForEntityId(entityId);
     this.labelAnchor = anchor;
     this.originalOffset = extras.getLabelOffset?.(entityId) ?? null;
     this.labelOffset = this.originalOffset;
     this.originalPosition = null;
     this.lastResult = null;
-    this.indicator.hide();
+    // The label itself follows the cursor, so a ghost chip beside it would only
+    // be a second copy of the thing being dragged.
+    this.indicator.setGhostVisible(false);
     this.start();
   }
 
@@ -378,6 +445,22 @@ export class PlacementController implements IPlacementController {
     ];
     this.labelOffset = offset;
     (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(entityId, offset);
+
+    // The caption is the only thing this gesture can do, and saying so is what
+    // stops a user waiting for a join that is never going to happen.
+    this.decision = decideDrop({ ...this.blankSituation(), mode: 'label' }, this.strings);
+    this.point.set(point[0], point[1], point[2]);
+    this.normal.copy(UP);
+    this.anchor.copy(this.point);
+    this.feedback.point.copy(this.point);
+    this.feedback.normal.copy(this.normal);
+    this.feedback.anchor.copy(this.anchor);
+    this.feedback.valid = true;
+    this.feedback.levelName = null;
+    this.feedback.levelElevation = null;
+    this.feedback.reason = undefined;
+    this.applyDecision();
+    this.indicator.set(this.feedback);
     this.ctx?.invalidate();
   }
 
@@ -390,6 +473,10 @@ export class PlacementController implements IPlacementController {
     }
 
     const resolved = this.resolve(clientX, clientY);
+    // Decided before the indicator is drawn, because the indicator's whole job
+    // is to say what the decision was.
+    this.decision = this.decide(resolved !== null);
+    this.applyDecision();
     this.indicator.set(this.feedback);
 
     if (!resolved) {
@@ -399,11 +486,13 @@ export class PlacementController implements IPlacementController {
         result: null,
         valid: false,
         reason: this.feedback.reason,
+        intent: this.decision,
       });
       this.ctx?.invalidate();
       return null;
     }
 
+    resolved.stackWith = this.decision.target;
     this.lastResult = resolved;
     // The marker itself follows the cursor in move mode; the ghost would only
     // duplicate it.
@@ -418,6 +507,7 @@ export class PlacementController implements IPlacementController {
       entityId: this.entityId ?? '',
       result: resolved,
       valid: true,
+      intent: this.decision,
     });
     this.ctx?.invalidate();
     return resolved;
@@ -432,29 +522,35 @@ export class PlacementController implements IPlacementController {
 
     if (mode === 'label') {
       this.updateLabel(clientX, clientY);
-      const offset = this.labelOffset;
-      // Dropped on another marker's chip. Dragging labels together is how
-      // anyone would say "put these two in one place" — they are the parts you
-      // can see and grab — so it means what it looks like.
-      const onto = this.markerUnderPointer();
+      const offset = this.labelOffset ?? [0, 0, 0];
+      const joining = this.decision.action === 'join' ? this.decision.target : null;
       this.finish(null);
-      if (entityId && onto) this.emitter.emit('label-commit', { entityId, offset: offset ?? [0, 0, 0], stackWith: onto });
-      else if (entityId && offset) this.emitter.emit('label-commit', { entityId, offset });
+      if (entityId) {
+        this.emitter.emit('label-commit', {
+          entityId,
+          offset,
+          stackWith: joining ?? undefined,
+        });
+      }
       return null;
     }
 
     const result = this.resolve(clientX, clientY);
+    this.decision = this.decide(result !== null);
 
-    if (!result || !entityId) {
-      // Rule: never silently place at the origin. The caller gets null and the
-      // cancel event carries the reason so the card can toast it.
-      this.finish('outside');
+    if (!result || !entityId || !isCommittable(this.decision.action)) {
+      // Rule: never silently place at the origin. `stay` is not a failure — the
+      // marker was carried around its own pile and put back — so it unwinds the
+      // same way a cancelled drag does, which is what the preview promised.
+      this.finish(this.decision.action === 'stay' ? 'user' : 'outside');
       return null;
     }
 
+    result.stackWith = this.decision.target;
     if (mode === 'move') this.entities.moveEntity(entityId, result.position);
+    const intent = this.decision;
     this.finish(null);
-    this.emitter.emit('placement-commit', { entityId, mode, result });
+    this.emitter.emit('placement-commit', { entityId, mode, result, intent });
     return result;
   }
 
@@ -596,12 +692,11 @@ export class PlacementController implements IPlacementController {
     this.hits.length = 0;
 
     if (level && this.isLevelHidden(level)) {
-      return this.reject(`${level.name} is hidden`, level);
+      return this.reject(fillTemplate(this.strings.hidden, { name: level.name }), level);
     }
 
     this.applyRoleOffset(level);
     snapToGrid(this.anchor);
-    const stackWith = this.snapToMarker();
 
     this.feedback.point.copy(this.point);
     this.feedback.normal.copy(this.normal);
@@ -617,7 +712,9 @@ export class PlacementController implements IPlacementController {
       levelId: level?.id ?? null,
       nodeName: hit.object.name || undefined,
       room: this.resolveRoom(level),
-      stackWith,
+      // Filled in by the caller from the decision, so that "which marker does
+      // this land on" is answered in exactly one place.
+      stackWith: null,
     };
   }
 
@@ -643,18 +740,17 @@ export class PlacementController implements IPlacementController {
 
     const ray = this.raycaster.ray;
     if (!ray.intersectPlane(_freePlane, this.point)) {
-      return this.reject('Drop beside the house, not above the horizon');
+      return this.reject(this.strings.outside);
     }
     this.point.y -= lift;
     if (level && this.isLevelHidden(level)) {
-      return this.reject(`${level.name} is hidden`, level);
+      return this.reject(fillTemplate(this.strings.hidden, { name: level.name }), level);
     }
 
     this.normal.copy(UP);
     this.anchor.copy(this.point);
     this.anchor.y += FLOOR_LIFT;
     snapToGrid(this.anchor);
-    const stackWith = this.snapToMarker();
 
     this.feedback.point.copy(this.point);
     this.feedback.normal.copy(this.normal);
@@ -669,19 +765,115 @@ export class PlacementController implements IPlacementController {
       normal: vRound([this.normal.x, this.normal.y, this.normal.z]),
       levelId: level?.id ?? null,
       room: this.resolveRoom(level),
-      stackWith,
+      stackWith: null,
     };
   }
 
+  /* -------------------------------------------------------------- decision */
+
   /**
-   * Land exactly on a marker that is almost under the pointer.
+   * What a release would do, from where the pointer is now.
    *
-   * Stacking is "drop this one on that one", and without a snap that is a
-   * shooting exercise: the target is a chip a few pixels wide, seen in
-   * perspective, and the drop is aimed at the floor beneath it. Within a hand's
-   * width the drop gives up its own spot and takes the other marker's, so the
-   * gesture succeeds by intention rather than by aim.
+   * Everything the rules need is gathered here and nowhere else, so there is a
+   * single answer per pointer move — shown by the indicator, carried by the
+   * commit event, and the same one in both. The rules themselves live in
+   * `drop-intent.ts`, away from the raycasting, because they are a table of
+   * cases and want to be read and tested as one.
    */
+  private decide(valid: boolean): DropDecision {
+    return decideDrop(
+      {
+        ...this.blankSituation(),
+        target: this.targetUnderPointer(),
+        overOwnStack: this.overOwnStack(),
+        valid,
+        reason: this.feedback.reason,
+        levelName: this.feedback.levelName,
+      },
+      this.strings,
+    );
+  }
+
+  /** The situation with nothing under the pointer; the fields the drag owns. */
+  private blankSituation(): {
+    mode: PlacementMode;
+    ownStack: string | null;
+    carryingStack: boolean;
+    target: DropTarget | null;
+    overOwnStack: boolean;
+    valid: boolean;
+  } {
+    return {
+      mode: this.mode ?? 'add',
+      ownStack: this.ownStack(),
+      carryingStack: this.carryStack,
+      target: null,
+      overOwnStack: false,
+      valid: true,
+    };
+  }
+
+  private ownStack(): string | null {
+    if (!this.entityId) return null;
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    return extras.getPlacedEntity?.(this.entityId)?.stack ?? null;
+  }
+
+  /**
+   * Still over the pile this marker came from?
+   *
+   * The hysteresis that turns "take it out" into a decision. A row is a chip a
+   * few pixels tall; without a zone to leave, any drag past the six-pixel
+   * threshold pulled a marker off its pile and moved it three centimetres, so a
+   * pile could not be touched without falling apart.
+   */
+  private overOwnStack(): boolean {
+    const stack = this.ownStack();
+    if (!stack || this.carryStack) return false;
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    return (
+      extras.overStack?.({ x: this.ndc.x, y: this.ndc.y }, stack, {
+        ignore: this.entityId ?? undefined,
+      }) ?? false
+    );
+  }
+
+  /** The marker under the pointer, described the way the rules want it. */
+  private targetUnderPointer(): DropTarget | null {
+    const hit = this.markerUnderPointer();
+    if (!hit) return null;
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const placed = extras.getPlacedEntity?.(hit) ?? null;
+    const all = extras.getPlacedEntities?.() ?? [];
+    const stack = placed?.stack ?? null;
+    return {
+      entityId: hit,
+      name: placed?.name ?? humaniseEntityId(hit),
+      stack,
+      size: stack ? all.filter((entry) => entry.stack === stack).length : 1,
+    };
+  }
+
+  /** Paint the decision: the ink of the cursor, and what the pile does. */
+  private applyDecision(): void {
+    const action = this.decision.action;
+    this.feedback.tone = TONE_BY_ACTION[action];
+    this.feedback.caption = this.decision.caption || undefined;
+
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const target = this.decision.target;
+    const targetStack = target ? extras.getPlacedEntity?.(target)?.stack ?? null : null;
+    extras.setStackHighlight?.(targetStack);
+    // The chip of the marker being landed on lifts, the same way it does under
+    // the cursor: a pile has a frame to light up, a lone marker has only itself.
+    this.entities.setHovered(target);
+
+    // Out of the pile while it is out: the rows close up behind it and it
+    // travels on its own, so "this one is leaving" is something you watch
+    // happen rather than something you read.
+    extras.setDraggedOut?.(action === 'detach' || action === 'join' ? this.entityId : null);
+  }
+
   /** Everyone sharing this marker's anchor, with the spot they started from. */
   private pileUnder(entityId: string): Array<{ entityId: string; from: Vec3 }> {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
@@ -693,7 +885,14 @@ export class PlacementController implements IPlacementController {
       .map((entry) => ({ entityId: entry.entity, from: [...entry.position] as Vec3 }));
   }
 
-  /** The marker under the pointer, ignoring the one being dragged and its pile. */
+  /**
+   * The marker under the pointer, ignoring the one being dragged and its pile.
+   *
+   * Screen space, and deliberately: a stack is markers that *look* like one
+   * pile, and whether the two points are a metre apart in the model is
+   * invisible from where you are sitting. This is the same hit test that decides
+   * what a tap lands on, so what you can hit is what you can stack with.
+   */
   private markerUnderPointer(): string | null {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
     const hit =
@@ -707,25 +906,6 @@ export class PlacementController implements IPlacementController {
     const self = this.entityId ? extras.getPlacedEntity?.(this.entityId) : null;
     if (self?.stack && target.stack === self.stack) return null;
     return hit;
-  }
-
-  /**
-   * The marker this drop would stack with — without moving the drop.
-   *
-   * Screen space, and deliberately: a stack is markers that *look* like one
-   * pile, and whether the two points are a metre apart in the model is
-   * invisible from where you are sitting. This is the same hit test that
-   * decides what a tap lands on.
-   *
-   * The indicator stays under the cursor. Pulling it onto the target instead
-   * made the ring jump to wherever that marker happened to be — which, with
-   * chips as wide as they are, is most of the time, and reads as the cursor
-   * having a mind of its own. Where the entity ends up is settled on the drop,
-   * by the join, not by dragging the pointer's own feedback away from it.
-   */
-  private snapToMarker(): string | null {
-    if (this.mode === null) return null;
-    return this.markerUnderPointer();
   }
 
   /**

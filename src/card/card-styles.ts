@@ -345,6 +345,16 @@ export const controlStyles = css`
   }
 
   .field > label,
+  /* An aside inside a field label: "for the whole stack" and its like. */
+  .hint-inline {
+    margin-left: 6px;
+    font-style: normal;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.75;
+  }
+
   .field-label {
     font-size: 11.5px;
     font-weight: 500;

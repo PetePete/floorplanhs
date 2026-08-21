@@ -1132,6 +1132,23 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         const index = entities.findIndex((entry) => entry.entity === intent.entityId);
         if (index < 0) return;
         entities[index] = { ...entities[index], ...intent.patch };
+
+        // The room is the pile's, not one row's: the leader line is drawn once
+        // for the whole stack, so setting it on a single member would leave the
+        // others disagreeing with a line that speaks for all of them.
+        const pile = entities[index].stack;
+        if (pile && 'room' in intent.patch) {
+          const room = intent.patch.room;
+          next.entities = entities.map((entry) => {
+            if (entry.stack !== pile) return entry;
+            const updated = { ...entry };
+            if (room) updated.room = room;
+            else delete updated.room;
+            return updated;
+          });
+          break;
+        }
+
         next.entities = entities;
         break;
       }

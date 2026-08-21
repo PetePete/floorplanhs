@@ -70,6 +70,9 @@ const EN = {
   'ui.preset.saved': 'View "{name}" saved',
 
   /* ------------------------------------------------------------ placement */
+  'ui.inspector.room': 'Room',
+  'ui.inspector.room_none': 'wherever it stands',
+  'ui.inspector.room_stack': 'for the whole stack',
   'ui.placement.collapse': 'Hide entities',
   'ui.placement.expand': 'Show entities',
   'ui.placement.hint_drag': 'Drag an entity onto the model to place it.',
@@ -162,6 +165,9 @@ const DE: Table = {
   'ui.preset.empty': 'Noch keine Ansichten gespeichert. Kamera bewegen und speichern.',
   'ui.preset.saved': 'Ansicht "{name}" gespeichert',
 
+  'ui.inspector.room': 'Raum',
+  'ui.inspector.room_none': 'wo er steht',
+  'ui.inspector.room_stack': 'für den ganzen Stapel',
   'ui.placement.collapse': 'Entitäten ausblenden',
   'ui.placement.expand': 'Entitäten einblenden',
   'ui.placement.hint_drag': 'Entität auf das Modell ziehen, um sie zu platzieren.',

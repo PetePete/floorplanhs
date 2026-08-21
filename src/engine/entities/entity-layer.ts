@@ -48,6 +48,16 @@ export interface EntityLayerOptions {
   maxOcclusionMarkers?: number;
 }
 
+/** Which part of a marker a pointer is on; see `EntityLayer.pickPart`. */
+export type MarkerPart = 'anchor' | 'label' | 'stack';
+
+export interface PickedPart {
+  entityId: string;
+  part: MarkerPart;
+  /** The pile that entity is on, if any. Set for every part, not just `stack`. */
+  stackId: string | null;
+}
+
 export interface PickOptions {
   /** Fingers are imprecise; touch gets a ~44 px effective target. */
   pointerType?: 'mouse' | 'touch' | 'pen';
@@ -117,6 +127,12 @@ export class EntityLayer implements IEntityLayer {
       headerHalfHeight: number;
     }
   >();
+  /** Last list `setEntities` was given; re-fanned when a drag leaves a pile. */
+  private lastEntities: PlacedEntity[] = [];
+  /** Drawn as if it had left its pile for the length of a drag; see `setDraggedOut`. */
+  private draggedOut: string | null = null;
+  /** The pile a release would land on; see `setStackHighlight`. */
+  private highlightStack: string | null = null;
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
   private readonly group = new THREE.Group();
@@ -235,6 +251,7 @@ export class EntityLayer implements IEntityLayer {
 
   setEntities(entities: PlacedEntity[]): void {
     const seen = new Set<string>();
+    this.lastEntities = entities;
 
     for (const placed of entities) {
       if (!placed?.entity) continue;
@@ -343,6 +360,7 @@ export class EntityLayer implements IEntityLayer {
         this.options.accent ?? '#03a9f4',
         ctx.size.pixelRatio,
         _frameUp,
+        id === this.highlightStack,
       );
       alive.add(id);
 
@@ -391,8 +409,9 @@ export class EntityLayer implements IEntityLayer {
     this.stacks.clear();
     const sizes = new Map<string, number>();
     for (const placed of entities) {
-      if (!placed.stack) continue;
-      sizes.set(placed.stack, (sizes.get(placed.stack) ?? 0) + 1);
+      const id = this.stackOfPlaced(placed);
+      if (!id) continue;
+      sizes.set(id, (sizes.get(id) ?? 0) + 1);
     }
     for (const placed of entities) {
       const marker = this.markers.get(placed.entity);
@@ -401,7 +420,7 @@ export class EntityLayer implements IEntityLayer {
       // carry from when it stood on its own.
       if (placed.marker?.offset && !placed.stack) continue;
 
-      const stack = placed.stack;
+      const stack = this.stackOfPlaced(placed);
       if (!stack) {
         marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
         marker.setStackIndex(0, 1);
@@ -415,6 +434,12 @@ export class EntityLayer implements IEntityLayer {
       members.push(placed.entity);
       this.stacks.set(stack, members);
     }
+  }
+
+  /** The pile a marker is drawn on — none while it is being dragged out of it. */
+  private stackOfPlaced(placed: PlacedEntity): string | null {
+    if (!placed.stack) return null;
+    return placed.entity === this.draggedOut ? null : placed.stack;
   }
 
   updateVisual(entityId: string, visual: EntityVisualState): void {
@@ -537,10 +562,7 @@ export class EntityLayer implements IEntityLayer {
    * label when nothing has been pushed anywhere, so the label would otherwise
    * take every hit.
    */
-  pickPart(
-    ndc: { x: number; y: number },
-    options?: PickOptions,
-  ): { entityId: string; part: 'anchor' | 'label' } | null {
+  pickPart(ndc: { x: number; y: number }, options?: PickOptions): PickedPart | null {
     const ctx = this.ctx;
     if (!ctx || this.markers.size === 0 || !this.markersVisible) return null;
     const { width, height } = ctx.size;
@@ -556,13 +578,13 @@ export class EntityLayer implements IEntityLayer {
     const camera = ctx.activeCamera;
     camera.updateMatrixWorld();
 
-    // The pile's grab bar first: it is drawn as a handle, so it behaves as the
-    // handle — the same answer as taking hold of the anchor, which is what
-    // moves a whole stack.
-    for (const rect of this.frameRects.values()) {
+    // The pile's grab bar first: it is drawn as a handle, so it behaves as one.
+    // It is also the only part of a pile that means "all of this", which is why
+    // it exists — a row means that one marker, and the shared dot is a dot.
+    for (const [stackId, rect] of this.frameRects) {
       if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
       if (Math.abs(pointerY - rect.headerY) > rect.headerHalfHeight) continue;
-      return { entityId: rect.base, part: 'anchor' };
+      return { entityId: rect.base, part: 'stack', stackId };
     }
 
     // The label wins a tie. From some angles the anchor sits behind its own
@@ -570,7 +592,7 @@ export class EntityLayer implements IEntityLayer {
     // the entity instead of its caption. What you point at is what you get; the
     // dot is reachable everywhere the chip is not, which is most of the plan.
     const label = this.pick(ndc, options);
-    if (label) return { entityId: label, part: 'label' };
+    if (label) return { entityId: label, part: 'label', stackId: this.stackIdOf(label) };
 
     let best: string | null = null;
     let bestDepth = Infinity;
@@ -582,7 +604,90 @@ export class EntityLayer implements IEntityLayer {
       bestDepth = _point.depth;
       best = entityId;
     }
-    return best ? { entityId: best, part: 'anchor' } : null;
+    return best ? { entityId: best, part: 'anchor', stackId: this.stackIdOf(best) } : null;
+  }
+
+  /** The pile a marker is on, as the config currently states it. */
+  stackIdOf(entityId: string): string | null {
+    return this.markers.get(entityId)?.placed.stack ?? null;
+  }
+
+  /** Everyone on a pile, in the order the config lists them. */
+  getStackMembers(stackId: string): string[] {
+    return [...(this.stacks.get(stackId) ?? [])];
+  }
+
+  /**
+   * Is the pointer still on the pile `stackId` — over one of its rows, or in
+   * the air between them?
+   *
+   * This is the hysteresis that makes taking a marker out of a pile a decision
+   * rather than an accident. Without it any drag past the six-pixel threshold
+   * pulled a member out and moved it three centimetres, so a pile could not be
+   * touched without falling apart.
+   */
+  overStack(ndc: { x: number; y: number }, stackId: string, options?: PickOptions): boolean {
+    const ctx = this.ctx;
+    if (!ctx) return false;
+    const { width, height } = ctx.size;
+    if (width <= 0 || height <= 0) return false;
+
+    const pointerX = (ndc.x * 0.5 + 0.5) * width;
+    const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * height;
+
+    const frame = this.frameRects.get(stackId);
+    if (
+      frame &&
+      Math.abs(pointerX - frame.x) <= frame.halfWidth &&
+      pointerY <= frame.y + frame.halfHeight &&
+      pointerY >= frame.headerY - frame.headerHalfHeight
+    ) {
+      return true;
+    }
+
+    // A pile of two that has just given one up has no frame left to test — the
+    // one remaining row is the whole of it, so its chip is the target.
+    const camera = ctx.activeCamera;
+    camera.updateMatrixWorld();
+    const touch = options?.pointerType === 'touch';
+    const slack = touch ? 22 : 12;
+    for (const entityId of this.stacks.get(stackId) ?? []) {
+      if (entityId === options?.ignore) continue;
+      const marker = this.markers.get(entityId);
+      if (!marker?.getScreenRect(camera, width, height, _rect)) continue;
+      if (Math.abs(pointerX - _rect.x) > _rect.halfWidth + slack) continue;
+      if (Math.abs(pointerY - _rect.y) > _rect.halfHeight + slack) continue;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Draw one pile as the thing a release would land on.
+   *
+   * The frame is already the answer to "is this a pile"; lit up it also answers
+   * "is this the pile I am about to drop on", which is the question being asked
+   * while the pointer is still down.
+   */
+  setStackHighlight(stackId: string | null): void {
+    if (this.highlightStack === stackId) return;
+    this.highlightStack = stackId;
+    this.ctx?.invalidate();
+  }
+
+  /**
+   * Draw this marker as if it had already left its pile.
+   *
+   * Display only, and for the length of one drag: the pile closes up behind it
+   * and the marker travels as a marker on its own, so what a release will do is
+   * visible rather than described. The config still says what it said; nothing
+   * here is written anywhere.
+   */
+  setDraggedOut(entityId: string | null): void {
+    if (this.draggedOut === entityId) return;
+    this.draggedOut = entityId;
+    this.fanStacks(this.lastEntities);
+    this.ctx?.invalidate();
   }
 
   /** Live label drag; the placed entity is only rewritten once it is dropped. */

@@ -42,7 +42,7 @@ export class StackFrame {
   private readonly canvas: HTMLCanvasElement;
   private readonly texture: THREE.CanvasTexture;
   private readonly material: THREE.SpriteMaterial;
-  private drawn = { width: 0, height: 0, color: '', dpr: 1 };
+  private drawn = { width: 0, height: 0, color: '', dpr: 1, highlight: false };
 
   constructor(color: string) {
     this.canvas = document.createElement('canvas');
@@ -70,18 +70,19 @@ export class StackFrame {
    * Redraw only when the box or the colour actually changed: this runs from the
    * frame loop, and a canvas upload per frame per stack is not free.
    */
-  private paint(size: StackFrameSize, color: string, dpr: number): void {
+  private paint(size: StackFrameSize, color: string, dpr: number, highlight: boolean): void {
     const width = Math.ceil(size.width + PADDING_PX * 2);
     const height = Math.ceil(size.height + PADDING_PX * 2) + HEADER_PX;
     if (
       this.drawn.width === width &&
       this.drawn.height === height &&
       this.drawn.color === color &&
-      this.drawn.dpr === dpr
+      this.drawn.dpr === dpr &&
+      this.drawn.highlight === highlight
     ) {
       return;
     }
-    this.drawn = { width, height, color, dpr };
+    this.drawn = { width, height, color, dpr, highlight };
 
     this.canvas.width = Math.max(8, Math.ceil(width * dpr));
     this.canvas.height = Math.max(8, Math.ceil(height * dpr));
@@ -111,9 +112,18 @@ export class StackFrame {
     }
     c2d.restore();
 
+    // Lit up, the dashes close into a solid line and the inside is washed with
+    // the same ink: "release here and it goes in this pile". A dashed outline
+    // says the pile exists; a filled one says it is the target.
+    if (highlight) {
+      c2d.fillStyle = withAlpha(color, 0.16);
+      roundRect(c2d, 1, HEADER_PX + 1, width - 2, height - HEADER_PX - 2, RADIUS_PX);
+      c2d.fill();
+    }
+
     c2d.strokeStyle = color;
-    c2d.lineWidth = 1;
-    c2d.setLineDash([DASH_PX, GAP_PX]);
+    c2d.lineWidth = highlight ? 2 : 1;
+    if (!highlight) c2d.setLineDash([DASH_PX, GAP_PX]);
 
     const inset = 0.5;
     const x = inset;
@@ -149,8 +159,9 @@ export class StackFrame {
     color: string,
     dpr: number,
     screenUp: THREE.Vector3,
+    highlight = false,
   ): void {
-    this.paint(size, color, dpr);
+    this.paint(size, color, dpr, highlight);
     const width = this.drawn.width;
     const height = this.drawn.height;
     // The header sits above the rows, so the whole thing rides that much higher
@@ -158,6 +169,7 @@ export class StackFrame {
     this.sprite.position.copy(centre).addScaledVector(screenUp, (HEADER_PX / 2) * unit);
     this.sprite.scale.set(width * unit, height * unit, 1);
     this.sprite.visible = width > 0 && height > 0;
+    this.material.opacity = highlight ? 1 : 0.85;
   }
 
   dispose(): void {

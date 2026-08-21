@@ -513,7 +513,14 @@ export class Fp3dEntityInspector extends FpBaseElement {
 
           ${this.rooms.length > 0
             ? html`<div class="field">
-                <span class="field-label">${this.t('ui.inspector.room', 'Room')}</span>
+                <span class="field-label">
+                  ${this.t('ui.inspector.room', 'Room')}
+                  ${placed.stack
+                    ? html`<em class="hint-inline"
+                        >${this.t('ui.inspector.room_stack', 'for the whole stack')}</em
+                      >`
+                    : nothing}
+                </span>
                 <select
                   aria-label=${this.t('ui.inspector.room', 'Room')}
                   @change=${(event: Event) =>

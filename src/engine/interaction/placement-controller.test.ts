@@ -91,6 +91,7 @@ function stubContext(): RenderContext {
 const noopEntities = {
   moveEntity: () => {},
   setEntities: () => {},
+  setHovered: () => {},
   getEntityPosition: (): Vec3 | null => null,
 } as unknown as IEntityLayer;
 
@@ -260,6 +261,7 @@ describe('dragging a marker out of its room', () => {
     const entities = {
       moveEntity: () => {},
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: (): Vec3 => [0, 0.02, 0],
       getPlacedEntity: () => null,
     } as unknown as IEntityLayer;
@@ -356,6 +358,7 @@ describe('placing outside the building', () => {
     const upstairs = {
       moveEntity: () => {},
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: (): Vec3 => [0, 3.2, 0],
     } as unknown as IEntityLayer;
 
@@ -381,6 +384,7 @@ describe('dragging the label', () => {
     const layer = {
       moveEntity: (_id: string, position: Vec3) => moved.push(position),
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: (): Vec3 => [0, 0.02, 0],
       getPlacedEntity: () => null,
       setLabelOffset: (_id: string, offset: Vec3) => offsets.push(offset),
@@ -447,6 +451,7 @@ describe('dragging the label', () => {
     const layer = {
       moveEntity: () => {},
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: () => null,
       getPlacedEntity: () => null,
     } as unknown as IEntityLayer;
@@ -494,6 +499,7 @@ describe('starting a fresh placement', () => {
     const entities = {
       moveEntity: () => {},
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: (): Vec3 => [0, 0.02, 0],
       getPlacedEntity: () => null,
     } as unknown as IEntityLayer;
@@ -527,6 +533,7 @@ describe('carrying a stack', () => {
     const entities = {
       moveEntity: (entityId: string, position: Vec3) => moves.push([entityId, position]),
       setEntities: () => {},
+      setHovered: () => {},
       getEntityPosition: (): Vec3 => [0, 0.02, 0],
       getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
       getPlacedEntities: () => members,
