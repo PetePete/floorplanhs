@@ -91,6 +91,24 @@ const EN = {
   'ui.placement.no_results': 'No entities match "{query}"',
   'ui.placement.level_unknown': 'no level',
 
+  /* What the cursor says a release would do; see `drop-intent.ts`. */
+  'ui.drop.join': 'Stack with {name}',
+  'ui.drop.join_pile': 'Add to {name} + {count} more',
+  'ui.drop.detach': 'Take out of the stack',
+  'ui.drop.stay': 'Stays in the stack',
+  'ui.drop.label': 'Move the label',
+  'ui.drop.invalid': 'Cannot drop here',
+  'ui.drop.outside': 'Drop beside the house, not above the horizon',
+  'ui.drop.hidden': '{name} is hidden',
+
+  /* The pile's own settings; see `stack-inspector.ts`. */
+  'ui.stack.title': 'Stack settings',
+  'ui.stack.room': 'Line to room',
+  'ui.stack.room_none': 'no line',
+  'ui.stack.color': 'Colour',
+  'ui.stack.note':
+    'A stack groups these markers on screen. Each of them keeps its own room and settings — tap a row to edit one.',
+
   /* ---------------------------------------------------------------- state */
   'ui.state.on': 'On',
   'ui.state.off': 'Off',
@@ -185,6 +203,22 @@ const DE: Table = {
   'ui.placement.search': 'Entitäten suchen',
   'ui.placement.no_results': 'Keine Entität passt zu "{query}"',
   'ui.placement.level_unknown': 'keine Etage',
+
+  'ui.drop.join': 'Mit {name} stapeln',
+  'ui.drop.join_pile': 'Zu {name} + {count} weiteren legen',
+  'ui.drop.detach': 'Aus dem Stapel nehmen',
+  'ui.drop.stay': 'Bleibt im Stapel',
+  'ui.drop.invalid': 'Hier nicht ablegbar',
+  'ui.drop.label': 'Schild verschieben',
+  'ui.drop.outside': 'Neben dem Haus ablegen, nicht über dem Horizont',
+  'ui.drop.hidden': '{name} ist ausgeblendet',
+
+  'ui.stack.title': 'Stapel-Einstellungen',
+  'ui.stack.room': 'Linie zum Raum',
+  'ui.stack.room_none': 'keine Linie',
+  'ui.stack.color': 'Farbe',
+  'ui.stack.note':
+    'Ein Stapel gruppiert diese Marker auf dem Bildschirm. Jeder behält seinen eigenen Raum und seine Einstellungen — für einen einzelnen auf seine Zeile tippen.',
 
   'ui.state.on': 'An',
   'ui.state.off': 'Aus',

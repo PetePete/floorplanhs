@@ -639,3 +639,80 @@ describe('a caption dropped on another marker', () => {
     placement.dispose();
   });
 });
+
+/**
+ * Taking one marker off a pile.
+ *
+ * This is the gesture the rules were written for, and for a while nothing could
+ * reach it: the router threw the grabbed part away and every drag carried the
+ * whole pile, so `detach` and `stay` were unreachable branches that the tests
+ * for `drop-intent` were happily exercising on their own.
+ */
+describe('pulling a row off a pile', () => {
+  function pile(over: boolean): {
+    placement: PlacementController;
+    moves: Array<[string, Vec3]>;
+    intents: string[];
+  } {
+    const moves: Array<[string, Vec3]> = [];
+    const intents: string[] = [];
+    const members = [
+      { entity: 'light.a', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      { entity: 'switch.b', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+    ];
+    const entities = {
+      moveEntity: (entityId: string, position: Vec3) => moves.push([entityId, position]),
+      setEntities: () => {},
+      setHovered: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      pick: () => null,
+      overStack: () => over,
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    placement.on('placement-commit', ({ intent }) => intents.push(intent.action));
+    return { placement, moves, intents };
+  }
+
+  function decision(placement: PlacementController): { action: string } {
+    return (placement as unknown as { decision: { action: string } }).decision;
+  }
+
+  it('leaves the rest of the pile where it is', () => {
+    const { placement, moves } = pile(false);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(1.5, 1.5));
+    expect(new Set(moves.map(([id]) => id))).toEqual(new Set(['light.a']));
+    placement.dispose();
+  });
+
+  it('promises to take it out, and commits that', () => {
+    const { placement, intents } = pile(false);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(1.5, 1.5));
+    expect(decision(placement).action).toBe('detach');
+
+    placement.commitPlacement(...screen(1.5, 1.5));
+    expect(intents, 'what the cursor said is what was written').toEqual(['detach']);
+    placement.dispose();
+  });
+
+  /** Inside its own frame the pile has not been touched, so nothing moves. */
+  it('holds still while the pointer is still on the pile', () => {
+    const { placement, moves, intents } = pile(true);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.2, 0.2));
+    expect(decision(placement).action).toBe('stay');
+    expect(
+      moves.map(([, position]) => position),
+      'the anchor stays where the pile put it',
+    ).toEqual([[0, 0.02, 0]]);
+
+    placement.commitPlacement(...screen(0.2, 0.2));
+    expect(intents, 'a release here writes nothing').toEqual([]);
+    placement.dispose();
+  });
+});

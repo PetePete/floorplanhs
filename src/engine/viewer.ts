@@ -44,7 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
-import { joinStack, leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
+import { leaveStack, resolveMove, stackFor } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -95,6 +95,8 @@ export class Viewer implements IViewer {
   private readonly prevStates = new Map<string, HassEntity | undefined>();
 
   private config: Floorplan3dCardConfig = { type: 'floorplan-3d-card' };
+  /** Drop captions, in the dashboard's language; see `setDropStrings`. */
+  private dropStrings: Record<string, string> = {};
   private renderCfg: Required<RenderConfig> = { ...DEFAULT_RENDER_CONFIG };
 
   private core: RenderCore | null = null;
@@ -455,7 +457,7 @@ export class Viewer implements IViewer {
     const placement = this._placement;
     if (placement) {
       this.unwire.push(
-        placement.on('placement-commit', ({ entityId, mode, result }) => {
+        placement.on('placement-commit', ({ entityId, mode, result, intent, carryStack }) => {
           if (mode !== 'move') return;
           const position = vRound(result.position);
           // The room the marker came from, when it was dragged out of one.
@@ -463,6 +465,20 @@ export class Viewer implements IViewer {
           // plan with nothing to say which room it belongs to — the placement
           // works it out, and then nobody wrote it down.
           const room = result.room ?? undefined;
+          // A row pulled off its pile leaves it. Sending this as a plain move
+          // would take the whole pile along — the mover looks the stack up by
+          // id, and this marker is still on it until the intent says otherwise.
+          if (intent.action === 'detach') {
+            this.emit('edit-intent', {
+              kind: 'unstack-entity',
+              entityId,
+              position,
+              level: result.levelId,
+              room,
+            });
+            this.adoptUnstack(entityId, position, result.levelId, room);
+            return;
+          }
           this.emit('edit-intent', {
             kind: 'move-entity',
             entityId,
@@ -470,8 +486,9 @@ export class Viewer implements IViewer {
             level: result.levelId,
             room,
             stackWith: result.stackWith ?? null,
+            carryStack,
           });
-          this.adoptMove(entityId, position, result.levelId, room, result.stackWith ?? null);
+          this.adoptMove(entityId, position, result.levelId, room, result.stackWith ?? null, carryStack);
         }),
         placement.on('label-commit', ({ entityId, offset, stackWith }) => {
           // Two chips dragged together: the pile is what was meant, whichever
@@ -542,10 +559,20 @@ export class Viewer implements IViewer {
    * with the same values the dashboard will confirm later.
    */
   /** A marker taken off its stack, in our own copy; see the card for the config. */
-  private adoptUnstack(entityId: string, position: Vec3): void {
-    const entities = leaveStack(this.config.entities ?? [], entityId).map((entry) =>
-      entry.entity === entityId ? { ...entry, position } : entry,
-    );
+  private adoptUnstack(
+    entityId: string,
+    position: Vec3,
+    level?: string | null,
+    room?: string,
+  ): void {
+    const entities = leaveStack(this.config.entities ?? [], entityId).map((entry) => {
+      if (entry.entity !== entityId) return entry;
+      const moved: PlacedEntity = { ...entry, position };
+      if (level !== undefined) moved.level = level;
+      if (room) moved.room = room;
+      else delete moved.room;
+      return moved;
+    });
     this.config = { ...this.config, entities };
     this.guard('entities', this._entities, (e) => e.setEntities(entities));
   }
@@ -556,40 +583,17 @@ export class Viewer implements IViewer {
     level: string | null,
     room: string | undefined,
     stackWith: string | null = null,
+    carryStack = true,
   ): void {
     const entities = this.config.entities ?? [];
-    const index = entities.findIndex((entry) => entry.entity === entityId);
-    if (index < 0) return;
+    if (!entities.some((entry) => entry.entity === entityId)) return;
 
-    // Grabbing one marker of a pile moves the pile: the anchor is shared, and
-    // leaving the others behind would be moving a thing out of its own place.
-    const stack = stackFor(entities, entityId);
-    if (stack) {
-      const moved = moveStack(entities, stack.id, position, level, room);
-      this.config = { ...this.config, entities: moved };
-      this.guard('entities', this._entities, (e) => e.setEntities(moved));
-      return;
-    }
-
-    const moved: PlacedEntity = { ...entities[index], position, level };
-    if (room) moved.room = room;
-    else delete moved.room;
-
-    const next = [...entities];
-    next[index] = moved;
-
-    // Dropped onto another marker: the same rule the card applies, applied here
-    // too. Without it the engine holds two markers at one point with no stack
-    // to fan them apart, so one sits invisibly inside the other until the
-    // config comes back round — which looks exactly like the marker vanishing.
-    const target = stackWith ? next.find((entry) => entry.entity === stackWith) : undefined;
-    const joined = target ? joinStack(next, entityId, target) : next;
-    // Same as the card: the pile lands where the drop was.
-    const pileId = target ? joined.find((entry) => entry.entity === entityId)?.stack : undefined;
-    const stacked = pileId ? moveStack(joined, pileId, position, level, room) : joined;
-
-    this.config = { ...this.config, entities: stacked };
-    this.guard('entities', this._entities, (e) => e.setEntities(stacked));
+    // The same resolver the card writes its config with. Two copies of these
+    // rules is how a pile came to be merged by a gesture that only meant to
+    // take one marker off it.
+    const next = resolveMove(entities, { entityId, position, level, room, stackWith, carryStack });
+    this.config = { ...this.config, entities: next };
+    this.guard('entities', this._entities, (e) => e.setEntities(next));
   }
 
   /**
@@ -851,6 +855,22 @@ export class Viewer implements IViewer {
     }, HANDLE_LINGER_MS);
   }
 
+  /**
+   * The words the drop cursor uses, from the card's localiser.
+   *
+   * The engine deliberately has no localiser of its own — Home Assistant's
+   * language lives on `hass`, which is the card's business — so the strings are
+   * handed down instead of looked up.
+   */
+  setDropStrings(strings: Record<string, string>): void {
+    this.dropStrings = strings;
+    this.guard('placement', this._placement, (p) =>
+      (p as IPlacementController & { setStrings?(v: Record<string, string>): void }).setStrings?.(
+        strings,
+      ),
+    );
+  }
+
   setEditMode(enabled: boolean): void {
     this.editMode = enabled;
     // Edit mode no longer pins the handles on; `flashSectionHandles` owns them.
@@ -979,7 +999,9 @@ export class Viewer implements IViewer {
         setSnapPlacement?(v: boolean): void;
         setHiddenLine?(v: boolean): void;
         setGroundDark?(v: boolean): void;
+        setStrings?(v: Record<string, string>): void;
       };
+      target.setStrings?.(this.dropStrings);
       target.setSnapPlacement?.(this.config.ui?.snapPlacement === true);
       target.setHiddenLine?.(wire);
       target.setGroundDark?.(groundDark);

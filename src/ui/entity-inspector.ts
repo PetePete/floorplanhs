@@ -513,14 +513,10 @@ export class Fp3dEntityInspector extends FpBaseElement {
 
           ${this.rooms.length > 0
             ? html`<div class="field">
-                <span class="field-label">
-                  ${this.t('ui.inspector.room', 'Room')}
-                  ${placed.stack
-                    ? html`<em class="hint-inline"
-                        >${this.t('ui.inspector.room_stack', 'for the whole stack')}</em
-                      >`
-                    : nothing}
-                </span>
+                <!-- This entity's own room, whether or not it is on a pile: a
+                     stack groups chips on the screen and says nothing about
+                     where a lamp hangs. The pile's room is set on the pile. -->
+                <span class="field-label">${this.t('ui.inspector.room', 'Room')}</span>
                 <select
                   aria-label=${this.t('ui.inspector.room', 'Room')}
                   @change=${(event: Event) =>

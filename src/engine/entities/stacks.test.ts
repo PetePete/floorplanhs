@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  applyStackPatch,
   joinStack,
   leaveStack,
+  mergeStacks,
+  resolveMove,
   moveStack,
   nextStackId,
   stackFor,
-  stackTarget,
 } from '@/engine/entities/stacks';
 import type { PlacedEntity, Vec3 } from '@/types/config';
 
@@ -20,32 +22,6 @@ import type { PlacedEntity, Vec3 } from '@/types/config';
 function at(entity: string, x: number, z: number, extra: Partial<PlacedEntity> = {}): PlacedEntity {
   return { entity, position: [x, 2.5, z] as Vec3, level: 'ground', ...extra };
 }
-
-describe('finding what a drop landed on', () => {
-  const house = [at('light.a', 0, 0), at('switch.b', 3, 0), at('sensor.c', 0, 3)];
-
-  it('takes the marker under the drop', () => {
-    expect(stackTarget(house, 'sensor.c', [0.1, 2.5, 0.1], 'ground')?.entity).toBe('light.a');
-  });
-
-  it('takes the nearest when two are within reach', () => {
-    const crowd = [at('light.a', 0, 0), at('switch.b', 0.3, 0)];
-    expect(stackTarget(crowd, 'sensor.c', [0.25, 2.5, 0], 'ground')?.entity).toBe('switch.b');
-  });
-
-  it('ignores a drop that landed on open floor', () => {
-    expect(stackTarget(house, 'sensor.c', [1.5, 2.5, 1.5], 'ground')).toBeNull();
-  });
-
-  it('never stacks across storeys, however close in plan', () => {
-    const stairs = [at('light.a', 0, 0, { level: 'upper' })];
-    expect(stackTarget(stairs, 'switch.b', [0, 2.5, 0], 'ground')).toBeNull();
-  });
-
-  it('does not stack a marker on itself', () => {
-    expect(stackTarget(house, 'light.a', [0, 2.5, 0], 'ground')).toBeNull();
-  });
-});
 
 describe('joining a stack', () => {
   it('starts one, and brings the newcomer to the target spot', () => {
@@ -125,30 +101,6 @@ describe('the stack as a whole', () => {
     expect(next[0].level).toBe('upper');
     expect(next[2].position).toEqual([8, 2.5, 8]);
   });
-
-
-});
-
-describe('a stack being carried', () => {
-  /** Dragging a pile by its anchor must not snap back onto its own members. */
-  it('does not offer its own stack as a target', () => {
-    const pile = [
-      at('light.a', 1, 1, { stack: 's' }),
-      at('switch.b', 1, 1, { stack: 's' }),
-      at('sensor.c', 6, 6),
-    ];
-    expect(stackTarget(pile, 'light.a', [1.05, 2.5, 1], 'ground')).toBeNull();
-  });
-
-  it('still offers a different pile to join', () => {
-    const two = [
-      at('light.a', 1, 1, { stack: 's' }),
-      at('switch.b', 1, 1, { stack: 's' }),
-      at('sensor.c', 6, 6, { stack: 't' }),
-      at('cover.d', 6, 6, { stack: 't' }),
-    ];
-    expect(stackTarget(two, 'light.a', [6, 2.5, 6], 'ground')?.stack).toBe('t');
-  });
 });
 
 /**
@@ -194,20 +146,34 @@ describe('joining from where the labels were dragged', () => {
  * this a stack dragged out of a room lost the one thing that said which room
  * it belonged to — the statement a single marker makes in the same situation.
  */
+/**
+ * A stack groups chips on the screen. It says nothing about where a lamp hangs
+ * or which room a sensor is measuring — so the room it points at is its own,
+ * and the members keep theirs untouched.
+ */
 describe('a stack and its room', () => {
   const pile = [
     at('light.a', 1, 1, { stack: 's', room: 'kitchen' }),
-    at('switch.b', 1, 1, { stack: 's', room: 'kitchen' }),
+    at('switch.b', 1, 1, { stack: 's', room: 'hall' }),
   ];
 
   it('records the room it was dragged out of, on every member', () => {
     const next = moveStack(pile, 's', [9, 2.5, 9], 'ground', 'kitchen');
-    expect(next.map((entry) => entry.room)).toEqual(['kitchen', 'kitchen']);
+    expect(next.map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
+  });
+
+  it('never touches what a member says about itself', () => {
+    const next = moveStack(pile, 's', [9, 2.5, 9], 'ground', 'kitchen');
+    expect(next.map((entry) => entry.room), 'each entity keeps its own room').toEqual([
+      'kitchen',
+      'hall',
+    ]);
   });
 
   it('drops the override when the pile lands inside a room again', () => {
     const next = moveStack(pile, 's', [2, 2.5, 2], 'ground', undefined);
-    expect(next.every((entry) => entry.room === undefined)).toBe(true);
+    expect(next.every((entry) => entry.stackRoom === undefined)).toBe(true);
+    expect(next.map((entry) => entry.room)).toEqual(['kitchen', 'hall']);
   });
 
   it('leaves markers outside the pile alone', () => {
@@ -215,5 +181,251 @@ describe('a stack and its room', () => {
     const next = moveStack(mixed, 's', [4, 2.5, 4], 'ground', 'kitchen');
     expect(next[2].room).toBe('hall');
     expect(next[2].position).toEqual([8, 2.5, 8]);
+  });
+
+  it('hands its room and its colour to a marker that joins', () => {
+    const dressed = [
+      at('light.a', 1, 1, { stack: 's', stackRoom: 'kitchen', stackColor: '#ff8800' }),
+      at('switch.b', 1, 1, { stack: 's', stackRoom: 'kitchen', stackColor: '#ff8800' }),
+    ];
+    const next = joinStack([...dressed, at('sensor.c', 6, 6)], 'sensor.c', dressed[0]);
+    const joined = next.find((entry) => entry.entity === 'sensor.c');
+    expect(joined?.stackRoom).toBe('kitchen');
+    expect(joined?.stackColor).toBe('#ff8800');
+  });
+
+  it('takes them back off a marker that leaves', () => {
+    const dressed = [
+      at('light.a', 1, 1, { stack: 's', stackRoom: 'kitchen', stackColor: '#ff8800' }),
+      at('switch.b', 1, 1, { stack: 's', stackRoom: 'kitchen', stackColor: '#ff8800' }),
+      at('sensor.c', 1, 1, { stack: 's', stackRoom: 'kitchen', stackColor: '#ff8800' }),
+    ];
+    const next = leaveStack(dressed, 'sensor.c');
+    const gone = next.find((entry) => entry.entity === 'sensor.c');
+    expect(gone?.stackRoom).toBeUndefined();
+    expect(gone?.stackColor).toBeUndefined();
+    expect(next.find((entry) => entry.entity === 'light.a')?.stackColor, 'the pile keeps its own')
+      .toBe('#ff8800');
+  });
+});
+
+/**
+ * Two piles pushed together are one pile.
+ *
+ * The cursor already promised it — a pile dragged over another marker reads
+ * "Add to Kitchen + 2 more" — and for a while the promise was all there was:
+ * the mover looked the stack up by id, moved it to the drop point, and the two
+ * ended up in the same spot belonging to nothing.
+ */
+describe('tipping one pile onto another', () => {
+  const two = [
+    at('light.a', 0, 0, { stack: 'a' }),
+    at('switch.b', 0, 0, { stack: 'a' }),
+    at('sensor.c', 3, 0, { stack: 'b' }),
+    at('cover.d', 3, 0, { stack: 'b' }),
+  ];
+
+  it('puts everyone on the target’s id', () => {
+    const merged = mergeStacks(two, 'a', two[2]);
+    expect(merged.every((entry) => entry.stack === 'b')).toBe(true);
+  });
+
+  it('brings the whole pile to the spot it was tipped onto', () => {
+    const merged = mergeStacks(two, 'a', two[2]);
+    for (const entry of merged) expect(entry.position).toEqual([3, 2.5, 0]);
+  });
+
+  it('starts a pile when the target had none', () => {
+    const loose = [at('light.a', 0, 0, { stack: 'a' }), at('switch.b', 0, 0, { stack: 'a' }), at('sensor.c', 3, 0)];
+    const merged = mergeStacks(loose, 'a', loose[2]);
+    const id = merged[2].stack;
+    expect(id).toBeTruthy();
+    expect(merged.every((entry) => entry.stack === id)).toBe(true);
+  });
+
+  it('does nothing when the target is already on this pile', () => {
+    expect(mergeStacks(two, 'a', two[1])).toEqual(two);
+  });
+
+  it('leaves everyone else alone', () => {
+    const bystander = at('fan.e', 9, 9);
+    const merged = mergeStacks([...two, bystander], 'a', two[2]);
+    expect(merged[4]).toEqual(bystander);
+  });
+});
+
+/**
+ * What a release actually writes.
+ *
+ * The gestures that arrive here are near-identical at the point of letting go —
+ * something landed on something, or on open floor — and they mean opposite
+ * things. A pile tipped onto a marker merges. One row of that pile dragged onto
+ * the same marker takes *itself* there and leaves the pile behind. Writing
+ * those rules twice, once for the config and once for what is drawn while the
+ * dashboard catches up, is how they came apart.
+ */
+describe('resolving a drop', () => {
+  function world(): PlacedEntity[] {
+    return [
+      at('light.a', 0, 0, { stack: 'a' }),
+      at('switch.b', 0, 0, { stack: 'a' }),
+      at('sensor.c', 0, 0, { stack: 'a' }),
+      at('cover.d', 5, 0),
+      at('fan.e', 9, 9),
+    ];
+  }
+
+  const to = (x: number, z: number): Vec3 => [x, 2.5, z];
+
+  it('carries the whole pile when the pile was in the hand', () => {
+    const next = resolveMove(world(), {
+      entityId: 'light.a',
+      position: to(2, 2),
+      level: 'ground',
+    });
+    for (const id of ['light.a', 'switch.b', 'sensor.c']) {
+      expect(next.find((e) => e.entity === id)?.position, id).toEqual([2, 2.5, 2]);
+    }
+  });
+
+  it('takes one row out and leaves the pile standing', () => {
+    const next = resolveMove(world(), {
+      entityId: 'light.a',
+      position: to(2, 2),
+      level: 'ground',
+      carryStack: false,
+    });
+    expect(next.find((e) => e.entity === 'light.a')?.stack).toBeUndefined();
+    expect(next.find((e) => e.entity === 'light.a')?.position).toEqual([2, 2.5, 2]);
+    expect(next.find((e) => e.entity === 'switch.b')?.position, 'stays put').toEqual([0, 2.5, 0]);
+    expect(next.find((e) => e.entity === 'switch.b')?.stack, 'still a pile of two').toBe('a');
+  });
+
+  /** The case that made this one function: a row dropped on another marker. */
+  it('does not drag the pile along when one row joins something else', () => {
+    const next = resolveMove(world(), {
+      entityId: 'light.a',
+      position: to(5, 0),
+      level: 'ground',
+      stackWith: 'cover.d',
+      carryStack: false,
+    });
+    const joined = next.find((e) => e.entity === 'light.a')?.stack;
+    expect(joined, 'on a new pile with the target').toBe(next.find((e) => e.entity === 'cover.d')?.stack);
+    expect(next.find((e) => e.entity === 'switch.b')?.stack, 'the old pile is untouched').toBe('a');
+    expect(next.find((e) => e.entity === 'switch.b')?.position).toEqual([0, 2.5, 0]);
+  });
+
+  it('merges the two when a whole pile is tipped onto a marker', () => {
+    const next = resolveMove(world(), {
+      entityId: 'light.a',
+      position: to(5, 0),
+      level: 'ground',
+      stackWith: 'cover.d',
+    });
+    const id = next.find((e) => e.entity === 'cover.d')?.stack;
+    expect(id).toBeTruthy();
+    for (const entity of ['light.a', 'switch.b', 'sensor.c']) {
+      expect(next.find((e) => e.entity === entity)?.stack, entity).toBe(id);
+      expect(next.find((e) => e.entity === entity)?.position, entity).toEqual([5, 2.5, 0]);
+    }
+  });
+
+  it('dissolves a pile of two when its last companion leaves', () => {
+    const pair = [at('light.a', 0, 0, { stack: 'a' }), at('switch.b', 0, 0, { stack: 'a' })];
+    const next = resolveMove(pair, {
+      entityId: 'light.a',
+      position: to(3, 3),
+      level: 'ground',
+      carryStack: false,
+    });
+    expect(next.every((entry) => entry.stack === undefined), 'nobody is left on a pile of one').toBe(
+      true,
+    );
+  });
+
+  it('starts a pile out of two lone markers', () => {
+    const next = resolveMove(world(), {
+      entityId: 'fan.e',
+      position: to(5, 0),
+      level: 'ground',
+      stackWith: 'cover.d',
+    });
+    const id = next.find((e) => e.entity === 'fan.e')?.stack;
+    expect(id).toBeTruthy();
+    expect(next.find((e) => e.entity === 'cover.d')?.stack).toBe(id);
+    expect(next.find((e) => e.entity === 'cover.d')?.position, 'the pile lands where they met')
+      .toEqual([5, 2.5, 0]);
+  });
+
+  it('records the room a marker was dragged out of, and clears it on the way back in', () => {
+    const out = resolveMove(world(), {
+      entityId: 'fan.e',
+      position: to(20, 20),
+      level: 'ground',
+      room: 'kitchen',
+    });
+    expect(out.find((e) => e.entity === 'fan.e')?.room).toBe('kitchen');
+
+    const back = resolveMove(out, { entityId: 'fan.e', position: to(1, 1), level: 'ground' });
+    expect(back.find((e) => e.entity === 'fan.e')?.room).toBeUndefined();
+  });
+
+  it('leaves the list alone for a marker it has never heard of', () => {
+    const before = world();
+    expect(resolveMove(before, { entityId: 'light.ghost', position: to(1, 1), level: 'ground' }))
+      .toEqual(before);
+  });
+});
+
+/**
+ * Editing a pile against editing what is in it.
+ *
+ * The distinction is the whole point: a stack groups chips on the screen, so
+ * its room and its colour are the pile's and belong on every member, while a
+ * lamp's own room is the lamp's and must survive being piled up with a switch.
+ */
+describe('patching through a stack', () => {
+  const pile = [
+    at('light.a', 0, 0, { stack: 's', room: 'kitchen' }),
+    at('switch.b', 0, 0, { stack: 's', room: 'hall' }),
+    at('sensor.c', 5, 5, { room: 'study' }),
+  ];
+
+  it('gives the pile’s colour to every member', () => {
+    const next = applyStackPatch(pile, 'light.a', { stackColor: '#ff8800' });
+    expect(next.slice(0, 2).map((entry) => entry.stackColor)).toEqual(['#ff8800', '#ff8800']);
+    expect(next[2].stackColor, 'and to nobody else').toBeUndefined();
+  });
+
+  it('gives the pile’s room to every member without touching theirs', () => {
+    const next = applyStackPatch(pile, 'switch.b', { stackRoom: 'kitchen' });
+    expect(next.slice(0, 2).map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
+    expect(next.map((entry) => entry.room), 'each entity keeps its own').toEqual([
+      'kitchen',
+      'hall',
+      'study',
+    ]);
+  });
+
+  it('clears the pile’s colour everywhere when it is reset', () => {
+    const coloured = applyStackPatch(pile, 'light.a', { stackColor: '#ff8800' });
+    const next = applyStackPatch(coloured, 'light.a', { stackColor: undefined });
+    expect(next.every((entry) => entry.stackColor === undefined)).toBe(true);
+    expect(next.every((entry) => 'stackColor' in entry), 'and leaves no empty key behind').toBe(
+      false,
+    );
+  });
+
+  it('keeps an entity patch to that entity, pile or no pile', () => {
+    const next = applyStackPatch(pile, 'light.a', { room: 'cellar', name: 'Lamp' });
+    expect(next[0].room).toBe('cellar');
+    expect(next[0].name).toBe('Lamp');
+    expect(next[1].room, 'the marker beside it on the pile is untouched').toBe('hall');
+    expect(next[1].name).toBeUndefined();
+  });
+
+  it('leaves the list alone for a marker it has never heard of', () => {
+    expect(applyStackPatch(pile, 'light.ghost', { stackColor: '#fff' })).toEqual(pile);
   });
 });

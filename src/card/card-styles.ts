@@ -69,6 +69,13 @@ export const themeTokens = css`
     --fp3d-label-tracking: 0.14em;
     --fp3d-touch: 44px;
     --fp3d-gap: 8px;
+    /*
+     * The panels down the left rail are one instrument with two parts, so they
+     * are one width. Content-sized, they came out different — the navigator
+     * carries storey names and the shelf carries whatever you dropped on it —
+     * and two stacked panels with different edges read as two unrelated things.
+     */
+    --fp3d-rail-width: 208px;
     --fp3d-chrome-inset: 16px;
 
     --fp3d-surface: rgba(252, 252, 253, 0.74);

@@ -76,6 +76,15 @@ export interface PlacementEvents {
     result: PlacementResult;
     /** Place, join a pile, or leave one — decided before the pointer came up. */
     intent: DropDecision;
+    /**
+     * Whether the whole pile was in the hand.
+     *
+     * `join` cannot say this on its own: a pile tipped onto another marker and a
+     * single row pulled off a pile onto the same marker are both joins, and the
+     * difference is everything — one merges two piles, the other takes one
+     * marker out of the first and puts it on the second.
+     */
+    carryStack: boolean;
   };
   'placement-cancel': { entityId: string; mode: PlacementMode; reason: PlacementCancelReason };
   /** A label was dragged to a new spot beside its anchor. */
@@ -501,10 +510,18 @@ export class PlacementController implements IPlacementController {
     // The marker itself follows the cursor in move mode; the ghost would only
     // duplicate it.
     if (this.mode === 'move' && this.entityId) {
-      this.entities.moveEntity(this.entityId, resolved.position);
-      for (const member of this.carrying) {
-        if (member.entityId === this.entityId) continue;
-        this.entities.moveEntity(member.entityId, resolved.position);
+      if (this.decision.action === 'stay') {
+        // "Stays in the stack" has to look like it. Dragged out and brought
+        // back, the marker is already sitting somewhere else — and a pile lays
+        // its rows out from each marker's own anchor, so leaving it there draws
+        // one row hanging off the side of a pile it is supposedly still on.
+        if (this.originalPosition) this.entities.moveEntity(this.entityId, this.originalPosition);
+      } else {
+        this.entities.moveEntity(this.entityId, resolved.position);
+        for (const member of this.carrying) {
+          if (member.entityId === this.entityId) continue;
+          this.entities.moveEntity(member.entityId, resolved.position);
+        }
       }
     }
     this.emitter.emit('placement-update', {
@@ -553,8 +570,9 @@ export class PlacementController implements IPlacementController {
     result.stackWith = this.decision.target;
     if (mode === 'move') this.entities.moveEntity(entityId, result.position);
     const intent = this.decision;
+    const carryStack = this.carryStack;
     this.finish(null);
-    this.emitter.emit('placement-commit', { entityId, mode, result, intent });
+    this.emitter.emit('placement-commit', { entityId, mode, result, intent, carryStack });
     return result;
   }
 
@@ -875,7 +893,12 @@ export class PlacementController implements IPlacementController {
     // Out of the pile while it is out: the rows close up behind it and it
     // travels on its own, so "this one is leaving" is something you watch
     // happen rather than something you read.
-    extras.setDraggedOut?.(action === 'detach' || action === 'join' ? this.entityId : null);
+    //
+    // Only when it really is leaving. A whole pile carried onto another marker
+    // is also a join, and pulling its base row out of it mid-drag splits the
+    // pile the user is holding in two.
+    const leaving = !this.carryStack && (action === 'detach' || action === 'join');
+    extras.setDraggedOut?.(leaving ? this.entityId : null);
   }
 
   /** Everyone sharing this marker's anchor, with the spot they started from. */
@@ -1099,6 +1122,18 @@ export class PlacementController implements IPlacementController {
     return from ? this.roomAt(from[0], from[1], from[2], id) : null;
   }
 
+  /**
+   * The words the cursor uses.
+   *
+   * The engine has no localiser and should not grow one — the card does, and it
+   * is the only part that knows which language Home Assistant is in. Partial on
+   * purpose: a table that is missing a key falls back to the English one rather
+   * than to an empty caption.
+   */
+  setStrings(strings: Partial<DropStrings>): void {
+    this.strings = { ...DEFAULT_DROP_STRINGS, ...strings };
+  }
+
   /** Opt into fixture-aware drop heights instead of what-you-see placement. */
   setSnapPlacement(value: boolean): void {
     this.snapPlacement = value;
@@ -1169,6 +1204,16 @@ export class PlacementController implements IPlacementController {
     this.originalPosition = null;
     this.lastResult = null;
     this.domDrag = false;
+
+    // Everything the drag painted comes off with it. Left standing, the layer
+    // goes on treating the marker as if it were still out of its pile — which
+    // means the pile it just joined is drawn as two loose markers with no frame
+    // between them. The user reads "Stack with Kitchen", lets go, and watches
+    // nothing happen.
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    extras.setDraggedOut?.(null);
+    extras.setStackHighlight?.(null);
+    this.entities.setHovered(null);
 
     this.indicator.hide();
     this.detachKeyListener();

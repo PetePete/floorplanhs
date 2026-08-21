@@ -30,7 +30,7 @@ import type {
   ModelLoadProgress,
 } from '@/engine/contracts';
 import { toEntityVisual } from '@/ha/state-mapper';
-import { joinStack, leaveStack, moveStack, stackFor } from '@/engine/entities/stacks';
+import { applyStackPatch, leaveStack, resolveMove } from '@/engine/entities/stacks';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
@@ -90,6 +90,7 @@ import '@/ui/action-dock';
 import '@/ui/section-panel';
 import '@/ui/entity-palette';
 import '@/ui/entity-inspector';
+import '@/ui/stack-inspector';
 import '@/ui/hud';
 
 /** MIME type the palette writes into `dataTransfer`. Mirrors HA's own picker. */
@@ -192,6 +193,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private section: SectionState = { ...DEFAULT_SECTION_STATE };
   @state() private activePreset: string | null = null;
   @state() private selectedEntity: string | null = null;
+  /** A pile whose grab bar was tapped; opens the stack's own settings. */
+  @state() private selectedStack: string | null = null;
   @state() private autoRotate = false;
   @state() private fullscreen = false;
   @state() private editing = false;
@@ -446,6 +449,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       this.viewer?.setEditMode(this.editing);
       if (!this.editing) {
         this.selectedEntity = null;
+        this.selectedStack = null;
         if (this.panel === 'palette') this.panel = 'none';
       }
     }
@@ -750,6 +754,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     try {
       if (this._hass) viewer.updateHass(this._hass);
+      viewer.setDropStrings(this.dropStrings());
       // Before mount, so the first frame already has readable edge lines.
       viewer.setThemeDark(this.dark);
       await viewer.mount(host, this.config);
@@ -788,6 +793,26 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * name it goes by. Two cards showing different houses keep their own camera;
    * two showing the same one may share it, which is the harmless case.
    */
+  /**
+   * What the drop cursor should say, in the dashboard's language.
+   *
+   * The engine has no localiser, so the card resolves the captions and hands
+   * them over. Templates travel intact: `{name}` and `{count}` are filled in by
+   * the rules, which are the only thing that knows what is under the pointer.
+   */
+  private dropStrings(): Record<string, string> {
+    return {
+      join: this.t('ui.drop.join', 'Stack with {name}'),
+      joinPile: this.t('ui.drop.join_pile', 'Add to {name} + {count} more'),
+      detach: this.t('ui.drop.detach', 'Take out of the stack'),
+      stay: this.t('ui.drop.stay', 'Stays in the stack'),
+      label: this.t('ui.drop.label', 'Move the label'),
+      invalid: this.t('ui.drop.invalid', 'Cannot drop here'),
+      outside: this.t('ui.drop.outside', 'Drop beside the house, not above the horizon'),
+      hidden: this.t('ui.drop.hidden', '{name} is hidden'),
+    };
+  }
+
   private viewMemoryKey(): string | null {
     const config = this.config;
     if (!config) return null;
@@ -891,6 +916,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.on('model-loaded', (model) => this.onModelLoaded(model)),
       viewer.on('error', (payload) => this.onViewerError(payload.message, payload.cause)),
       viewer.on('entity-activate', (payload) => this.onEntityActivate(payload.entityId, payload.action)),
+      viewer.on('stack-activate', ({ stackId }) => {
+        if (!this.editing) return;
+        // One rail, one subject: the pile replaces whatever single marker was
+        // being edited, rather than opening a second panel over it.
+        this.selectedEntity = null;
+        this.selectedStack = stackId;
+      }),
       viewer.on('edit-intent', (intent) => this.applyIntent(intent, true)),
       viewer.on('preset-applied', ({ presetId }) => {
         this.activePreset = presetId;
@@ -941,6 +973,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   private onEntityActivate(entityId: string, action: 'tap' | 'hold' | 'double-tap'): void {
     // In edit mode a tap means "let me configure this", not "toggle my lamp".
     if (this.editing && action === 'tap') {
+      this.selectedStack = null;
       this.selectedEntity = entityId;
       return;
     }
@@ -1055,12 +1088,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         // Dropped onto a marker that is already there. Without this the new one
         // lands at exactly the same point and is simply invisible underneath —
         // which is what "placing does not work" looks like from the outside.
-        const onto = intent.stackWith
-          ? entities.find((entry) => entry.entity === intent.stackWith)
-          : undefined;
-        next.entities = onto
-          ? joinStack(entities, intent.entity.entity, onto)
-          : entities;
+        // Through the same resolver as a move, so the new pile ends up where the
+        // two met rather than wherever the older marker happened to be standing.
+        next.entities = resolveMove(entities, {
+          entityId: intent.entity.entity,
+          position: intent.entity.position,
+          level: intent.entity.level ?? null,
+          room: intent.entity.room,
+          stackWith: intent.stackWith,
+        });
         this.recentAdds.set(intent.entity.entity, Date.now());
         label = this.entityLabel(intent.entity.entity);
         // Select it immediately. Dropping a marker into a 3D scene and getting
@@ -1073,83 +1109,50 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         break;
       }
       case 'move-entity': {
-        const index = entities.findIndex((entry) => entry.entity === intent.entityId);
-        if (index < 0) return;
-        const position = vRound(intent.position);
-
-        // One marker of a pile carries the pile: the anchor is shared, so
-        // leaving the others behind would be moving a thing out of its place.
-        const pile = stackFor(entities, intent.entityId);
-        if (pile) {
-          // The room travels with the pile, so a stack dragged out of a room
-          // keeps its line back to it — the same statement a single marker
-          // makes, and the reason the room is recorded on the way out at all.
-          next.entities = moveStack(entities, pile.id, position, intent.level, intent.room);
-          break;
-        }
-
-        const moved: PlacedEntity = { ...entities[index], position, level: intent.level };
-        // `undefined` means the drop landed inside a room and the position
-        // speaks for itself, so the old override is dropped rather than kept.
-        if (intent.room === undefined) delete moved.room;
-        else if (intent.room) moved.room = intent.room;
-        entities[index] = moved;
-
-        // Dropped on top of another marker: that is how a stack starts, and it
-        // is the only way one does — no menu, no mode. Which marker that was is
-        // decided where the drop happened, on screen, not re-derived here from
-        // world coordinates that know nothing about the camera.
-        const target = intent.stackWith
-          ? entities.find((entry) => entry.entity === intent.stackWith)
-          : undefined;
-        if (!target) {
-          next.entities = entities;
-          break;
-        }
-        // The pile goes where the two met, not where the marker underneath
-        // happened to be standing: dragging one onto the other is a placement,
-        // and the place is the one you dropped them in.
-        const joined = joinStack(entities, intent.entityId, target);
-        const pileId = joined.find((entry) => entry.entity === intent.entityId)?.stack;
-        next.entities = pileId
-          ? moveStack(joined, pileId, position, intent.level, intent.room)
-          : joined;
+        if (!entities.some((entry) => entry.entity === intent.entityId)) return;
+        // Whether the pile travelled, whether the drop landed on another marker,
+        // and what that means for everyone involved: all of it is decided in
+        // one place, which the viewer used to apply the drop straight away.
+        // Dropping on top of another marker is how a stack starts, and the only
+        // way one does — no menu, no mode.
+        next.entities = resolveMove(entities, {
+          entityId: intent.entityId,
+          position: vRound(intent.position),
+          level: intent.level,
+          room: intent.room,
+          stackWith: intent.stackWith,
+          carryStack: intent.carryStack,
+        });
         break;
       }
       case 'unstack-entity': {
         const index = entities.findIndex((entry) => entry.entity === intent.entityId);
         if (index < 0) return;
-        const freed = leaveStack(entities, intent.entityId).map((entry) =>
-          entry.entity === intent.entityId
-            ? { ...entry, position: vRound(intent.position), level: intent.level }
-            : entry,
-        );
+        const freed = leaveStack(entities, intent.entityId).map((entry) => {
+          if (entry.entity !== intent.entityId) return entry;
+          const moved: PlacedEntity = {
+            ...entry,
+            position: vRound(intent.position),
+            level: intent.level,
+          };
+          // Same rule as a move: a room named here is the one it was dragged
+          // *out of*, and it is what the leader line points back at. On its own
+          // again, that is this marker's own room — it just left the pile whose
+          // room it was.
+          if (intent.room) moved.room = intent.room;
+          else delete moved.room;
+          return moved;
+        });
         next.entities = freed;
         label = this.entityLabel(intent.entityId);
         break;
       }
       case 'update-entity': {
-        const index = entities.findIndex((entry) => entry.entity === intent.entityId);
-        if (index < 0) return;
-        entities[index] = { ...entities[index], ...intent.patch };
-
-        // The room is the pile's, not one row's: the leader line is drawn once
-        // for the whole stack, so setting it on a single member would leave the
-        // others disagreeing with a line that speaks for all of them.
-        const pile = entities[index].stack;
-        if (pile && 'room' in intent.patch) {
-          const room = intent.patch.room;
-          next.entities = entities.map((entry) => {
-            if (entry.stack !== pile) return entry;
-            const updated = { ...entry };
-            if (room) updated.room = room;
-            else delete updated.room;
-            return updated;
-          });
-          break;
-        }
-
-        next.entities = entities;
+        if (!entities.some((entry) => entry.entity === intent.entityId)) return;
+        // What a pile says about itself goes to every member; what an entity
+        // says about itself stays on that entity. The rule lives with the rest
+        // of the stack arithmetic, where it can be read as the table it is.
+        next.entities = applyStackPatch(entities, intent.entityId, intent.patch);
         break;
       }
       case 'remove-entity': {
@@ -2006,8 +2009,9 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       event.stopPropagation();
       return;
     }
-    if (this.selectedEntity) {
+    if (this.selectedEntity || this.selectedStack) {
       this.selectedEntity = null;
+      this.selectedStack = null;
       event.stopPropagation();
       return;
     }
@@ -2286,9 +2290,34 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     `;
   }
 
+  /** The members of the pile whose settings are open, if any. */
+  private get selectedStackMembers(): PlacedEntity[] {
+    const id = this.selectedStack;
+    if (!id) return [];
+    return (this.config?.entities ?? []).filter((entry) => entry.stack === id);
+  }
+
   /** Section controls and the inspector share the right rail; selection wins. */
   private renderRightSheet(selected: PlacedEntity | null): TemplateResult | typeof nothing {
     const config = this.config;
+    const members = this.selectedStackMembers;
+    if (this.editing && members.length > 1) {
+      return html`<div class="at-right sheet">
+        <fp3d-stack-inspector
+          data-hass
+          .dark=${this.dark}
+          .size=${this.layout}
+          .stack=${{ id: this.selectedStack ?? '', members }}
+          .rooms=${this.rooms}
+          .levels=${this.levels}
+          @fp3d-entity-patch=${(event: CustomEvent<{ entityId: string; patch: Partial<PlacedEntity> }>) =>
+            this.onEntityPatch(event.detail.entityId, event.detail.patch)}
+          @fp3d-stack-close=${() => {
+            this.selectedStack = null;
+          }}
+        ></fp3d-stack-inspector>
+      </div>`;
+    }
     if (this.editing && selected) {
       return html`<div class="at-right sheet">
         <fp3d-entity-inspector

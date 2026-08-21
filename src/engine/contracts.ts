@@ -272,8 +272,13 @@ export interface IPlacementController extends Subsystem {
   /** Commit; returns null when the drop was outside the model. */
   commitPlacement(clientX: number, clientY: number): PlacementResult | null;
   cancelPlacement(): void;
-  /** Move an already-placed entity. */
-  beginMove(entityId: string): void;
+  /**
+   * Move an already-placed entity.
+   *
+   * `carryStack: false` takes this one marker off the pile it is on and leaves
+   * the rest standing; the default takes the whole pile along.
+   */
+  beginMove(entityId: string, options?: { carryStack?: boolean }): void;
   /** Move an already-placed entity's *label*, leaving the entity where it is. */
   beginLabelMove(entityId: string): void;
   isActive(): boolean;
@@ -288,6 +293,19 @@ export interface IPlacementController extends Subsystem {
       entityId: string;
       mode: 'add' | 'move' | 'label';
       result: PlacementResult;
+      /**
+       * What the cursor promised while it hovered.
+       *
+       * Spelled out here rather than imported from `drop-intent`: the contracts
+       * are what the subsystems implement, so they cannot depend on one.
+       */
+      intent: {
+        action: 'place' | 'join' | 'detach' | 'stay' | 'label' | 'invalid';
+        target: string | null;
+        caption: string;
+      };
+      /** Whether the whole pile was in the hand, or one row off it. */
+      carryStack: boolean;
     }) => void,
   ): () => void;
   /** A label dragged clear of its anchor; the offset is in metres. */
@@ -313,6 +331,11 @@ export type EditIntent =
       kind: 'move-entity';
       /** Marker the drop landed on; the two become a stack. */
       stackWith?: string | null;
+      /**
+       * Whether the whole pile travelled. False means one row was in the hand,
+       * so it leaves its pile behind rather than dragging it along.
+       */
+      carryStack?: boolean;
       entityId: string;
       position: Vec3;
       level: string | null;
@@ -325,8 +348,19 @@ export type EditIntent =
   | { kind: 'update-preset'; presetId: string; patch: Partial<CameraPreset> }
   | { kind: 'remove-preset'; presetId: string }
   /** Entities that live in the panel rather than on the plan. */
-  /** A label dragged clear of the pile: this marker leaves it, and lands here. */
-  | { kind: 'unstack-entity'; entityId: string; position: Vec3; level: string | null }
+  /** A row dragged clear of the pile: this marker leaves it, and lands here. */
+  /**
+   * A marker put somewhere else. `carryStack: false` means one row of a pile
+   * was in the hand, so the rest of that pile stays where it is.
+   */
+  | {
+      kind: 'unstack-entity';
+      entityId: string;
+      position: Vec3;
+      level: string | null;
+      /** The room it was dragged out of, for its own leader line. */
+      room?: string;
+    }
   | { kind: 'add-shortcut'; entityId: string }
   | { kind: 'remove-shortcut'; entityId: string }
   | { kind: 'set-section'; section: SectionState };
@@ -334,6 +368,14 @@ export type EditIntent =
 /** Emitted by the viewer; the card turns these into `config-changed`. */
 export interface ViewerEvents {
   'entity-activate': { entityId: string; action: 'tap' | 'hold' | 'double-tap' };
+  /**
+   * The grab bar of a pile was tapped rather than dragged.
+   *
+   * The bar is the only part of a stack that means "all of this", so it is the
+   * only part that can open the stack's own settings — a row would mean the one
+   * marker, and the shared dot is the entity underneath.
+   */
+  'stack-activate': { stackId: string; entityId: string };
   'entity-hover': { entityId: string | null };
   'edit-intent': EditIntent;
   'preset-applied': { presetId: string };

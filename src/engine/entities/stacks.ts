@@ -6,23 +6,19 @@
  * looked like before. Dropped on one another they become a stack: one anchor,
  * the labels fanned up from it so you can read what is in there.
  *
- * The rules are the two gestures. Drag the **anchor** and the whole stack goes;
- * drag a **label** and that one marker comes out. Everything here is the pure
- * arithmetic behind that — no three.js, no config writing, so it can be tested
- * as the table of cases it is.
+ * The rules are the two gestures. Drag the **anchor** (or the pile's grab bar)
+ * and the whole stack goes; drag a **row** and that one marker comes out.
+ * Everything here is the pure arithmetic behind that — no three.js, no config
+ * writing, so it can be tested as the table of cases it is.
+ *
+ * What counts as "dropped on" is decided in screen space by `EntityLayer.pick`,
+ * not by distance in metres: a stack is markers that *look* like one pile, and
+ * whether their anchors are a metre apart is invisible from where the user is
+ * sitting. So nothing here measures the plan — the caller says which marker the
+ * drop landed on.
  */
 
 import type { PlacedEntity, Vec3 } from '@/types/config';
-
-/**
- * How close two markers must land to become a stack, in metres.
- *
- * Wide enough that dropping "on" a marker succeeds without aiming, narrow
- * enough that two lamps either side of a doorway stay two lamps.
- */
-export const STACK_RADIUS_M = 0.35;
-
-
 
 export function stackOf(entity: PlacedEntity | undefined): string | null {
   return entity?.stack ?? null;
@@ -44,42 +40,6 @@ export function stackFor(
   const members = stackMembers(entities, id);
   // A stack of one is not a stack; it is a marker with a stale label on it.
   return members.length > 1 ? { id, members } : null;
-}
-
-function distanceXZ(a: Vec3, b: Vec3): number {
-  return Math.hypot(a[0] - b[0], a[2] - b[2]);
-}
-
-/**
- * The entity a drop landed on top of, or null.
- *
- * Same storey only: two markers a floor apart are not in the same place however
- * close their plan coordinates are, and stacking them would hide one behind a
- * ceiling.
- */
-export function stackTarget(
-  entities: readonly PlacedEntity[],
-  moved: string,
-  position: Vec3,
-  level: string | null,
-  radius = STACK_RADIUS_M,
-): PlacedEntity | null {
-  let best: PlacedEntity | null = null;
-  let bestDistance = radius;
-  // The pile it is already on is not a target: dragging a stack by its anchor
-  // would otherwise snap straight back onto the mates it is carrying.
-  const own = stackOf(entities.find((entry) => entry.entity === moved));
-
-  for (const entry of entities) {
-    if (entry.entity === moved) continue;
-    if (own && entry.stack === own) continue;
-    if ((entry.level ?? null) !== level) continue;
-    const distance = distanceXZ(entry.position, position);
-    if (distance > bestDistance) continue;
-    bestDistance = distance;
-    best = entry;
-  }
-  return best;
 }
 
 /** A readable id, unique among the stacks already in play. */
@@ -107,7 +67,7 @@ export function joinStack(
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.entity !== moved) return entry;
     return {
-      ...withStack(entry, id),
+      ...withStack(entry, id, target),
       position: [...target.position] as Vec3,
       level: target.level ?? null,
     };
@@ -121,13 +81,48 @@ export function joinStack(
  * offset from when the marker stood alone would drag one row off sideways and
  * the list would stop being one.
  */
-function withStack(entry: PlacedEntity, id: string): PlacedEntity {
+function withStack(entry: PlacedEntity, id: string, from?: PlacedEntity): PlacedEntity {
   const next: PlacedEntity = entry.stack === id ? { ...entry } : { ...entry, stack: id };
+  // What the pile says about itself travels with membership. `room` never does:
+  // that is each entity's own statement about where it is, and a stack is a
+  // grouping on the screen, not a claim about the house.
+  if (from) {
+    if (from.stackRoom) next.stackRoom = from.stackRoom;
+    else delete next.stackRoom;
+    if (from.stackColor) next.stackColor = from.stackColor;
+    else delete next.stackColor;
+  }
   if (!next.marker?.offset) return next;
   const { offset: _offset, ...marker } = next.marker;
   next.marker = Object.keys(marker).length > 0 ? marker : undefined;
   if (next.marker === undefined) delete next.marker;
   return next;
+}
+
+/**
+ * Tip a whole pile onto another marker: every member joins the target's stack.
+ *
+ * Two piles pushed together are one pile — the alternative, refusing because
+ * both sides already have an id, would be arithmetic getting in the way of the
+ * obvious. The target's id wins, so whichever stack was there first keeps its
+ * name in the YAML.
+ */
+export function mergeStacks(
+  entities: readonly PlacedEntity[],
+  movedStack: string,
+  target: PlacedEntity,
+): PlacedEntity[] {
+  const id = target.stack ?? nextStackId(entities);
+  if (id === movedStack) return [...entities];
+  return entities.map((entry) => {
+    if (entry.entity === target.entity) return withStack(entry, id);
+    if (entry.stack !== movedStack) return entry;
+    return {
+      ...withStack(entry, id, target),
+      position: [...target.position] as Vec3,
+      level: target.level ?? null,
+    };
+  });
 }
 
 /**
@@ -144,7 +139,9 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
 
   return entities.map((entry) => {
     if (entry.entity === entityId || (dissolve && entry.stack === id)) {
-      const { stack: _stack, ...rest } = entry;
+      // Off the pile, and without the things that were the pile's: its room and
+      // its colour said something about the group, not about this marker.
+      const { stack: _stack, stackRoom: _room, stackColor: _color, ...rest } = entry;
       return rest;
     }
     return entry;
@@ -154,10 +151,12 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
 /**
  * Move every member of a stack to one spot.
  *
- * `room` follows the same rule as a single marker: a name is the room the pile
+ * `room` follows the same rule as a single marker — a name is the room the pile
  * was dragged *out of*, and it is what the leader line points back at;
  * `undefined` means the drop landed inside a room, where the position already
- * says which, so any old override is dropped rather than left to go stale.
+ * says which — but it is written as the *pile's* room. The members' own `room`
+ * is what each of them says about itself, and dragging a group of chips across
+ * the screen is not a statement about where a lamp hangs.
  */
 export function moveStack(
   entities: readonly PlacedEntity[],
@@ -169,8 +168,124 @@ export function moveStack(
   return entities.map((entry) => {
     if (entry.stack !== stackId) return entry;
     const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+    if (room) moved.stackRoom = room;
+    else delete moved.stackRoom;
+    return moved;
+  });
+}
+
+/**
+ * A marker let go of somewhere, with everything the drop knew about it.
+ *
+ * `carryStack: false` says one row of a pile was in the hand rather than the
+ * pile itself. The two look the same at the point of release — both land on
+ * some marker, or on open floor — and they mean opposite things.
+ */
+export interface MoveRequest {
+  entityId: string;
+  position: Vec3;
+  level: string | null;
+  /** The room it was dragged out of; absent clears any existing override. */
+  room?: string;
+  /** The marker the drop landed on, if any. */
+  stackWith?: string | null;
+  /** Whether the whole pile travelled. Anything but `false` means it did. */
+  carryStack?: boolean;
+}
+
+/**
+ * Where everything ends up after a drop. The one place that decides it.
+ *
+ * The viewer applies a drop straight away so the marker does not spring back
+ * while the dashboard takes its time, and the card applies the same drop to the
+ * config it writes. Written twice, they drifted twice: a pile tipped onto
+ * another marker moved without merging, and once that was fixed in both places,
+ * a single row dragged off a pile onto another marker took its whole pile along
+ * — the branch could not tell the two gestures apart.
+ */
+export function resolveMove(
+  entities: readonly PlacedEntity[],
+  request: MoveRequest,
+): PlacedEntity[] {
+  const { entityId, position, level, room } = request;
+  const self = entities.find((entry) => entry.entity === entityId);
+  if (!self) return [...entities];
+
+  const target = request.stackWith
+    ? (entities.find((entry) => entry.entity === request.stackWith) ?? null)
+    : null;
+  const pile = stackFor(entities, entityId);
+  const carrying = pile && request.carryStack !== false ? pile : null;
+
+  if (carrying) {
+    // Tipped onto a marker that is not one of its own: the piles become one,
+    // and the merged pile lands where the drop was.
+    if (target && target.stack !== carrying.id) {
+      const merged = mergeStacks(entities, carrying.id, target);
+      const id = merged.find((entry) => entry.entity === entityId)?.stack;
+      return id ? moveStack(merged, id, position, level, room) : merged;
+    }
+    return moveStack(entities, carrying.id, position, level, room);
+  }
+
+  // One marker in the hand. If it was on a pile it leaves it first, which also
+  // dissolves a pile of two down to a plain marker.
+  const freed = pile ? leaveStack(entities, entityId) : [...entities];
+
+  const onto = target ? (freed.find((entry) => entry.entity === target.entity) ?? null) : null;
+  if (onto && onto.entity !== entityId) {
+    const joined = joinStack(freed, entityId, onto);
+    const id = joined.find((entry) => entry.entity === entityId)?.stack;
+    return id ? moveStack(joined, id, position, level, room) : joined;
+  }
+
+  return freed.map((entry) => {
+    if (entry.entity !== entityId) return entry;
+    const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
     if (room) moved.room = room;
     else delete moved.room;
     return moved;
+  });
+}
+
+/**
+ * The things a pile says about itself, and the only ones it may write to its
+ * members.
+ *
+ * `room` is deliberately not here. A stack groups chips on the screen; where a
+ * lamp hangs and which room a sensor is measuring is each entity's own
+ * statement, and a grouping must never overwrite it.
+ */
+export const STACK_FIELDS = ['stackRoom', 'stackColor'] as const;
+export type StackField = (typeof STACK_FIELDS)[number];
+
+/**
+ * Apply a patch to one marker, spreading the pile's own fields to everyone on
+ * it — they are held on every member so the pile keeps them whichever of them
+ * is drawn first, and a patch that reached only one would leave the others
+ * disagreeing with a frame and a line that speak for all of them.
+ */
+export function applyStackPatch(
+  entities: readonly PlacedEntity[],
+  entityId: string,
+  patch: Partial<PlacedEntity>,
+): PlacedEntity[] {
+  const index = entities.findIndex((entry) => entry.entity === entityId);
+  if (index < 0) return [...entities];
+
+  const next = entities.map((entry, i) => (i === index ? { ...entry, ...patch } : entry));
+  const pile = next[index].stack;
+  const shared = STACK_FIELDS.filter((key) => key in patch);
+  if (!pile || shared.length === 0) return next;
+
+  return next.map((entry) => {
+    if (entry.stack !== pile) return entry;
+    const updated = { ...entry };
+    for (const key of shared) {
+      const value = patch[key];
+      if (value) updated[key] = value;
+      else delete updated[key];
+    }
+    return updated;
   });
 }

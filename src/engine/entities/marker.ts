@@ -47,6 +47,22 @@ const ROOM_LEADER_MIN_M = 0.6;
 /** Metres the pill floats above its anchor when no offset is configured. */
 const DEFAULT_LIFT = 0.34;
 
+/**
+ * Screen pixels between the anchor dot and the chip above it.
+ *
+ * Enough that the dot is never inside the chip's hit rectangle, whatever the
+ * camera is doing — the dot is how you move the entity, so it has to be
+ * reachable from every angle rather than from the close ones.
+ *
+ * Measured across the rigs the card actually uses, as the band of clear screen
+ * above the dot (the separation less the chip's 22 px half-height). At 26 px
+ * the steep near-plan view left 7.9 px, which is less than the dot's own 8 px
+ * radius: its top half was inside the chip, and the chip wins ties by design.
+ * 30 px leaves 12.0 px there and 21.7 px at the isometric default, so the whole
+ * dot is grabbable from every angle.
+ */
+const CLEARANCE_PX = 30;
+
 /** Fallback row pitch until the layer has measured the chips in the pile. */
 const STACK_ROW_PX = 34;
 
@@ -307,7 +323,33 @@ export class EntityMarker {
 
   /** The room this marker labels, for the layer's anchor lookup. */
   get roomName(): string | undefined {
+    return this.leaderRoom();
+  }
+
+  /**
+   * The room the leader line runs to.
+   *
+   * On a pile that is the pile's own room, when it has been given one: a stack
+   * is a visual grouping and does not touch what its members say about
+   * themselves, so the two are separate statements and the pile's is the one
+   * its line is drawn from.
+   */
+  private leaderRoom(): string | undefined {
+    if (this.placedEntity.stack) return this.placedEntity.stackRoom ?? this.placedEntity.room;
     return this.placedEntity.room;
+  }
+
+  /**
+   * Where this marker is, as the config states it — the drawn position with the
+   * exploded view's lift taken back off.
+   *
+   * Everything outside the layer means this one: a cancelled drag restores it
+   * through `setPosition`, which puts the lift back on. Handing out the drawn
+   * position instead sent the marker up one storey-gap per cancelled drag.
+   */
+  get configPosition(): Vec3 {
+    const p = this.object.position;
+    return [p.x, p.y - this.levelLift, p.z];
   }
 
   setPosition(position: Vec3): void {
@@ -335,10 +377,14 @@ export class EntityMarker {
    * none. The layer hands the whole table down whenever the model changes.
    */
   setRoomAnchors(anchors: ReadonlyMap<string, Vec3> | null): void {
-    const room = this.placedEntity.room;
+    const room = this.leaderRoom();
     // Level first: room ids are unique per storey, not across the building, so
     // a house with a hallway on every floor has three rooms called `flur`, and
     // the bare name then answers a different question than the one asked.
+    //
+    // The fallback takes the name as given, which is also how a pile points at a
+    // room on another storey: the anchors are keyed `level|room`, so a
+    // storey-qualified name written by the stack panel is already a key.
     const level = this.placedEntity.level;
     const point =
       room && anchors
@@ -501,18 +547,20 @@ export class EntityMarker {
     const lift = this.baseLift + HOVER_LIFT * this.hoverAmt;
     this.body.position.set(this.labelX, lift, this.labelZ);
 
-    // A stack is read as a list, so its rows are spaced on the *screen* — and
-    // that means straight up the screen, not straight up the house. A world-Y
-    // offset is foreshortened by the cosine of the camera's elevation: 36 px of
-    // pitch became 29 px at the isometric default, against 30 px chips, so the
-    // rows overlapped in exactly the view the card ships with, and collapsed
-    // into one another as you tilted further over. Offsetting along the
-    // camera's own up axis is the same number of pixels at any angle.
-    if (this.stackIndex > 0) {
-      const unit = this.pixelUnit(ctx, this.object.position);
-      _screenUp.setFromMatrixColumn(ctx.activeCamera.matrixWorld, 1).normalize();
-      this.body.position.addScaledVector(_screenUp, this.stackIndex * this.stackSpacing * unit);
-    }
+    // Up the *screen*, not up the house — for the chip's own clearance as much
+    // as for the rows of a pile.
+    //
+    // A world-Y offset is foreshortened by the cosine of the camera's
+    // elevation. For a pile that made the rows overlap at the isometric default
+    // and collapse as you tilted further. For a single marker it did something
+    // quieter and worse: the chip's 34 cm of clearance arrived as about seven
+    // pixels at ordinary framing, so the chip's own hit rectangle swallowed the
+    // anchor dot beneath it and the dot — the handle that moves the entity —
+    // could not be grabbed at all.
+    const anchorUnit = this.pixelUnit(ctx, this.object.position);
+    _screenUp.setFromMatrixColumn(ctx.activeCamera.matrixWorld, 1).normalize();
+    const clearancePx = this.stackIndex * this.stackSpacing + CLEARANCE_PX;
+    this.body.position.addScaledVector(_screenUp, clearancePx * anchorUnit);
     // Crowded markers give up the label that was covering a neighbour, but not
     // the leader: the line is what says something is there and, when it points
     // at a room, which room that is. Dropping both leaves a bare crosshair,
@@ -533,8 +581,12 @@ export class EntityMarker {
     // Hidden label, so the leader stops at the anchor rather than running up to
     // a pill that is not being drawn. Sideways too: a label dragged out of the
     // way is only readable if the line still says which anchor it belongs to.
+    // The chip's own position, all three components: the clearance above the
+    // anchor is a screen offset, so it leans with the camera and has a vertical
+    // share of its own. Ending the line at `lift` left it stopping short of the
+    // chip it is supposed to reach.
     const tipX = showLabel ? this.body.position.x : 0;
-    const tipY = showLabel ? lift : 0;
+    const tipY = showLabel ? this.body.position.y : 0;
     const tipZ = showLabel ? this.body.position.z : 0;
     const p = this.leaderPositions;
     if (p[6] !== tipX || p[7] !== tipY || p[8] !== tipZ) {
@@ -630,6 +682,18 @@ export class EntityMarker {
     return this.placedEntity.marker?.color ?? this.visual?.color ?? this.accent;
   }
 
+  /**
+   * The ink of the leader line.
+   *
+   * On a pile it is the pile's, so the line reads as coming from the stack
+   * rather than from whichever of its members happens to be the bottom row —
+   * and it matches the frame the line starts at. Alone, a marker's line is its
+   * own colour, which is what says the lamp is on.
+   */
+  private leaderColor(): string {
+    return this.placedEntity.stackColor ?? this.currentColor();
+  }
+
   private artState(): MarkerVisualState {
     if (this.selected) return 'selected';
     if (this.hovered) return 'hover';
@@ -652,7 +716,7 @@ export class EntityMarker {
     this.anchorCell = this.atlas.cell({ variant: 'anchor', color });
     this.applyCells();
 
-    this.leaderMaterial.color.set(color);
+    this.leaderMaterial.color.set(this.leaderColor());
   }
 
   private applyCells(): void {

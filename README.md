@@ -357,12 +357,24 @@ marker *is* the gesture, and that is decided by what overlaps on screen.
 | --- | --- |
 | Drop a marker on another | They stack |
 | Drag one **label** onto another | The same: labels are what you can see and grab |
-| Drag the stack's **anchor dot** | The whole pile moves |
-| Drag one **label** off the pile | That marker leaves the stack and lands where you dropped it |
+| Drag the stack's **grab bar** or its **anchor dot** | The whole pile moves |
+| Drop a whole pile on another marker | The two piles merge |
+| Drag one **row** off the pile | That marker leaves the stack and lands where you dropped it |
+| Drag a row around inside the pile | Nothing: it is still on the pile it started on |
+| Tap the **grab bar** | The stack's own settings open |
+
+The cursor says which of these a release would do before you let go, so the
+gesture is never a guess.
 
 Taking the second-to-last marker out dissolves the stack, because a stack of
 one is a marker. In the YAML it is one field, `stack:`, shared by the members —
 nothing to maintain by hand.
+
+**A stack groups chips on the screen, and nothing more.** It never speaks for
+the entities in it: where a lamp hangs and which room a sensor is measuring stay
+each entity's own `room`, untouched by piling them up. What the pile does have
+of its own is a colour and a room for its leader line, set by tapping its grab
+bar and written to every member as `stackColor` and `stackRoom`.
 
 **Anchor and label are two things.** The dot is the entity — where the lamp
 hangs, where its light comes from. The chip is a caption, and a plan is full of
@@ -552,6 +564,8 @@ tour:
 | `name` | string | friendly name | Label override. |
 | `role` | see below | derived from the domain | Forces the visual treatment. |
 | `stack` | string | — | Markers sharing this id share one spot. Written by dropping one marker onto another, cleared by dragging a label back out; nothing to maintain by hand. |
+| `stackRoom` | string | — | The room the *pile's* leader line runs to — any room in the house, including one on another storey. Not the entity's own `room`, which a stack never touches. Written by dragging the pile out of a room, or in the stack's settings. A room id is unique per storey, so a name that occurs on several is written storey-qualified as `level\|room`. |
+| `stackColor` | string | the card accent | The pile's ink: its frame, its grab bar and its leader line. Held on every member so the pile keeps it whichever row is drawn first. |
 | `light` | [`LightVisualConfig`](#light-options) | — | Only meaningful for the `light` role. |
 | `marker` | [`MarkerConfig`](#marker-options) | — | Marker appearance. |
 | `tap_action` | `ActionConfig` | `toggle`, or nothing | What a tap does. Entities that can be operated (lights, switches, covers, …) toggle; entities you can only read do nothing, because a floorplan on a wall gets touched by people walking past and a sensor is not a control. Set `more-info` to open the dialog on tap. |

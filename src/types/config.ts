@@ -266,6 +266,26 @@ export interface PlacedEntity {
    * onto another, cleared by dragging its label back out.
    */
   stack?: string;
+  /**
+   * The room the *pile* points at, which is not the room its members are in.
+   *
+   * A stack groups chips on the screen; it says nothing about where a lamp
+   * hangs or which room a sensor is measuring — those stay each entity's own
+   * `room`, and a stack never writes them. This is only where the pile's leader
+   * line runs to, and it is held on every member so the pile keeps it whichever
+   * of them is drawn first.
+   */
+  stackRoom?: string;
+  /**
+   * The pile's own colour: its frame, its grab bar and the line it runs to the
+   * room it names.
+   *
+   * A stack is one thing on the plan and needs to read as one, which the
+   * members cannot say for themselves — their chips are coloured by what they
+   * are and what they are doing. Held on every member, the way `room` is, so
+   * that the pile keeps it however the list is reordered.
+   */
+  stackColor?: string;
   light?: LightVisualConfig;
   /**
    * The room this entity belongs to.

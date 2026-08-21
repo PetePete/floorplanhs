@@ -719,6 +719,13 @@ function readEntities(raw: unknown[], path: string): PlacedEntity[] {
     if (room) placed.room = room;
     const stack = readString(obj, 'stack', here);
     if (stack) placed.stack = stack;
+    // What the pile says about itself, held on every member. Read back out here
+    // or it is dropped on the next round-trip — this rebuilds the entity from
+    // the keys it knows, so a field it does not know does not survive one.
+    const stackRoom = readString(obj, 'stackRoom', here);
+    if (stackRoom) placed.stackRoom = stackRoom;
+    const stackColor = readString(obj, 'stackColor', here);
+    if (stackColor) placed.stackColor = stackColor;
     if (obj.light !== undefined && obj.light !== null) {
       placed.light = readLightVisual(obj.light, child(here, 'light'));
     }

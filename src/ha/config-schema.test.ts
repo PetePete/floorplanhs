@@ -328,6 +328,33 @@ describe('normalizeConfig', () => {
     const once = normalizeConfig({ type: TYPE, entities: [{ entity: 'light.a', position: [1, 2, 3] }] });
     expect(normalizeConfig(once)).toEqual(once);
   });
+
+  /**
+   * The entity is rebuilt from the keys the schema knows, so a key it does not
+   * know does not survive a round-trip — and every placement the card makes goes
+   * through one. A stack that loses its colour on the next save is a stack whose
+   * settings do not stick.
+   */
+  it('keeps what a stack says about itself', () => {
+    const config = normalizeConfig({
+      type: TYPE,
+      entities: [
+        {
+          entity: 'light.a',
+          position: [1, 2, 3],
+          room: 'kitchen',
+          stack: 'stack_1',
+          stackRoom: 'hall',
+          stackColor: '#ff8800',
+        },
+      ],
+    });
+    const placed = config.entities?.[0];
+    expect(placed?.stack).toBe('stack_1');
+    expect(placed?.stackRoom).toBe('hall');
+    expect(placed?.stackColor).toBe('#ff8800');
+    expect(placed?.room, 'and what the entity says about itself, separately').toBe('kitchen');
+  });
 });
 
 /* -------------------------------------------------------------- migrations */

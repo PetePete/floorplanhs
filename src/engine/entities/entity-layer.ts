@@ -339,12 +339,21 @@ export class EntityLayer implements IEntityLayer {
       const height = rows + spread;
       const unit = worldUnitsPerPixel(ctx.activeCamera, marker.getBodyWorldPosition(_framePoint), ctx.size.height);
 
+      // The pile's own ink, if it was given one. Read off the members, so it
+      // survives whichever of them happens to be the first row.
+      const ink =
+        visible
+          .map((entityId) => this.markers.get(entityId)?.placed.stackColor)
+          .find((color): color is string => typeof color === 'string' && color.length > 0) ??
+        this.options.accent ??
+        '#03a9f4';
+
       let frame = this.frames.get(id);
       // A canvas is the only way to paint a dashed rectangle here, and a node
       // harness has none. No frame is better than no card.
       if (!frame && typeof document === 'undefined') continue;
       if (!frame) {
-        frame = new StackFrame(this.options.accent ?? '#03a9f4');
+        frame = new StackFrame(ink);
         this.frames.set(id, frame);
         this.group.add(frame.sprite);
       }
@@ -357,7 +366,7 @@ export class EntityLayer implements IEntityLayer {
         _framePoint,
         { width, height },
         unit,
-        this.options.accent ?? '#03a9f4',
+        ink,
         ctx.size.pixelRatio,
         _frameUp,
         id === this.highlightStack,
@@ -775,10 +784,7 @@ export class EntityLayer implements IEntityLayer {
 
   /** Anchor position of a placed marker; used to restore a cancelled move. */
   getEntityPosition(entityId: string): Vec3 | null {
-    const marker = this.markers.get(entityId);
-    if (!marker) return null;
-    const p = marker.object.position;
-    return [p.x, p.y, p.z];
+    return this.markers.get(entityId)?.configPosition ?? null;
   }
 
   getPlacedEntity(entityId: string): PlacedEntity | null {

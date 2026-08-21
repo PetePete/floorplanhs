@@ -133,20 +133,31 @@ describe('label offset', () => {
     m.dispose();
   });
 
-  it('runs the leader out to where the label went', () => {
+  /** The chip's own position, in the marker's frame. */
+  function chip(m: EntityMarker): THREE.Vector3 {
+    return (m as unknown as { body: THREE.Group }).body.position.clone();
+  }
+
+  it('runs the leader out to wherever the label is drawn', () => {
     const m = marker({ position: [0, 0, 0] });
     m.setLabelOffset([2, 0.4, -1]);
     frame(m);
-    expect(tip(m).x).toBeCloseTo(2, 3);
-    expect(tip(m).z).toBeCloseTo(-1, 3);
+    // Not to the configured offset — to the chip. The two differ by the chip's
+    // clearance above the anchor, which is a screen distance and therefore
+    // leans with the camera.
+    expect(tip(m).x).toBeCloseTo(chip(m).x, 5);
+    expect(tip(m).y).toBeCloseTo(chip(m).y, 5);
+    expect(tip(m).z).toBeCloseTo(chip(m).z, 5);
+    expect(tip(m).x).toBeGreaterThan(1);
     m.dispose();
   });
 
-  it('keeps the leader pointing straight up when nothing was pushed aside', () => {
+  it('reaches the chip even when no offset was configured', () => {
     const m = marker({ position: [0, 0, 0] });
     frame(m);
-    expect(tip(m).x).toBeCloseTo(0, 5);
-    expect(tip(m).z).toBeCloseTo(0, 5);
+    expect(tip(m).x).toBeCloseTo(chip(m).x, 5);
+    expect(tip(m).y).toBeCloseTo(chip(m).y, 5);
+    expect(tip(m).z).toBeCloseTo(chip(m).z, 5);
     expect(tip(m).y).toBeGreaterThan(0);
     m.dispose();
   });
@@ -214,25 +225,34 @@ describe('the pitch of a pile', () => {
   }
 
   it('lifts a row by the pitch it was given', () => {
+    // Row 0 carries the chip's own clearance; the rows above add their pitch to
+    // it, so the pitch is what the *differences* measure.
+    const base = marker({ position: [0, 0, 0] });
+    base.setStackIndex(0, 3, 30);
+    const ground = liftOf(base);
+
     const one = marker({ position: [0, 0, 0] });
-    one.setStackIndex(1, 2, 30);
-    const tight = liftOf(one);
+    one.setStackIndex(1, 3, 30);
+    const tight = liftOf(one) - ground;
 
     const other = marker({ position: [0, 0, 0] });
-    other.setStackIndex(1, 2, 60);
-    const loose = liftOf(other);
+    other.setStackIndex(1, 3, 60);
+    const loose = liftOf(other) - ground;
 
     expect(loose).toBeGreaterThan(tight);
-    // Twice the pitch, twice the gap above the anchor's own lift.
-    expect(loose - 0.34).toBeCloseTo((tight - 0.34) * 2, 4);
+    expect(loose).toBeCloseTo(tight * 2, 4);
+    base.dispose();
     one.dispose();
     other.dispose();
   });
 
-  it('leaves a marker that stands alone at its resting lift', () => {
+  it('puts a marker that stands alone one clearance above its anchor', () => {
     const m = marker({ position: [0, 0, 0] });
     m.setStackIndex(0, 1, 40);
-    expect(liftOf(m)).toBeCloseTo(0.34, 5);
+    // Above the anchor, and by less than the pitch of a whole row.
+    const lift = liftOf(m);
+    expect(lift).toBeGreaterThan(0.34);
+    expect(lift).toBeLessThan(0.34 + 1);
     m.dispose();
   });
 });
@@ -326,5 +346,167 @@ describe('a row across many frames', () => {
     for (let i = 0; i < 120; i += 1) row.update(1 / 60, ctx);
     expect(body.position.distanceTo(first)).toBeLessThan(1e-6);
     row.dispose();
+  });
+});
+
+/**
+ * The exploded view draws a storey somewhere it is not. Anything that reads a
+ * position back out has to undo that, or the lift is written down as if it were
+ * real — a cancelled drag put the marker back at its *drawn* height, and the
+ * next cancel added the gap again.
+ */
+describe('a storey pulled apart', () => {
+  it('reports where the marker really is, not where it is drawn', () => {
+    const m = marker({ position: [1, 2.5, 3], level: 'upper' });
+    m.setLevelOffsets(new Map([['upper', 3]]));
+    expect(m.object.position.y, 'drawn up with its storey').toBeCloseTo(5.5, 5);
+    expect(m.configPosition).toEqual([1, 2.5, 3]);
+    m.dispose();
+  });
+
+  it('survives being put back where it was, however often', () => {
+    const m = marker({ position: [1, 2.5, 3], level: 'upper' });
+    m.setLevelOffsets(new Map([['upper', 3]]));
+    for (let i = 0; i < 5; i += 1) m.setPosition(m.configPosition);
+    expect(m.configPosition[1]).toBeCloseTo(2.5, 5);
+    m.dispose();
+  });
+});
+
+/**
+ * The chip's clearance is a *screen* distance.
+ *
+ * It has to be, because a world offset is foreshortened by the cosine of the
+ * camera's elevation: 34 cm of lift arrives as about seven pixels in a near-plan
+ * view, and then the chip's own hit rectangle swallows the anchor dot — the
+ * handle that moves the entity. The rows of a pile have the same problem and it
+ * is the same fix, so both are measured here rather than argued about.
+ */
+describe('clearance, seen from anywhere', () => {
+  /** A camera `elevation` degrees above the ground, looking at the origin. */
+  function rig(elevationDeg: number, distance = 18): THREE.PerspectiveCamera {
+    const el = THREE.MathUtils.degToRad(elevationDeg);
+    const camera = new THREE.PerspectiveCamera(50, 4 / 3, 0.1, 500);
+    camera.position.set(
+      distance * Math.cos(el) * Math.SQRT1_2,
+      distance * Math.sin(el),
+      distance * Math.cos(el) * Math.SQRT1_2,
+    );
+    camera.lookAt(0, 0, 0);
+    camera.updateMatrixWorld(true);
+    return camera;
+  }
+
+  const SIZE = { width: 1200, height: 800, pixelRatio: 1 };
+
+  function draw(m: EntityMarker, camera: THREE.PerspectiveCamera): void {
+    m.update(1 / 60, {
+      size: SIZE,
+      activeCamera: camera,
+      clippingPlanes: [],
+      invalidate: () => {},
+    } as unknown as Parameters<EntityMarker['update']>[1]);
+  }
+
+  /** Where a world point lands, in CSS pixels. */
+  function project(camera: THREE.PerspectiveCamera, point: THREE.Vector3): THREE.Vector2 {
+    const p = point.clone().project(camera);
+    return new THREE.Vector2(
+      (p.x * 0.5 + 0.5) * SIZE.width,
+      (1 - (p.y * 0.5 + 0.5)) * SIZE.height,
+    );
+  }
+
+  /** Screen distance from a marker's anchor to the chip above it. */
+  function separation(m: EntityMarker, camera: THREE.PerspectiveCamera): number {
+    draw(m, camera);
+    m.object.updateMatrixWorld(true);
+    const body = new THREE.Vector3().setFromMatrixPosition(
+      (m as unknown as { body: THREE.Group }).body.matrixWorld,
+    );
+    return project(camera, body).distanceTo(project(camera, m.object.position));
+  }
+
+  // The isometric default, a near-plan view, a low eye and a steep one: the
+  // rigs a floorplan is actually looked at from.
+  const angles = [35.264, 78, 12, 60];
+
+  it('holds the chip clear of the dot from every angle', () => {
+    for (const angle of angles) {
+      const m = marker({ position: [0, 0, 0] });
+      // Clear of the chip's own 22 px half-height, with the dot's 8 px radius
+      // to spare — a dot half inside the chip cannot be grabbed, because the
+      // chip wins every tie.
+      expect(separation(m, rig(angle)), `${angle}°`).toBeGreaterThan(22 + 8);
+      m.dispose();
+    }
+  });
+
+  it('keeps the rows of a pile a fixed number of pixels apart', () => {
+    for (const angle of angles) {
+      const first = marker({ position: [0, 0, 0] });
+      first.setStackIndex(0, 2, 36);
+      const second = marker({ position: [0, 0, 0] });
+      second.setStackIndex(1, 2, 36);
+
+      const pitch = separation(second, rig(angle)) - separation(first, rig(angle));
+      // Within a pixel of what was asked for: the rows are 30 px tall, so any
+      // real shortfall is two chips printed on top of each other.
+      expect(pitch, `${angle}°`).toBeGreaterThan(35);
+      expect(pitch, `${angle}°`).toBeLessThan(38);
+      first.dispose();
+      second.dispose();
+    }
+  });
+});
+
+/**
+ * A pile's line is the pile's, not its members'.
+ *
+ * A stack groups chips on the screen and never speaks for the entities in it,
+ * so where its line runs is a separate statement from where any of them is —
+ * including a room on another storey, which is exactly the case a shelf of
+ * readings parked clear of the plan is for.
+ */
+describe('the line a stack draws', () => {
+  const UPSTAIRS: Vec3 = [0, 3, 6];
+  const table = new Map<string, Vec3>([
+    ['kitchen', KITCHEN],
+    ['ground|kitchen', KITCHEN],
+    ['upper|hall', UPSTAIRS],
+  ]);
+
+  function leaderTarget(m: EntityMarker): THREE.Vector3 {
+    const p = (m as unknown as { leaderPositions: Float32Array }).leaderPositions;
+    return new THREE.Vector3(p[0], p[1], p[2]);
+  }
+
+  it('runs to the pile’s room, not the marker’s own', () => {
+    const m = marker({
+      position: [-4, 0, 0],
+      level: 'ground',
+      room: 'kitchen',
+      stack: 's',
+      stackRoom: 'upper|hall',
+    });
+    m.setRoomAnchors(table);
+    // Local frame: the upstairs hall against a marker parked 4 m west.
+    expect(leaderTarget(m).x).toBeCloseTo(4, 5);
+    expect(leaderTarget(m).z).toBeCloseTo(6, 5);
+    m.dispose();
+  });
+
+  it('falls back to the marker’s own room when the pile named none', () => {
+    const m = marker({ position: [-4, 0, 0], level: 'ground', room: 'kitchen', stack: 's' });
+    m.setRoomAnchors(table);
+    expect(leaderTarget(m).x).toBeCloseTo(8, 5);
+    m.dispose();
+  });
+
+  it('ignores a pile room on a marker that is not on a pile', () => {
+    const m = marker({ position: [-4, 0, 0], level: 'ground', room: 'kitchen', stackRoom: 'upper|hall' });
+    m.setRoomAnchors(table);
+    expect(leaderTarget(m).x, 'its own room wins').toBeCloseTo(8, 5);
+    m.dispose();
   });
 });

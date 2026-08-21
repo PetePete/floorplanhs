@@ -22,6 +22,7 @@ import type {
   Subsystem,
   ViewerEvents,
 } from '@/engine/contracts';
+import type { MarkerPart } from '@/engine/entities/entity-layer';
 import type { Emitter } from '@/util/events';
 
 export type PointerKind = 'mouse' | 'touch' | 'pen';
@@ -106,11 +107,11 @@ export interface PointerRouterOptions {
  */
 interface PointerAwarePick {
   pick(ndc: { x: number; y: number }, options?: { pointerType?: PointerKind }): string | null;
-  /** Anchor or label; see `EntityLayer.pickPart`. Absent on a stub layer. */
+  /** Anchor, label or grab bar; see `EntityLayer.pickPart`. Absent on a stub layer. */
   pickPart?(
     ndc: { x: number; y: number },
     options?: { pointerType?: PointerKind },
-  ): { entityId: string; part: 'anchor' | 'label' } | null;
+  ): { entityId: string; part: MarkerPart; stackId: string | null } | null;
 }
 
 type GestureMethod =
@@ -149,7 +150,9 @@ const DEFAULTS: Required<PointerRouterOptions> = {
 
 export class PointerRouter implements Subsystem {
   /** Which part of the marker this gesture went down on; see `pickUp`. */
-  private grabbedPart: 'anchor' | 'label' | null = null;
+  private grabbedPart: MarkerPart | null = null;
+  /** The pile that marker is on, read at the same moment as the part. */
+  private grabbedStack: string | null = null;
   private readonly handlers: GestureHandler[] = [];
   private readonly options: Required<PointerRouterOptions>;
 
@@ -343,6 +346,7 @@ export class PointerRouter implements Subsystem {
     const part = this.pickEntityPart(this.sample.ndc, type);
     this.primary.entityId = part?.entityId ?? null;
     this.grabbedPart = part?.part ?? null;
+    this.grabbedStack = part?.stackId ?? null;
     this.dispatch('onDown');
 
     if (this.sample.claimed) this.capture(event);
@@ -374,6 +378,13 @@ export class PointerRouter implements Subsystem {
       primary.dragging = true;
       this.clearHoldTimer();
       this.dispatch('onDragStart');
+      // A drag is claimed here, not on the way down — a press that turns into a
+      // drag is the whole point of the threshold. Without the capture the
+      // pointer stops being ours the moment it leaves the canvas: let go over
+      // the dashboard and no `pointerup` ever arrives, so the drag is still
+      // running when the mouse comes back and the marker follows a pointer
+      // nobody is pressing.
+      if (this.sample.claimed) this.capture(event);
     } else if (primary.dragging) {
       this.dispatch('onDrag');
     } else {
@@ -494,6 +505,13 @@ export class PointerRouter implements Subsystem {
     },
     onTap: (ev) => {
       const entityId = this.primary?.entityId ?? null;
+      // The grab bar taken by itself: the pile is what was tapped, not the
+      // marker whose row happens to sit at the bottom of it.
+      if (this.grabbedPart === 'stack' && this.grabbedStack && entityId) {
+        this.emitter.emit('stack-activate', { stackId: this.grabbedStack, entityId });
+        ev.claim();
+        return;
+      }
       this.entities.setSelected(entityId);
       if (!entityId) return;
       this.emitter.emit('entity-activate', { entityId, action: 'tap' });
@@ -599,8 +617,17 @@ export class PointerRouter implements Subsystem {
    * Two things live at one marker — where the lamp is, and where its caption is
    * — and one drag gesture has to serve both. What the pointer went down on is
    * the only honest way to tell them apart.
+   *
+   * On a pile there is a third thing, and the caption stops being one of them: a
+   * row's position is decided by the pile, not by an offset of its own, so
+   * dragging a row can only mean "take this one out". The grab bar and the
+   * shared anchor take the whole pile.
    */
   private pickUp(entityId: string): void {
+    if (this.grabbedStack && this.grabbedPart === 'label') {
+      this.placement.beginMove(entityId, { carryStack: false });
+      return;
+    }
     if (this.grabbedPart === 'label') this.placement.beginLabelMove(entityId);
     else this.placement.beginMove(entityId);
   }
@@ -608,13 +635,13 @@ export class PointerRouter implements Subsystem {
   private pickEntityPart(
     ndc: { x: number; y: number },
     type: PointerKind,
-  ): { entityId: string; part: 'anchor' | 'label' } | null {
+  ): { entityId: string; part: MarkerPart; stackId: string | null } | null {
     const layer = this.entities as IEntityLayer & PointerAwarePick;
     if (typeof layer.pickPart === 'function') {
       return layer.pickPart({ x: ndc.x, y: ndc.y }, { pointerType: type });
     }
     const entityId = this.pickEntity(ndc, type);
-    return entityId ? { entityId, part: 'anchor' } : null;
+    return entityId ? { entityId, part: 'anchor', stackId: null } : null;
   }
 
   private setHover(entityId: string | null): void {
@@ -684,10 +711,19 @@ export class PointerRouter implements Subsystem {
     this.holdTimer = null;
   }
 
+  /**
+   * Hold on to the pointer for the rest of the gesture.
+   *
+   * On the *canvas*, not on the node we listen on. OrbitControls captures the
+   * pointer on the canvas too, and capturing on an ancestor instead moves the
+   * event target up there — so the canvas would stop receiving the release and
+   * OrbitControls would be left mid-rotate. The same element for both means our
+   * capture is its capture, and events still reach us on the way down.
+   */
   private capture(event: PointerEvent): void {
     this.consume(event);
     try {
-      this.eventTarget?.setPointerCapture(event.pointerId);
+      this.canvas?.setPointerCapture(event.pointerId);
     } catch {
       // Capture can legitimately fail if the pointer already went up.
     }
@@ -695,8 +731,8 @@ export class PointerRouter implements Subsystem {
 
   private releaseCapture(pointerId: number): void {
     try {
-      if (this.eventTarget?.hasPointerCapture(pointerId)) {
-        this.eventTarget.releasePointerCapture(pointerId);
+      if (this.canvas?.hasPointerCapture(pointerId)) {
+        this.canvas.releasePointerCapture(pointerId);
       }
     } catch {
       /* already released */
@@ -707,9 +743,23 @@ export class PointerRouter implements Subsystem {
    * Swallow the event so neither OrbitControls nor the page reacts. Touch only
    * gets `preventDefault` once the gesture is claimed, so a user scrolling the
    * dashboard past the card is never blocked.
+   *
+   * Never the end of a gesture, though. OrbitControls binds `pointermove` and
+   * `pointerup` on the canvas when a press starts, and its `pointerup` is the
+   * only thing that puts it back to `STATE.NONE` and takes those listeners off
+   * again. We listen one node up in the capture phase, so stopping the release
+   * meant OrbitControls never learned the button had come up: it sat in
+   * `STATE.ROTATE`, and the moment the camera was enabled again — right after
+   * the tap it never saw the end of — the house spun with every mouse move,
+   * with no button pressed. Tap a marker, and the card stopped answering
+   * properly.
+   *
+   * A release that reaches the canvas costs us nothing: the camera is suspended
+   * for the length of anything we claimed, so all it does is let the other
+   * listener close its own gesture.
    */
   private consume(event: PointerEvent): void {
-    event.stopPropagation();
+    if (event.type !== 'pointerup' && event.type !== 'pointercancel') event.stopPropagation();
     if (event.pointerType === 'touch' && event.cancelable) event.preventDefault();
   }
 

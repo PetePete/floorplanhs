@@ -35,6 +35,10 @@ export class Fp3dLevelSelector extends FpBaseElement {
         gap: 2px;
         padding: 4px;
         border-radius: var(--fp3d-chrome-radius);
+        /* One width for both panels in the rail; see --fp3d-rail-width. */
+        width: var(--fp3d-rail-width, 208px);
+        max-width: 100%;
+        box-sizing: border-box;
         max-height: 100%;
         min-height: 0;
         overflow-y: auto;
