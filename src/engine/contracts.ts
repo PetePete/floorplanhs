@@ -347,11 +347,17 @@ export type EditIntent =
   | { kind: 'add-preset'; preset: CameraPreset }
   | { kind: 'update-preset'; presetId: string; patch: Partial<CameraPreset> }
   | { kind: 'remove-preset'; presetId: string }
-  /** Entities that live in the panel rather than on the plan. */
-  /** A row dragged clear of the pile: this marker leaves it, and lands here. */
   /**
-   * A marker put somewhere else. `carryStack: false` means one row of a pile
-   * was in the hand, so the rest of that pile stays where it is.
+   * A row moved to another place in its pile.
+   *
+   * The rows are drawn in the order the config lists them, so this reorders
+   * `entities` — and the bottom row is the one that keeps the anchor dot and
+   * the leader line.
+   */
+  | { kind: 'reorder-stack'; stackId: string; from: number; to: number }
+  /**
+   * A row dragged clear of the pile: this marker leaves it, and lands here.
+   * The rest of the pile stays where it is.
    */
   | {
       kind: 'unstack-entity';
@@ -361,6 +367,7 @@ export type EditIntent =
       /** The room it was dragged out of, for its own leader line. */
       room?: string;
     }
+  /** Entities that live in the panel rather than on the plan. */
   | { kind: 'add-shortcut'; entityId: string }
   | { kind: 'remove-shortcut'; entityId: string }
   | { kind: 'set-section'; section: SectionState };

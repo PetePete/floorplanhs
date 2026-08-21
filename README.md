@@ -362,6 +362,7 @@ marker *is* the gesture, and that is decided by what overlaps on screen.
 | Drag one **row** off the pile | That marker leaves the stack and lands where you dropped it |
 | Drag a row around inside the pile | Nothing: it is still on the pile it started on |
 | Tap the **grab bar** | The stack's own settings open |
+| Drag a row in those settings | The pile is reordered |
 
 The cursor says which of these a release would do before you let go, so the
 gesture is never a guess.
@@ -375,6 +376,13 @@ the entities in it: where a lamp hangs and which room a sensor is measuring stay
 each entity's own `room`, untouched by piling them up. What the pile does have
 of its own is a colour and a room for its leader line, set by tapping its grab
 bar and written to every member as `stackColor` and `stackRoom`.
+
+The rows are drawn in the order the `entities:` list gives them, bottom row
+first — and the bottom row is the one that keeps the anchor dot and the leader
+line, so which marker sits there is worth choosing. The stack's settings list
+the rows in that order and let you move them, by dragging or with the arrows
+beside each one; the arrows are there because dragging a list is a mouse
+gesture and this card runs on wall panels too.
 
 **Anchor and label are two things.** The dot is the entity — where the lamp
 hangs, where its light comes from. The chip is a caption, and a plan is full of

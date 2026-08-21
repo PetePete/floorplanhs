@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyStackPatch,
   joinStack,
+  reorderStack,
   leaveStack,
   mergeStacks,
   resolveMove,
@@ -427,5 +428,71 @@ describe('patching through a stack', () => {
 
   it('leaves the list alone for a marker it has never heard of', () => {
     expect(applyStackPatch(pile, 'light.ghost', { stackColor: '#fff' })).toEqual(pile);
+  });
+});
+
+/**
+ * The order of the rows is the order you read the pile in, and the bottom row
+ * is the one that keeps the anchor dot and the leader line — so it is worth
+ * being able to say which marker that is.
+ */
+describe('reordering a pile', () => {
+  const ids = (entities: PlacedEntity[]): string[] => entities.map((entry) => entry.entity);
+
+  function house(): PlacedEntity[] {
+    return [
+      at('light.a', 0, 0, { stack: 's' }),
+      at('sensor.x', 7, 7),
+      at('switch.b', 0, 0, { stack: 's' }),
+      at('cover.c', 0, 0, { stack: 's' }),
+      at('fan.y', 9, 9),
+    ];
+  }
+
+  it('moves a row up the list', () => {
+    const next = reorderStack(house(), 's', 2, 0);
+    expect(ids(next)).toEqual(['cover.c', 'sensor.x', 'light.a', 'switch.b', 'fan.y']);
+  });
+
+  it('moves a row down the list', () => {
+    const next = reorderStack(house(), 's', 0, 2);
+    expect(ids(next)).toEqual(['switch.b', 'sensor.x', 'cover.c', 'light.a', 'fan.y']);
+  });
+
+  /** The pile's slots are the pile's; nothing else shifts by one. */
+  it('leaves every other marker exactly where it was', () => {
+    const next = reorderStack(house(), 's', 0, 2);
+    expect(next[1].entity).toBe('sensor.x');
+    expect(next[4].entity).toBe('fan.y');
+  });
+
+  it('takes an overshoot as the end of the list', () => {
+    const next = reorderStack(house(), 's', 0, 99);
+    expect(ids(next)).toEqual(['switch.b', 'sensor.x', 'cover.c', 'light.a', 'fan.y']);
+  });
+
+  it('does nothing when the row is already there', () => {
+    const before = house();
+    expect(reorderStack(before, 's', 1, 1)).toEqual(before);
+  });
+
+  it('does nothing for a row that is not in the pile', () => {
+    const before = house();
+    expect(reorderStack(before, 's', 7, 0)).toEqual(before);
+  });
+
+  it('does nothing for a pile that is not there', () => {
+    const before = house();
+    expect(reorderStack(before, 'nope', 0, 1)).toEqual(before);
+  });
+
+  it('keeps what the pile says about itself on every member', () => {
+    const dressed = [
+      at('light.a', 0, 0, { stack: 's', stackColor: '#ff8800' }),
+      at('switch.b', 0, 0, { stack: 's', stackColor: '#ff8800' }),
+    ];
+    const next = reorderStack(dressed, 's', 0, 1);
+    expect(next.every((entry) => entry.stackColor === '#ff8800')).toBe(true);
+    expect(ids(next)).toEqual(['switch.b', 'light.a']);
   });
 });

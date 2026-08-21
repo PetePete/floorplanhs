@@ -106,6 +106,9 @@ const EN = {
   'ui.stack.room': 'Line to room',
   'ui.stack.room_none': 'no line',
   'ui.stack.color': 'Colour',
+  'ui.stack.members': 'Rows, bottom first',
+  'ui.stack.move_up': 'Move up',
+  'ui.stack.move_down': 'Move down',
   'ui.stack.note':
     'A stack groups these markers on screen. Each of them keeps its own room and settings — tap a row to edit one.',
 
@@ -217,6 +220,9 @@ const DE: Table = {
   'ui.stack.room': 'Linie zum Raum',
   'ui.stack.room_none': 'keine Linie',
   'ui.stack.color': 'Farbe',
+  'ui.stack.members': 'Zeilen, unterste zuerst',
+  'ui.stack.move_up': 'Nach oben',
+  'ui.stack.move_down': 'Nach unten',
   'ui.stack.note':
     'Ein Stapel gruppiert diese Marker auf dem Bildschirm. Jeder behält seinen eigenen Raum und seine Einstellungen — für einen einzelnen auf seine Zeile tippen.',
 

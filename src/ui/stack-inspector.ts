@@ -12,7 +12,7 @@
  */
 
 import { css, html, nothing, type TemplateResult } from 'lit';
-import { property } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 
 import { defineFp, FpBaseElement } from '@/ui/base-element';
 import { icon } from '@/ui/icons';
@@ -54,8 +54,8 @@ export class Fp3dStackInspector extends FpBaseElement {
         min-height: 0;
       }
 
-      /* The members, so it is obvious which pile this is. Read-only: they are
-         edited by tapping the row itself, out on the plan. */
+      /* The members, in the order they are drawn. What each of them *is* stays
+         out on the plan — tap the row there to edit one. */
       .members {
         list-style: none;
         margin: 8px 0 4px;
@@ -67,10 +67,55 @@ export class Fp3dStackInspector extends FpBaseElement {
 
       .members li {
         display: flex;
-        align-items: baseline;
+        align-items: center;
         gap: 6px;
+        min-height: 30px;
+        padding-right: 2px;
+        border-radius: var(--fp3d-chrome-radius);
         font-size: 12.5px;
         color: var(--fp3d-text);
+      }
+
+      .members li:hover {
+        background: var(--fp3d-hover);
+      }
+
+      /* Where the row would land: a rule drawn between two rows rather than a
+         gap that opens. The list is three or four items long, and things
+         jumping about in it is worse than a line. */
+      .members li.over-top {
+        box-shadow: inset 0 2px 0 var(--fp3d-accent);
+      }
+
+      .members li.over-bottom {
+        box-shadow: inset 0 -2px 0 var(--fp3d-accent);
+      }
+
+      .members li.dragging {
+        opacity: 0.45;
+      }
+
+      .grip {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 18px;
+        height: 24px;
+        color: var(--fp3d-text-dim);
+        cursor: grab;
+      }
+
+      .grip .fp-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .who {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
       }
 
       .members .id {
@@ -79,6 +124,36 @@ export class Fp3dStackInspector extends FpBaseElement {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      /* Buttons as well as the grip: dragging a list works with a mouse and
+         nowhere near a finger, and this card is meant for a wall panel too. */
+      .nudge {
+        flex: none;
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border: none;
+        border-radius: var(--fp3d-chrome-radius);
+        background: none;
+        color: var(--fp3d-text-dim);
+        cursor: pointer;
+      }
+
+      .nudge:hover:not(:disabled) {
+        background: var(--fp3d-hover);
+        color: var(--fp3d-text);
+      }
+
+      .nudge:disabled {
+        opacity: 0.25;
+        cursor: default;
+      }
+
+      .nudge .fp-icon {
+        width: 15px;
+        height: 15px;
       }
 
       .color-row {
@@ -123,6 +198,10 @@ export class Fp3dStackInspector extends FpBaseElement {
   @property({ attribute: false }) rooms: Array<{ id: string; level: string | null }> = [];
   /** Storey names, so a room that exists on several of them can be told apart. */
   @property({ attribute: false }) levels: LevelDefinition[] = [];
+
+  /** The row in hand and the row under the cursor, as positions in the list. */
+  @state() private dragRow: number | null = null;
+  @state() private overRow: number | null = null;
 
   /** What the pile says about itself; every member carries the same answer. */
   private get shared(): { room?: string; color?: string } {
@@ -169,6 +248,80 @@ export class Fp3dStackInspector extends FpBaseElement {
     this.emit('fp3d-entity-patch', { entityId: stack.members[0].entity, patch });
   }
 
+  /** Move a row, and say so once. */
+  private reorder(from: number, to: number): void {
+    if (from === to) return;
+    this.emit('fp3d-stack-reorder', { from, to });
+  }
+
+  private renderMember(member: PlacedEntity, index: number, count: number): TemplateResult {
+    const name = member.name ?? getEntityName(this.hass, member.entity);
+    // The line goes on the side the row would arrive from, which is the
+    // question a drop between two rows is really asking.
+    const over =
+      this.overRow === index && this.dragRow !== null && this.dragRow !== index
+        ? this.dragRow > index
+          ? 'over-top'
+          : 'over-bottom'
+        : '';
+
+    return html`
+      <li
+        class=${[over, this.dragRow === index ? 'dragging' : ''].filter(Boolean).join(' ')}
+        draggable="true"
+        @dragstart=${(event: DragEvent) => {
+          this.dragRow = index;
+          // Firefox refuses to start a drag with an empty payload.
+          event.dataTransfer?.setData('text/plain', member.entity);
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+        }}
+        @dragover=${(event: DragEvent) => {
+          if (this.dragRow === null) return;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+          this.overRow = index;
+        }}
+        @drop=${(event: DragEvent) => {
+          event.preventDefault();
+          // The canvas is a drop target too, and it is underneath us.
+          event.stopPropagation();
+          const from = this.dragRow;
+          this.dragRow = null;
+          this.overRow = null;
+          if (from !== null) this.reorder(from, index);
+        }}
+        @dragend=${() => {
+          this.dragRow = null;
+          this.overRow = null;
+        }}
+      >
+        <span class="grip" aria-hidden="true">${icon('drag')}</span>
+        <span class="who">
+          <span>${name}</span>
+          <span class="id">${member.entity}</span>
+        </span>
+        <button
+          class="nudge"
+          ?disabled=${index === 0}
+          aria-label=${this.t('ui.stack.move_up', 'Move up')}
+          title=${this.t('ui.stack.move_up', 'Move up')}
+          @click=${() => this.reorder(index, index - 1)}
+        >
+          ${icon('chevronUp')}
+        </button>
+        <button
+          class="nudge"
+          ?disabled=${index === count - 1}
+          aria-label=${this.t('ui.stack.move_down', 'Move down')}
+          title=${this.t('ui.stack.move_down', 'Move down')}
+          @click=${() => this.reorder(index, index + 1)}
+        >
+          ${icon('chevronDown')}
+        </button>
+      </li>
+    `;
+  }
+
   protected override render(): TemplateResult | typeof nothing {
     const stack = this.stack;
     if (!stack || stack.members.length < 2) return nothing;
@@ -196,14 +349,11 @@ export class Fp3dStackInspector extends FpBaseElement {
         </div>
 
         <div class="body scroll-y">
-          <ul class="members">
-            ${stack.members.map(
-              (member) => html`
-                <li>
-                  <span>${member.name ?? getEntityName(this.hass, member.entity)}</span>
-                  <span class="id">${member.entity}</span>
-                </li>
-              `,
+          <!-- Listed the way the pile is drawn: bottom row first. That row is
+               also the one that keeps the anchor dot and the leader line. -->
+          <ul class="members" aria-label=${this.t('ui.stack.members', 'Rows, bottom first')}>
+            ${stack.members.map((member, index) =>
+              this.renderMember(member, index, stack.members.length),
             )}
           </ul>
 

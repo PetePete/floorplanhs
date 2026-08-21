@@ -289,3 +289,45 @@ export function applyStackPatch(
     return updated;
   });
 }
+
+/**
+ * Move one member of a pile to another place in the list.
+ *
+ * The rows are drawn in the order the config lists them, bottom row first, so
+ * this is the order you read the pile in — and the bottom row is also the one
+ * that keeps the anchor dot and the leader line, which is a reason to care
+ * beyond taste.
+ *
+ * Only the pile's own slots are touched. The members keep the positions they
+ * occupy in `entities` and swap which of them sits in each, so a pile reordered
+ * in a house full of markers leaves every other marker exactly where it was —
+ * and a config diff shows the pile and nothing else.
+ */
+export function reorderStack(
+  entities: readonly PlacedEntity[],
+  stackId: string,
+  from: number,
+  to: number,
+): PlacedEntity[] {
+  const slots: number[] = [];
+  entities.forEach((entry, index) => {
+    if (entry.stack === stackId) slots.push(index);
+  });
+  if (slots.length < 2) return [...entities];
+  if (from === to) return [...entities];
+  if (from < 0 || from >= slots.length) return [...entities];
+  // Clamped rather than refused: a drag that overshoots the end of a short list
+  // means the end of the list.
+  const target = Math.max(0, Math.min(slots.length - 1, to));
+  if (from === target) return [...entities];
+
+  const members = slots.map((index) => entities[index]);
+  const [moved] = members.splice(from, 1);
+  members.splice(target, 0, moved);
+
+  const next = [...entities];
+  slots.forEach((index, row) => {
+    next[index] = members[row];
+  });
+  return next;
+}

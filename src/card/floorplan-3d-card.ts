@@ -30,7 +30,12 @@ import type {
   ModelLoadProgress,
 } from '@/engine/contracts';
 import { toEntityVisual } from '@/ha/state-mapper';
-import { applyStackPatch, leaveStack, resolveMove } from '@/engine/entities/stacks';
+import {
+  applyStackPatch,
+  leaveStack,
+  reorderStack,
+  resolveMove,
+} from '@/engine/entities/stacks';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
 import { ConfigError, normalizeConfig, stubConfig, validateConfig } from '@/ha/config-schema';
@@ -1123,6 +1128,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
           stackWith: intent.stackWith,
           carryStack: intent.carryStack,
         });
+        break;
+      }
+      case 'reorder-stack': {
+        const reordered = reorderStack(entities, intent.stackId, intent.from, intent.to);
+        // Nothing moved: no config write, no undo entry, no rebuild for a drop
+        // that landed back where it started.
+        if (reordered.every((entry, index) => entry === entities[index])) return;
+        next.entities = reordered;
         break;
       }
       case 'unstack-entity': {
@@ -2312,6 +2325,16 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
           .levels=${this.levels}
           @fp3d-entity-patch=${(event: CustomEvent<{ entityId: string; patch: Partial<PlacedEntity> }>) =>
             this.onEntityPatch(event.detail.entityId, event.detail.patch)}
+          @fp3d-stack-reorder=${(event: CustomEvent<{ from: number; to: number }>) =>
+            this.applyIntent(
+              {
+                kind: 'reorder-stack',
+                stackId: this.selectedStack ?? '',
+                from: event.detail.from,
+                to: event.detail.to,
+              },
+              false,
+            )}
           @fp3d-stack-close=${() => {
             this.selectedStack = null;
           }}
