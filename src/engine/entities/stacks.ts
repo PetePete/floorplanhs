@@ -211,20 +211,37 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
   const dissolve = remaining.length <= 1;
 
   return entities.map((entry) => {
-    if (entry.entity === entityId || (dissolve && entry.stack === id)) {
-      // Off the pile, and without the things that were the pile's: its room and
-      // its colour said something about the group, not about this marker.
-      const {
-        stack: _stack,
-        stackFrom: _from,
-        stackRoom: _room,
-        stackColor: _color,
-        ...rest
-      } = entry;
-      return rest;
-    }
+    if (entry.entity === entityId || (dissolve && entry.stack === id)) return freeFromPile(entry);
     return entry;
   });
+}
+
+/**
+ * A marker with nothing left of the pile on it, back on its own spot.
+ *
+ * The one left behind when a pile of two comes apart never asked for any of it:
+ * it was not dragged, it did not leave, the group simply stopped existing
+ * around it. Leaving it standing on the pile's spot with its own address thrown
+ * away would make the *other* marker's departure move it, which is the last
+ * thing a marker that was not touched should do.
+ *
+ * Its label comes back with it. The offset was rebased when it joined so the
+ * caption would not move; rebasing it by the same travel in reverse is exactly
+ * the offset it had before, so the line is the line it used to draw.
+ */
+function freeFromPile(entry: PlacedEntity): PlacedEntity {
+  const home = entry.stackFrom ? homeOf(entry) : null;
+  const based = home ? rebaseOffset(entry, entry.position, home) : entry;
+  // Off the pile, and without the things that were the pile's: its room and its
+  // colour said something about the group, not about this marker.
+  const {
+    stack: _stack,
+    stackFrom: _from,
+    stackRoom: _room,
+    stackColor: _color,
+    ...rest
+  } = based;
+  return home ? { ...rest, position: home } : rest;
 }
 
 /** The room a pile currently points at, as any of its members states it. */

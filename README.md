@@ -375,7 +375,9 @@ The cursor says which of these a release would do before you let go, so the
 gesture is never a guess.
 
 Taking the second-to-last marker out dissolves the stack, because a stack of
-one is a marker. In the YAML it is one field, `stack:`, shared by the members —
+one is a marker — and the one left behind goes home too, label and all. It was
+not dragged and it did not leave; the group simply stopped existing around it,
+and a marker nobody touched must not be moved by someone else's departure. In the YAML it is one field, `stack:`, shared by the members —
 nothing to maintain by hand.
 
 **A stack groups chips on the screen, and nothing more.** It never speaks for

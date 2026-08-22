@@ -725,3 +725,81 @@ describe('adding to a pile that points at a room', () => {
     expect(next.slice(0, 2).every((entry) => entry.stackRoom === undefined)).toBe(true);
   });
 });
+
+/**
+ * A pile of two coming apart.
+ *
+ * The marker left behind never asked for any of this: it was not dragged, it
+ * did not leave, the group simply stopped existing around it. Leaving it on the
+ * pile's spot with its own address thrown away would mean the *other* marker's
+ * departure had moved it — the last thing a marker nobody touched should do.
+ */
+describe('a stack dissolving', () => {
+  /** Where the label sits on the plan. */
+  function labelAt(entry: PlacedEntity | undefined): [number, number] {
+    const offset = entry?.marker?.offset ?? [0, 0, 0];
+    return [(entry?.position[0] ?? 0) + offset[0], (entry?.position[2] ?? 0) + offset[2]];
+  }
+
+  function pair(): PlacedEntity[] {
+    return [
+      at('light.a', 1, 1, { marker: { offset: [-2, 0.34, 1], icon: 'mdi:lamp' } }),
+      at('sensor.b', 6, 6),
+    ];
+  }
+
+  it('puts the one left behind back on its own spot', () => {
+    const start = pair();
+    // light.a is landed on, so the pile stands where it stood; drag it onto the
+    // sensor instead, and the pile is at the sensor's spot.
+    const joined = joinStack(start, 'light.a', start[1]);
+    expect(joined[0].position, 'while stacked it shares the anchor').toEqual([6, 2.5, 6]);
+
+    const out = unstackTo(joined, 'sensor.b', [9, 2.5, 9], 'ground');
+    expect(out.find((entry) => entry.entity === 'light.a')?.position).toEqual([1, 2.5, 1]);
+  });
+
+  it('gives it its label back with it', () => {
+    const start = pair();
+    const before = labelAt(start[0]);
+    const joined = joinStack(start, 'light.a', start[1]);
+    const out = unstackTo(joined, 'sensor.b', [9, 2.5, 9], 'ground');
+
+    const back = out.find((entry) => entry.entity === 'light.a');
+    expect(labelAt(back), 'the line it used to draw').toEqual(before);
+    expect(back?.marker?.offset).toEqual([-2, 0.34, 1]);
+    expect(back?.marker?.icon).toBe('mdi:lamp');
+  });
+
+  it('leaves nothing of the pile on either of them', () => {
+    const start = [
+      at('light.a', 1, 1, { }),
+      at('sensor.b', 6, 6, { stackRoom: 'hall', stackColor: '#ff8800' }),
+    ];
+    const joined = joinStack(start, 'light.a', start[1]);
+    const out = unstackTo(joined, 'sensor.b', [9, 2.5, 9], 'ground');
+    for (const entry of out) {
+      expect(entry.stack, entry.entity).toBeUndefined();
+      expect(entry.stackFrom, entry.entity).toBeUndefined();
+      expect(entry.stackRoom, entry.entity).toBeUndefined();
+      expect(entry.stackColor, entry.entity).toBeUndefined();
+    }
+  });
+
+  /** Three members: nobody is left behind, so nobody is sent anywhere. */
+  it('leaves a pile of three standing when one goes', () => {
+    const three = [
+      at('light.a', 1, 1),
+      at('switch.b', 2, 2),
+      at('sensor.c', 6, 6),
+    ];
+    const one = joinStack(three, 'light.a', three[2]);
+    const two = joinStack(one, 'switch.b', one[2]);
+    const out = unstackTo(two, 'light.a', [9, 2.5, 9], 'ground');
+
+    const staying = out.find((entry) => entry.entity === 'switch.b');
+    expect(staying?.stack, 'still a pile').toBeTruthy();
+    expect(staying?.position, 'and still on it').toEqual([6, 2.5, 6]);
+    expect(staying?.stackFrom, 'with its own spot still remembered').toEqual([-4, 0, -4]);
+  });
+});
