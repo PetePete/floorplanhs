@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyStackPatch,
+  unstackTo,
   joinStack,
   reorderStack,
   leaveStack,
@@ -494,5 +495,74 @@ describe('reordering a pile', () => {
     const next = reorderStack(dressed, 's', 0, 1);
     expect(next.every((entry) => entry.stackColor === '#ff8800')).toBe(true);
     expect(ids(next)).toEqual(['switch.b', 'light.a']);
+  });
+});
+
+/**
+ * What a marker says about itself outlives the pile.
+ *
+ * `room` is a setting — which room a sensor is reporting on, which room a lamp
+ * fills — and joining a group of chips on the screen is not a reason to forget
+ * it. On a pile it simply goes unused: the pile draws one line, its own. Take
+ * the marker out again and the setting is still there, which is the whole of
+ * what "remembered" has to mean.
+ */
+describe('a marker that leaves a pile', () => {
+  const pile = [
+    at('light.a', 1, 1, { stack: 's', stackRoom: 'hall', stackColor: '#ff8800', room: 'kitchen' }),
+    at('switch.b', 1, 1, { stack: 's', stackRoom: 'hall', stackColor: '#ff8800' }),
+    at('sensor.c', 1, 1, { stack: 's', stackRoom: 'hall', stackColor: '#ff8800', room: 'study' }),
+  ];
+
+  it('keeps the room it named before it ever joined', () => {
+    const next = unstackTo(pile, 'light.a', [4, 2.5, 4], 'ground');
+    expect(next.find((entry) => entry.entity === 'light.a')?.room).toBe('kitchen');
+  });
+
+  it('leaves the pile’s own room and colour behind', () => {
+    const next = unstackTo(pile, 'light.a', [4, 2.5, 4], 'ground');
+    const gone = next.find((entry) => entry.entity === 'light.a');
+    expect(gone?.stack).toBeUndefined();
+    expect(gone?.stackRoom).toBeUndefined();
+    expect(gone?.stackColor).toBeUndefined();
+  });
+
+  it('takes the room it was dragged out of when the drop names one', () => {
+    const next = unstackTo(pile, 'sensor.c', [9, 2.5, 9], 'ground', 'hall');
+    expect(next.find((entry) => entry.entity === 'sensor.c')?.room).toBe('hall');
+  });
+
+  it('lands where it was put', () => {
+    const next = unstackTo(pile, 'light.a', [4, 2.5, 4], 'upper');
+    const moved = next.find((entry) => entry.entity === 'light.a');
+    expect(moved?.position).toEqual([4, 2.5, 4]);
+    expect(moved?.level).toBe('upper');
+  });
+
+  it('leaves the rest of the pile alone', () => {
+    const next = unstackTo(pile, 'light.a', [4, 2.5, 4], 'ground');
+    expect(next.find((entry) => entry.entity === 'sensor.c')?.stack).toBe('s');
+    expect(next.find((entry) => entry.entity === 'sensor.c')?.room, 'and its own room').toBe('study');
+  });
+
+  /** The same rule reached through a drag: a row pulled off keeps its room. */
+  it('holds through a drag off the pile as well', () => {
+    const next = resolveMove(pile, {
+      entityId: 'light.a',
+      position: [4, 2.5, 4],
+      level: 'ground',
+      carryStack: false,
+    });
+    expect(next.find((entry) => entry.entity === 'light.a')?.room).toBe('kitchen');
+  });
+
+  it('still clears a stale override for a marker that was never on a pile', () => {
+    const loose = [at('fan.e', 9, 9, { room: 'cellar' })];
+    const next = resolveMove(loose, { entityId: 'fan.e', position: [1, 2.5, 1], level: 'ground' });
+    expect(next[0].room, 'dragged across the plan, the position speaks').toBeUndefined();
+  });
+
+  it('does nothing for a marker it has never heard of', () => {
+    expect(unstackTo(pile, 'light.ghost', [0, 0, 0], 'ground')).toEqual(pile);
   });
 });

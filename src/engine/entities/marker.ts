@@ -329,13 +329,16 @@ export class EntityMarker {
   /**
    * The room the leader line runs to.
    *
-   * On a pile that is the pile's own room, when it has been given one: a stack
-   * is a visual grouping and does not touch what its members say about
-   * themselves, so the two are separate statements and the pile's is the one
-   * its line is drawn from.
+   * On a pile, the pile's — and only the pile's. A stack is one thing on the
+   * plan and draws one line; three markers each pointing off at the room they
+   * name is the tangle the pile was made to put an end to. Falling back to a
+   * member's own room brought exactly that back, one line at a time.
+   *
+   * What a member says about itself is not lost, only unused: `room` stays in
+   * the config untouched, and drawing it again is what leaving the pile means.
    */
   private leaderRoom(): string | undefined {
-    if (this.placedEntity.stack) return this.placedEntity.stackRoom ?? this.placedEntity.room;
+    if (this.placedEntity.stack) return this.placedEntity.stackRoom;
     return this.placedEntity.room;
   }
 

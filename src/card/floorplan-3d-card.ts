@@ -32,9 +32,9 @@ import type {
 import { toEntityVisual } from '@/ha/state-mapper';
 import {
   applyStackPatch,
-  leaveStack,
   reorderStack,
   resolveMove,
+  unstackTo,
 } from '@/engine/entities/stacks';
 import { Viewer, WebGLUnavailableError } from '@/engine/viewer';
 import { handleAction, PRESET_EVENT } from '@/ha/actions';
@@ -1151,24 +1151,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         break;
       }
       case 'unstack-entity': {
-        const index = entities.findIndex((entry) => entry.entity === intent.entityId);
-        if (index < 0) return;
-        const freed = leaveStack(entities, intent.entityId).map((entry) => {
-          if (entry.entity !== intent.entityId) return entry;
-          const moved: PlacedEntity = {
-            ...entry,
-            position: vRound(intent.position),
-            level: intent.level,
-          };
-          // Same rule as a move: a room named here is the one it was dragged
-          // *out of*, and it is what the leader line points back at. On its own
-          // again, that is this marker's own room — it just left the pile whose
-          // room it was.
-          if (intent.room) moved.room = intent.room;
-          else delete moved.room;
-          return moved;
-        });
-        next.entities = freed;
+        if (!entities.some((entry) => entry.entity === intent.entityId)) return;
+        next.entities = unstackTo(
+          entities,
+          intent.entityId,
+          vRound(intent.position),
+          intent.level,
+          intent.room,
+        );
         label = this.entityLabel(intent.entityId);
         break;
       }

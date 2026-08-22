@@ -110,11 +110,16 @@ function isClipped(point: THREE.Vector3, planes: readonly THREE.Plane[]): boolea
 }
 
 /**
- * The top edge of a pile's screen box, bar included when there is one.
+ * The top edge of a pile's screen box, grab bar included when there is one.
  *
  * Two hit tests want it and they must agree, or a pointer can be inside the
  * pile for one of them and outside for the other — which is a drag that reads
  * "take it out" and then puts it back.
+ *
+ * Outside edit mode there is no bar to include: it is not drawn, not reachable,
+ * and takes up no room. The box then sits exactly around the rows, which is
+ * where it sits in edit mode too — the bar rides above it and its going changes
+ * nothing about the box.
  */
 export function frameTop(rect: {
   y: number;
@@ -154,6 +159,8 @@ export class EntityLayer implements IEntityLayer {
   private lastEntities: PlacedEntity[] = [];
   /** Drawn as if it had left its pile for the length of a drag; see `setDraggedOut`. */
   private draggedOut: string | null = null;
+  /** The house's own ink; a pile with no colour of its own is drawn in it. */
+  private stackInk: string | null = null;
   /** A row drawn at a place the config does not put it yet; see `setRowPreview`. */
   private previewEntity: string | null = null;
   private previewRow = 0;
@@ -370,10 +377,14 @@ export class EntityLayer implements IEntityLayer {
 
       // The pile's own ink, if it was given one. Read off the members, so it
       // survives whichever of them happens to be the first row.
+      // The pile's own ink, if it was given one; otherwise the house's. A frame
+      // in the accent shouts over a hidden-line drawing — the box is a note on
+      // the drawing, and a note is written in the same ink as the drawing.
       const ink =
         visible
           .map((entityId) => this.markers.get(entityId)?.placed.stackColor)
           .find((color): color is string => typeof color === 'string' && color.length > 0) ??
+        this.stackInk ??
         this.options.accent ??
         '#03a9f4';
 
@@ -607,6 +618,29 @@ export class EntityLayer implements IEntityLayer {
   setEditMode(enabled: boolean): void {
     if (this.editMode === enabled) return;
     this.editMode = enabled;
+    // Thrown away rather than repainted. A frame holds a canvas it only redraws
+    // when its own key changes, and a stale grip on a card nobody can edit is
+    // exactly the thing this switch exists to prevent — so the cheap, certain
+    // move is to let the next frame build them again from scratch.
+    for (const [id, frame] of this.frames) {
+      frame.dispose();
+      this.frames.delete(id);
+      this.frameRects.delete(id);
+    }
+    this.ctx?.invalidate();
+  }
+
+  /**
+   * The ink the model's line work is drawn in.
+   *
+   * A stack's frame is a note on the drawing rather than a control, so unless a
+   * pile has been given a colour of its own it is written in the same ink as
+   * the lines it sits over — which also means it follows the palette, the
+   * theme and a configured `edgeColor` without knowing about any of them.
+   */
+  setStackInk(color: string | null): void {
+    if (this.stackInk === color) return;
+    this.stackInk = color;
     this.ctx?.invalidate();
   }
 

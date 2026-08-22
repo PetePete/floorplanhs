@@ -496,11 +496,28 @@ describe('the line a stack draws', () => {
     m.dispose();
   });
 
-  it('falls back to the marker’s own room when the pile named none', () => {
+  /**
+   * A stack is one thing on the plan and draws one line. Three markers each
+   * pointing off at the room they name is the tangle a pile is made to end.
+   */
+  it('draws nothing of its own when the pile named no room', () => {
     const m = marker({ position: [-4, 0, 0], level: 'ground', room: 'kitchen', stack: 's' });
     m.setRoomAnchors(table);
-    expect(leaderTarget(m).x).toBeCloseTo(8, 5);
+    expect(leaderTarget(m).length(), 'no line to its own room').toBe(0);
     m.dispose();
+  });
+
+  /** Unused, not lost: leaving the pile is what draws it again. */
+  it('gets its own line back when it leaves the pile', () => {
+    const stacked = marker({ position: [-4, 0, 0], level: 'ground', room: 'kitchen', stack: 's' });
+    stacked.setRoomAnchors(table);
+    expect(leaderTarget(stacked).length()).toBe(0);
+    stacked.dispose();
+
+    const alone = marker({ position: [-4, 0, 0], level: 'ground', room: 'kitchen' });
+    alone.setRoomAnchors(table);
+    expect(leaderTarget(alone).x).toBeCloseTo(8, 5);
+    alone.dispose();
   });
 
   it('ignores a pile room on a marker that is not on a pile', () => {

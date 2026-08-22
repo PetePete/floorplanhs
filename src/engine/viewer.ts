@@ -44,7 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
-import { leaveStack, reorderStack, resolveMove, stackFor } from '@/engine/entities/stacks';
+import { reorderStack, resolveMove, stackFor, unstackTo } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -583,14 +583,12 @@ export class Viewer implements IViewer {
     level?: string | null,
     room?: string,
   ): void {
-    const entities = leaveStack(this.config.entities ?? [], entityId).map((entry) => {
-      if (entry.entity !== entityId) return entry;
-      const moved: PlacedEntity = { ...entry, position };
-      if (level !== undefined) moved.level = level;
-      if (room) moved.room = room;
-      else delete moved.room;
-      return moved;
-    });
+    const current = this.config.entities ?? [];
+    const keep = current.find((entry) => entry.entity === entityId)?.level ?? null;
+    // The same rule the card writes with: a marker coming off a pile keeps the
+    // room it names, because that is a setting rather than a side effect of
+    // where it was dragged.
+    const entities = unstackTo(current, entityId, position, level ?? keep, room);
     this.config = { ...this.config, entities };
     this.guard('entities', this._entities, (e) => e.setEntities(entities));
   }
@@ -1008,7 +1006,13 @@ export class Viewer implements IViewer {
         : palette === 'mono-light'
           ? EDGE_INK_ON_LIGHT
           : groundInk;
-    this.edges.setColor(color || paletteInk);
+    const ink = color || paletteInk;
+    this.edges.setColor(ink);
+    // A stack's frame is a note on the drawing, so it is written in the
+    // drawing's ink unless the pile was given a colour of its own.
+    this.guard('entities', this._entities, (e) =>
+      (e as IEntityLayer & { setStackInk?(v: string | null): void }).setStackInk?.(ink),
+    );
     this.edges.setStyle(render.style ?? DEFAULT_RENDER_CONFIG.style);
 
     this.guard('camera', this._cameraCtl, (c) =>

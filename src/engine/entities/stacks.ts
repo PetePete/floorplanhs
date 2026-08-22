@@ -241,11 +241,54 @@ export function resolveMove(
 
   return freed.map((entry) => {
     if (entry.entity !== entityId) return entry;
-    const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
-    if (room) moved.room = room;
-    else delete moved.room;
-    return moved;
+    // Returned, not spread over `entry` again: `settle` builds from `entry` and
+    // may *remove* the room, and an outer spread would hand it straight back.
+    return settle(entry, position, level, room, pile !== null);
   });
+}
+
+/**
+ * Where a marker lands, and what happens to the room it names.
+ *
+ * The room follows one rule everywhere: a name is the room it was dragged *out
+ * of* and is what the leader line points back at; nothing means the drop landed
+ * inside a room, where the position already says which, so a stale override is
+ * dropped rather than left to go wrong.
+ *
+ * `leavingPile` suspends the second half. A marker coming off a pile has not
+ * been dragged across the plan — it has been taken out of a group — and the
+ * room it names is a setting it had before it ever joined and goes on wanting
+ * once it is on its own again. Clearing it there threw away the one thing the
+ * user would expect a marker to remember.
+ */
+function settle(
+  entry: PlacedEntity,
+  position: Vec3,
+  level: string | null,
+  room: string | undefined,
+  leavingPile: boolean,
+): PlacedEntity {
+  const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+  if (room) moved.room = room;
+  else if (!leavingPile) delete moved.room;
+  return moved;
+}
+
+/**
+ * Take a marker off its pile and put it down, keeping what it says about
+ * itself. The card writes this and the viewer draws it, from one rule.
+ */
+export function unstackTo(
+  entities: readonly PlacedEntity[],
+  entityId: string,
+  position: Vec3,
+  level: string | null,
+  room?: string,
+): PlacedEntity[] {
+  if (!entities.some((entry) => entry.entity === entityId)) return [...entities];
+  return leaveStack(entities, entityId).map((entry) =>
+    entry.entity === entityId ? settle(entry, position, level, room, true) : entry,
+  );
 }
 
 /**

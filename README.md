@@ -380,7 +380,11 @@ nothing to maintain by hand.
 
 **A stack groups chips on the screen, and nothing more.** It never speaks for
 the entities in it: where a lamp hangs and which room a sensor is measuring stay
-each entity's own `room`, untouched by piling them up. What the pile does have
+each entity's own `room`, untouched by piling them up. On a pile that setting
+simply goes unused — a stack is one thing on the plan and draws one line, its
+own, because three markers each pointing off at the room they name is the
+tangle a pile is there to end. Take a marker out again and its line comes back;
+nothing was thrown away. What the pile does have
 of its own is a colour and a room for its leader line, set by tapping its grab
 bar and written to every member as `stackColor` and `stackRoom`.
 
