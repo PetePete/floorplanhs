@@ -67,11 +67,46 @@ export function joinStack(
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.entity !== moved) return entry;
     return {
-      ...withStack(entry, id, target),
+      ...rebaseOffset(withStack(entry, id, target), entry.position, target.position),
       position: [...target.position] as Vec3,
       level: target.level ?? null,
     };
   });
+}
+
+/**
+ * Keep the label where it is on the plan while the anchor moves under it.
+ *
+ * `marker.offset` is measured from the anchor, which is the right way round for
+ * everything a user does by hand: drag the marker and its caption comes along.
+ * It is the wrong way round for the two moves nobody asked for — joining a pile
+ * and leaving one — because there the anchor is relocated *for* you, and a
+ * caption that was put somewhere legible ends up an equal distance from a
+ * completely different point. The line then runs off to nowhere in particular,
+ * and the only way back is to drop the marker on the exact spot it started on.
+ *
+ * Rebasing by the anchor's own travel leaves the caption on the plan where it
+ * was, so the line still points at the place it was drawn to.
+ */
+function rebaseOffset(entry: PlacedEntity, from: Vec3, to: Vec3): PlacedEntity {
+  const offset = entry.marker?.offset;
+  if (!offset) return entry;
+  const dx = from[0] - to[0];
+  const dz = from[2] - to[2];
+  if (dx === 0 && dz === 0) return entry;
+  return {
+    ...entry,
+    marker: {
+      ...entry.marker,
+      // The lift is not a place on the plan, it is how high the chip floats.
+      offset: [round3(offset[0] + dx), offset[1], round3(offset[2] + dz)] as Vec3,
+    },
+  };
+}
+
+/** Millimetres are as fine as a floorplan gets; see `vRound`. */
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 /**
@@ -121,7 +156,7 @@ export function mergeStacks(
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.stack !== movedStack) return entry;
     return {
-      ...withStack(entry, id, target),
+      ...rebaseOffset(withStack(entry, id, target), entry.position, target.position),
       position: [...target.position] as Vec3,
       level: target.level ?? null,
     };
@@ -291,7 +326,8 @@ function settle(
   room: string | undefined,
   leavingPile: boolean,
 ): PlacedEntity {
-  const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+  const base = leavingPile ? rebaseOffset(entry, entry.position, position) : entry;
+  const moved: PlacedEntity = { ...base, position: [...position] as Vec3, level };
   if (leavingPile) {
     if (!moved.room && room) moved.room = room;
     return moved;

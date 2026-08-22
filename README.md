@@ -386,7 +386,10 @@ own, because three markers each pointing off at the room they name is the
 tangle a pile is there to end. Take a marker out again and its line comes back;
 nothing was thrown away. The same goes for a label you dragged aside: while the
 marker is a row of a pile the offset plays no part, because the rows are laid
-out from the shared anchor — and it is still there when the marker leaves. What the pile does have
+out from the shared anchor — and it is still there when the marker leaves. It
+comes back as a *place on the plan* rather than as a distance: joining a pile
+and leaving one both relocate the anchor for you, and a caption that keeps its
+distance from a point that has moved is a caption that has moved. What the pile does have
 of its own is a colour and a room for its leader line, set by tapping its grab
 bar and written to every member as `stackColor` and `stackRoom`.
 

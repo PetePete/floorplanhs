@@ -114,18 +114,31 @@ describe('the stack as a whole', () => {
  * stack are laid out from the shared anchor, so while a marker is a member the
  * offset simply plays no part; the layer overrules it where the rows are placed,
  * and the config keeps it for the day the marker is on its own again.
+ *
+ * Kept as a *place on the plan*, not as a distance from the anchor. The anchor
+ * is relocated by these two moves, and a caption that keeps its distance from a
+ * point that has moved is a caption that has moved — the line then ran off to
+ * nowhere in particular unless the marker was dropped on the exact spot it
+ * started from.
  */
 describe('joining from where the labels were dragged', () => {
-  it('keeps the label offset of the marker that joins', () => {
+  /** Where the label sits on the plan: the anchor plus what it is offset by. */
+  function labelAt(entry: PlacedEntity | undefined): [number, number] {
+    const offset = entry?.marker?.offset ?? [0, 0, 0];
+    return [(entry?.position[0] ?? 0) + offset[0], (entry?.position[2] ?? 0) + offset[2]];
+  }
+
+  it('leaves the label of the marker that joins where it was', () => {
     const house = [
       at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
       at('media_player.room', 4, 4, { marker: { offset: [-5.8, 0.34, -2.1] } }),
     ];
+    const before = labelAt(house[1]);
     const next = joinStack(house, 'media_player.room', house[0]);
 
     expect(next[1].stack).toBe('stack_1');
-    expect(next[1].marker?.offset).toEqual([-5.8, 0.34, -2.1]);
-    expect(next[1].position).toEqual([1, 2.5, 1]);
+    expect(next[1].position, 'the anchor goes to the pile').toEqual([1, 2.5, 1]);
+    expect(labelAt(next[1]), 'the label does not').toEqual(before);
   });
 
   it('keeps it on the marker that was landed on as well', () => {
@@ -147,17 +160,36 @@ describe('joining from where the labels were dragged', () => {
     expect(next[0].marker).toEqual({ icon: 'mdi:lamp', offset: [1, 0.34, 1] });
   });
 
-  /** The whole point: it is there again when the marker comes back out. */
-  it('hands the label back when the marker leaves the pile', () => {
+  /**
+   * The whole point: the label is where it was, whatever the anchor did in the
+   * meantime — including being dropped somewhere else entirely on the way out.
+   */
+  it('hands the label back to the place it was put', () => {
     const house = [
       at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
       at('sensor.b', 4, 4, { marker: { offset: [2, 0.34, -1], icon: 'mdi:thermometer' } }),
     ];
+    const before = labelAt(house[1]);
+
     const joined = joinStack(house, 'sensor.b', house[0]);
     const out = unstackTo(joined, 'sensor.b', [7, 2.5, 7], 'ground');
     const back = out.find((entry) => entry.entity === 'sensor.b');
+
     expect(back?.stack).toBeUndefined();
-    expect(back?.marker).toEqual({ offset: [2, 0.34, -1], icon: 'mdi:thermometer' });
+    expect(back?.position, 'the marker lands where it was dropped').toEqual([7, 2.5, 7]);
+    expect(labelAt(back), 'and its label is back where it was drawn').toEqual(before);
+    expect(back?.marker?.icon, 'the rest of the marker config is untouched').toBe('mdi:thermometer');
+  });
+
+  it('does the same when the pile is tipped onto another marker', () => {
+    const world = [
+      at('light.x', 0, 0),
+      at('sensor.b', 4, 4, { stack: 's', marker: { offset: [2, 0.34, -1] } }),
+      at('switch.c', 4, 4, { stack: 's' }),
+    ];
+    const before = labelAt(world[1]);
+    const merged = mergeStacks(world, 's', world[0]);
+    expect(labelAt(merged.find((entry) => entry.entity === 'sensor.b'))).toEqual(before);
   });
 });
 
