@@ -97,6 +97,8 @@ export class Viewer implements IViewer {
   private config: Floorplan3dCardConfig = { type: 'floorplan-3d-card' };
   /** Drop captions, in the dashboard's language; see `setDropStrings`. */
   private dropStrings: Record<string, string> = {};
+  /** Markers on the drawing, or the drawing on its own; see `setMarkersVisible`. */
+  private markersVisible = true;
   private renderCfg: Required<RenderConfig> = { ...DEFAULT_RENDER_CONFIG };
 
   private core: RenderCore | null = null;
@@ -894,12 +896,27 @@ export class Viewer implements IViewer {
     );
   }
 
+  /**
+   * Take the markers off the drawing, or put them back.
+   *
+   * A way of looking at the model rather than a setting: a floorplan with forty
+   * entities on it is a diagram of the entities, and sometimes the thing you
+   * want to look at is the house. Nothing is written down, so a reload brings
+   * them back — as does entering edit mode, because placing something you
+   * cannot see is not a thing anyone means to do.
+   */
+  setMarkersVisible(visible: boolean): void {
+    this.markersVisible = visible;
+    this.guard('entities', this._entities, (e) => e.setMarkersVisible(visible || this.editMode));
+    this.core?.invalidate();
+  }
+
   setEditMode(enabled: boolean): void {
     this.editMode = enabled;
     // Edit mode no longer pins the handles on; `flashSectionHandles` owns them.
     if (!enabled) this.guard('section', this._section, (s) => s.setHandlesVisible(false));
     this.guard('entities', this._entities, (e) => {
-      e.setMarkersVisible(true);
+      e.setMarkersVisible(enabled || this.markersVisible);
       (e as IEntityLayer & EditAware).setEditMode?.(enabled);
     });
     this.guard('placement', this._placement, (p) =>

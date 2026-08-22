@@ -345,6 +345,13 @@ finger, gets the storey it fell into, and its position is rounded to millimetres
 before being written back through `config-changed`. Touch is a first-class path —
 this works with a finger, not just a mouse.
 
+The toolbar has a switch that takes the markers off the drawing — stacks, leader
+lines and all. A floorplan with forty entities on it is a diagram of the
+entities, and sometimes the thing you want to look at is the house. It is a way
+of looking rather than a setting: nothing is written down, a reload brings them
+back, and so does entering edit mode, since placing something you cannot see is
+not a thing anyone means to do.
+
 **Markers stack.** A lamp, its switch and the motion sensor that drives them
 are one place in the house, and three chips fighting over the same square metre
 is what that looks like otherwise. Drop one marker on another and they become a
@@ -385,6 +392,12 @@ while the row is still in your hand, because a reorder you cannot see until you
 let go is a guess about a list you are looking straight at. The same rows are
 listed in the stack's settings with arrows beside them, for a finger — HTML5
 drag is a mouse gesture, and this card runs on wall panels.
+
+The grab bar is an editing affordance, so it is only drawn while the dashboard
+is in edit mode — a handle on a card nobody can rearrange is a control that does
+nothing, and on a floorplan hanging on a wall it is one more thing in front of
+the drawing. The dashed frame stays either way: that says these markers are one
+place in the house, which is true whether or not you are editing.
 
 The frame is the pile's drop area, not just its rows. Dragging an entity out of
 the picker and letting go anywhere inside the box adds it to that stack: the

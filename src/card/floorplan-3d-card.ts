@@ -198,6 +198,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private section: SectionState = { ...DEFAULT_SECTION_STATE };
   @state() private activePreset: string | null = null;
   @state() private selectedEntity: string | null = null;
+  /** Markers on the drawing, or the drawing on its own; see the toolbar. */
+  @state() private markersVisible = true;
   /** A pile whose grab bar was tapped; opens the stack's own settings. */
   @state() private selectedStack: string | null = null;
   @state() private autoRotate = false;
@@ -1007,6 +1009,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         break;
       case 'fit':
         viewer?.fitToView(!this.prefersReducedMotion());
+        break;
+      case 'markers':
+        if (!viewer) break;
+        // A way of looking at the model, like separating the storeys: it is not
+        // written to the config, and a reload brings the markers back. Editing
+        // brings them back too — placing something you cannot see is not a
+        // thing anyone means to do.
+        this.markersVisible = !this.markersVisible;
+        viewer.setMarkersVisible(this.markersVisible);
         break;
       case 'explode':
         if (!viewer) break;
@@ -2175,6 +2186,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
                 .size=${this.layout}
                 .openPanel=${this.panel}
                 .autoRotate=${this.autoRotate}
+                .markersVisible=${this.markersVisible}
                 .fullscreen=${this.fullscreen}
                 .canSection=${canSection}
                 .canExplode=${this.canExplode}

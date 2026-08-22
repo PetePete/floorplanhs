@@ -22,6 +22,7 @@ export type ToolbarAction =
   | 'autorotate'
   | 'tour'
   | 'fullscreen'
+  | 'markers'
   | 'palette';
 
 interface ToolbarItem {
@@ -186,6 +187,8 @@ export class Fp3dToolbar extends FpBaseElement {
   @property({ type: String }) openPanel: 'none' | 'section' | 'palette' = 'none';
   @property({ type: Boolean }) orthographic = false;
   @property({ type: Boolean }) autoRotate = false;
+  /** Whether the markers are on the drawing right now; see the `markers` action. */
+  @property({ type: Boolean }) markersVisible = true;
   @property({ type: Boolean }) fullscreen = false;
   /** False hides the section button entirely, so it cannot open a hidden panel. */
   @property({ type: Boolean }) canSection = true;
@@ -256,6 +259,18 @@ export class Fp3dToolbar extends FpBaseElement {
         pressed: this.tourPlaying,
         hidden: !this.canTour || this.reducedMotion,
         rank: 2,
+      },
+      {
+        // Off, the card is the drawing and nothing else. A floorplan with forty
+        // entities on it is a diagram of the entities; sometimes what you want
+        // to look at is the house.
+        action: 'markers',
+        glyph: this.markersVisible ? 'eye' : 'eyeOff',
+        label: this.markersVisible
+          ? this.t('ui.toolbar.markers_hide', 'Hide entities')
+          : this.t('ui.toolbar.markers_show', 'Show entities'),
+        pressed: !this.markersVisible,
+        rank: 4,
       },
       {
         action: 'autorotate',

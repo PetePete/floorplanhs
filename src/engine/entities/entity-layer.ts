@@ -109,6 +109,23 @@ function isClipped(point: THREE.Vector3, planes: readonly THREE.Plane[]): boolea
   return false;
 }
 
+/**
+ * The top edge of a pile's screen box, bar included when there is one.
+ *
+ * Two hit tests want it and they must agree, or a pointer can be inside the
+ * pile for one of them and outside for the other — which is a drag that reads
+ * "take it out" and then puts it back.
+ */
+export function frameTop(rect: {
+  y: number;
+  halfHeight: number;
+  headerY: number;
+  headerHalfHeight: number;
+  grabBar: boolean;
+}): number {
+  return rect.grabBar ? rect.headerY - rect.headerHalfHeight : rect.y - rect.halfHeight;
+}
+
 export class EntityLayer implements IEntityLayer {
   private readonly markers = new Map<string, EntityMarker>();
   /** Members per stack id, in list order; see `fanStacks`. */
@@ -125,6 +142,8 @@ export class EntityLayer implements IEntityLayer {
       halfHeight: number;
       headerY: number;
       headerHalfHeight: number;
+      /** Whether a grab bar is drawn at all; see `setEditMode`. */
+      grabBar: boolean;
       /** Screen y of the bottom row's centre, and the spacing above it. */
       bottomY: number;
       pitch: number;
@@ -380,6 +399,7 @@ export class EntityLayer implements IEntityLayer {
         ctx.size.pixelRatio,
         _frameUp,
         id === this.highlightStack,
+        this.editMode,
       );
       alive.add(id);
 
@@ -397,6 +417,10 @@ export class EntityLayer implements IEntityLayer {
         halfHeight: height / 2 + STACK_FRAME_PAD_PX,
         // The grab bar, in the same screen coordinates: it sits directly above
         // the rows, which is where the frame's own top edge is.
+        grabBar: this.editMode,
+        // Where the bar is painted, and only meaningful when one is. Kept as a
+        // number either way so the arithmetic has nothing to special-case; what
+        // guards it is `grabBar`.
         headerY: screenY - height / 2 - STACK_FRAME_PAD_PX - HEADER_PX / 2,
         headerHalfHeight: HEADER_PX / 2 + 3,
         bottomY: screenY + height / 2 - bottomRowY,
@@ -572,9 +596,18 @@ export class EntityLayer implements IEntityLayer {
     this.ctx?.invalidate();
   }
 
-  /** Edit mode currently only affects hit tolerance; kept for the Viewer hook. */
+  /**
+   * Edit mode changes what a pile offers to the hand.
+   *
+   * The grab bar is a handle for rearranging, so on a card nobody can rearrange
+   * it is a control that does nothing — and on a floorplan hanging on a wall,
+   * one more thing in front of the drawing. The dashed frame stays: that says
+   * these markers are one place in the house, which is true either way.
+   */
   setEditMode(enabled: boolean): void {
+    if (this.editMode === enabled) return;
     this.editMode = enabled;
+    this.ctx?.invalidate();
   }
 
   setAccent(accent: string): void {
@@ -633,6 +666,7 @@ export class EntityLayer implements IEntityLayer {
     // It is also the only part of a pile that means "all of this", which is why
     // it exists — a row means that one marker, and the shared dot is a dot.
     for (const [stackId, rect] of this.frameRects) {
+      if (!rect.grabBar) continue;
       if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
       if (Math.abs(pointerY - rect.headerY) > rect.headerHalfHeight) continue;
       return { entityId: rect.base, part: 'stack', stackId };
@@ -684,7 +718,7 @@ export class EntityLayer implements IEntityLayer {
       // The grab bar counts as part of the pile: it is the part of it that
       // means "all of this".
       if (pointerY > rect.y + rect.halfHeight) continue;
-      if (pointerY < rect.headerY - rect.headerHalfHeight) continue;
+      if (pointerY < frameTop(rect)) continue;
       const members = this.stacks.get(stackId) ?? [];
       const base = members.find((entityId) => entityId !== options?.ignore) ?? rect.base;
       if (base === options?.ignore) continue;
@@ -755,7 +789,7 @@ export class EntityLayer implements IEntityLayer {
       frame &&
       Math.abs(pointerX - frame.x) <= frame.halfWidth &&
       pointerY <= frame.y + frame.halfHeight &&
-      pointerY >= frame.headerY - frame.headerHalfHeight
+      pointerY >= frameTop(frame)
     ) {
       return true;
     }
