@@ -268,7 +268,13 @@ export function moveStack(
 ): PlacedEntity[] {
   return entities.map((entry) => {
     if (entry.stack !== stackId) return entry;
-    const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+    // The home is remembered as a vector *from the pile*, so moving the pile
+    // has to restate it or the memory travels along and every member's spot
+    // quietly shifts by however far the pile went. That is not an edge case:
+    // a pile lands where the two labels met, which is never exactly where the
+    // marker underneath was standing, so the very act of joining moved every
+    // home it had just written down.
+    const moved: PlacedEntity = { ...withHome(entry, position), position: [...position] as Vec3, level };
     if (room) moved.stackRoom = room;
     else delete moved.stackRoom;
     return moved;

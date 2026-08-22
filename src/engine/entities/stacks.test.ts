@@ -185,15 +185,35 @@ describe('joining from where the labels were dragged', () => {
     expect(back?.marker?.icon, 'the rest of the marker config is untouched').toBe('mdi:thermometer');
   });
 
-  it('brings a marker home even when the pile has been moved since', () => {
+  /**
+   * The home is written as a vector from the pile, so every move of the pile
+   * has to restate it. Not an edge case: a pile lands where the two labels met,
+   * which is never exactly where the marker underneath was standing — so the
+   * act of joining moved every home it had just written down, and the marker
+   * came back a pile's-width away from where it started.
+   */
+  it('is not dragged along when the pile is moved', () => {
     const house = [at('light.a', 1, 1), at('sensor.b', 4, 4)];
     const joined = joinStack(house, 'sensor.b', house[0]);
-    // The pile travels four metres east; the marker is three east of it either
-    // way, so it comes back beside the pile's new home rather than at an
-    // address nothing is at any more.
     const moved = moveStack(joined, 'stack_1', [5, 2.5, 1], 'ground');
     const out = unstackTo(moved, 'sensor.b', [9, 2.5, 2], 'ground');
-    expect(out.find((entry) => entry.entity === 'sensor.b')?.position).toEqual([8, 2.5, 4]);
+    expect(out.find((entry) => entry.entity === 'sensor.b')?.position).toEqual([4, 2.5, 4]);
+  });
+
+  /** The same, through the gesture that actually builds a pile. */
+  it('remembers the spot a marker came from, not the spot the labels met at', () => {
+    const house = [at('light.a', 1, 1), at('sensor.b', 4, 4)];
+    // Dragged together, the pile lands where the two labels met — over here.
+    const joined = resolveMove(house, {
+      entityId: 'sensor.b',
+      position: [2.5, 2.5, 2.5],
+      level: 'ground',
+      stackWith: 'light.a',
+    });
+    const out = unstackTo(joined, 'sensor.b', [9, 2.5, 9], 'ground');
+    expect(out.find((entry) => entry.entity === 'sensor.b')?.position).toEqual([4, 2.5, 4]);
+    expect(out.find((entry) => entry.entity === 'light.a')?.position, 'and so does the other one')
+      .toEqual([1, 2.5, 1]);
   });
 
   /** A pile from an older config has nothing to remember; the drop is all. */
