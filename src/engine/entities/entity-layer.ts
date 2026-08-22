@@ -125,12 +125,19 @@ export class EntityLayer implements IEntityLayer {
       halfHeight: number;
       headerY: number;
       headerHalfHeight: number;
+      /** Screen y of the bottom row's centre, and the spacing above it. */
+      bottomY: number;
+      pitch: number;
+      count: number;
     }
   >();
   /** Last list `setEntities` was given; re-fanned when a drag leaves a pile. */
   private lastEntities: PlacedEntity[] = [];
   /** Drawn as if it had left its pile for the length of a drag; see `setDraggedOut`. */
   private draggedOut: string | null = null;
+  /** A row drawn at a place the config does not put it yet; see `setRowPreview`. */
+  private previewEntity: string | null = null;
+  private previewRow = 0;
   /** The pile a release would land on; see `setStackHighlight`. */
   private highlightStack: string | null = null;
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
@@ -337,6 +344,9 @@ export class EntityLayer implements IEntityLayer {
       // The rows run from the first label up; the box covers all of them.
       const spread = pitch * (visible.length - 1);
       const height = rows + spread;
+      // The rows run up the screen from the bottom of the box; `rowUnder` turns
+      // a pointer back into one of them.
+      const bottomRowY = rows / 2;
       const unit = worldUnitsPerPixel(ctx.activeCamera, marker.getBodyWorldPosition(_framePoint), ctx.size.height);
 
       // The pile's own ink, if it was given one. Read off the members, so it
@@ -389,6 +399,9 @@ export class EntityLayer implements IEntityLayer {
         // the rows, which is where the frame's own top edge is.
         headerY: screenY - height / 2 - STACK_FRAME_PAD_PX - HEADER_PX / 2,
         headerHalfHeight: HEADER_PX / 2 + 3,
+        bottomY: screenY + height / 2 - bottomRowY,
+        pitch,
+        count: visible.length,
       });
     }
 
@@ -414,34 +427,63 @@ export class EntityLayer implements IEntityLayer {
    * outranks our tidying.
    */
   private fanStacks(entities: PlacedEntity[]): void {
-    const counted = new Map<string, number>();
     this.stacks.clear();
-    const sizes = new Map<string, number>();
+
+    // The piles first, in config order, so a row can be moved within one before
+    // anything is placed by its index.
     for (const placed of entities) {
-      const id = this.stackOfPlaced(placed);
-      if (!id) continue;
-      sizes.set(id, (sizes.get(id) ?? 0) + 1);
+      if (!this.markers.has(placed.entity)) continue;
+      if (placed.marker?.offset && !placed.stack) continue;
+      const stack = this.stackOfPlaced(placed);
+      if (!stack) continue;
+      const members = this.stacks.get(stack) ?? [];
+      members.push(placed.entity);
+      this.stacks.set(stack, members);
     }
+    this.applyRowPreview();
+
     for (const placed of entities) {
       const marker = this.markers.get(placed.entity);
       if (!marker) continue;
       // A member of a stack is placed by its row, not by an offset it may still
       // carry from when it stood on its own.
       if (placed.marker?.offset && !placed.stack) continue;
-
-      const stack = this.stackOfPlaced(placed);
-      if (!stack) {
-        marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
-        marker.setStackIndex(0, 1);
-        continue;
-      }
-      const index = counted.get(stack) ?? 0;
-      counted.set(stack, index + 1);
+      if (this.stackOfPlaced(placed)) continue;
       marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
-      marker.setStackIndex(index, sizes.get(stack) ?? 1);
-      const members = this.stacks.get(stack) ?? [];
-      members.push(placed.entity);
-      this.stacks.set(stack, members);
+      marker.setStackIndex(0, 1);
+    }
+
+    for (const members of this.stacks.values()) {
+      members.forEach((entityId, index) => {
+        const marker = this.markers.get(entityId);
+        if (!marker) return;
+        marker.setLabelOffset([0, DEFAULT_LABEL_LIFT_M, 0]);
+        marker.setStackIndex(index, members.length);
+      });
+    }
+  }
+
+  /**
+   * Show a row where the drag says it is going, rather than where the config
+   * still has it.
+   *
+   * A reorder you cannot see until you let go is a guess, and the pile is a
+   * list you are reading — the whole point of moving a row is to see the list
+   * come out in the new order.
+   */
+  private applyRowPreview(): void {
+    const entityId = this.previewEntity;
+    if (!entityId) return;
+    for (const [id, members] of this.stacks) {
+      const from = members.indexOf(entityId);
+      if (from < 0) continue;
+      const to = Math.max(0, Math.min(members.length - 1, this.previewRow));
+      if (from === to) return;
+      const next = [...members];
+      next.splice(from, 1);
+      next.splice(to, 0, entityId);
+      this.stacks.set(id, next);
+      return;
     }
   }
 
@@ -614,6 +656,70 @@ export class EntityLayer implements IEntityLayer {
       best = entityId;
     }
     return best ? { entityId: best, part: 'anchor', stackId: this.stackIdOf(best) } : null;
+  }
+
+  /**
+   * The pile whose frame the pointer is inside, or null.
+   *
+   * The frame is the pile's drop area — the box is drawn around the whole list
+   * precisely to say "this is one thing", and the air between two rows is as
+   * much part of it as the rows. Aiming at a particular chip when you mean
+   * "onto this pile" is aiming at the wrong thing, and on a pile of two that is
+   * a target eight pixels tall.
+   *
+   * Nearest first, by the frame's own depth, so two piles that overlap on
+   * screen resolve the way everything else does.
+   */
+  stackUnder(
+    ndc: { x: number; y: number },
+    options?: { ignore?: string },
+  ): { stackId: string; base: string } | null {
+    const ctx = this.ctx;
+    if (!ctx || !this.markersVisible) return null;
+    const pointerX = (ndc.x * 0.5 + 0.5) * ctx.size.width;
+    const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * ctx.size.height;
+
+    for (const [stackId, rect] of this.frameRects) {
+      if (Math.abs(pointerX - rect.x) > rect.halfWidth) continue;
+      // The grab bar counts as part of the pile: it is the part of it that
+      // means "all of this".
+      if (pointerY > rect.y + rect.halfHeight) continue;
+      if (pointerY < rect.headerY - rect.headerHalfHeight) continue;
+      const members = this.stacks.get(stackId) ?? [];
+      const base = members.find((entityId) => entityId !== options?.ignore) ?? rect.base;
+      if (base === options?.ignore) continue;
+      return { stackId, base };
+    }
+    return null;
+  }
+
+  /**
+   * Which row of a pile the pointer is over, counting from the bottom.
+   *
+   * Clamped rather than refused past either end: a drag that runs above the top
+   * of the pile means the top of the pile, which is what the hand is saying.
+   * Null only when there is no such pile on screen to count rows in.
+   */
+  rowUnder(ndc: { x: number; y: number }, stackId: string): number | null {
+    const ctx = this.ctx;
+    const rect = this.frameRects.get(stackId);
+    if (!ctx || !rect || rect.pitch <= 0) return null;
+    const pointerY = (1 - (ndc.y * 0.5 + 0.5)) * ctx.size.height;
+    const row = Math.round((rect.bottomY - pointerY) / rect.pitch);
+    return Math.max(0, Math.min(rect.count - 1, row));
+  }
+
+  /**
+   * Draw a pile as if one of its rows had already moved. `null` puts it back.
+   *
+   * The config still says what it said; the drag decides whether that changes.
+   */
+  setRowPreview(entityId: string | null, row = 0): void {
+    if (this.previewEntity === entityId && this.previewRow === row) return;
+    this.previewEntity = entityId;
+    this.previewRow = row;
+    this.fanStacks(this.lastEntities);
+    this.ctx?.invalidate();
   }
 
   /** The pile a marker is on, as the config currently states it. */

@@ -300,9 +300,11 @@ export interface IPlacementController extends Subsystem {
        * are what the subsystems implement, so they cannot depend on one.
        */
       intent: {
-        action: 'place' | 'join' | 'detach' | 'stay' | 'label' | 'invalid';
+        action: 'place' | 'join' | 'detach' | 'stay' | 'reorder' | 'label' | 'invalid';
         target: string | null;
         caption: string;
+        /** Row the release would move to; only for `reorder`. */
+        row?: number;
       };
       /** Whether the whole pile was in the hand, or one row off it. */
       carryStack: boolean;

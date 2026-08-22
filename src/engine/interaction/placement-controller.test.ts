@@ -716,3 +716,189 @@ describe('pulling a row off a pile', () => {
     placement.dispose();
   });
 });
+
+/**
+ * Moving a row within its own pile.
+ *
+ * The hand is already on the row — it is the same grab that pulls one out — so
+ * the list has to be reorderable with it. What tells the two apart is where the
+ * drag ends: inside the frame it is about the list, outside it is about the
+ * plan.
+ */
+describe('dragging a row up its own pile', () => {
+  function pile(row: () => number | null): {
+    placement: PlacementController;
+    moves: Array<[string, Vec3]>;
+    preview: Array<[string | null, number | undefined]>;
+    commits: Array<{ action: string; row?: number }>;
+  } {
+    const moves: Array<[string, Vec3]> = [];
+    const preview: Array<[string | null, number | undefined]> = [];
+    const commits: Array<{ action: string; row?: number }> = [];
+    const members = [
+      { entity: 'light.a', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      { entity: 'switch.b', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      { entity: 'sensor.c', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+    ];
+    const entities = {
+      moveEntity: (entityId: string, position: Vec3) => moves.push([entityId, position]),
+      setEntities: () => {},
+      setHovered: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      getStackMembers: () => members.map((m) => m.entity),
+      pick: () => null,
+      overStack: () => true,
+      rowUnder: () => row(),
+      setRowPreview: (entityId: string | null, index?: number) => preview.push([entityId, index]),
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    placement.on('placement-commit', ({ intent }) =>
+      commits.push({ action: intent.action, row: intent.row }),
+    );
+    return { placement, moves, preview, commits };
+  }
+
+  function decision(placement: PlacementController): { action: string; row?: number } {
+    return (placement as unknown as { decision: { action: string; row?: number } }).decision;
+  }
+
+  it('reads the drag as a move up the list', () => {
+    const { placement } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    expect(decision(placement).action).toBe('reorder');
+    expect(decision(placement).row).toBe(2);
+    placement.dispose();
+  });
+
+  it('shows the list in the new order while the row is still in hand', () => {
+    const { placement, preview } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    expect(preview[preview.length - 1]).toEqual(['light.a', 2]);
+    placement.dispose();
+  });
+
+  it('does not move the marker in the house', () => {
+    const { placement, moves } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    expect(
+      moves.map(([, position]) => position),
+      'the anchor stays where the pile put it',
+    ).toEqual([[0, 0.02, 0]]);
+    placement.dispose();
+  });
+
+  it('commits the row it promised', () => {
+    const { placement, commits } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    placement.commitPlacement(...screen(0.1, 0.1));
+    expect(commits).toEqual([{ action: 'reorder', row: 2 }]);
+    placement.dispose();
+  });
+
+  /**
+   * The row it started on is read once. Asking the layer mid-drag asks about
+   * the *preview*, and the answer chases itself: moved to row 2, therefore
+   * already on row 2, therefore nothing to move.
+   */
+  it('does not lose the move to its own preview', () => {
+    const { placement } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    for (let i = 0; i < 5; i += 1) placement.updatePlacement(...screen(0.1, 0.1));
+    expect(decision(placement).action).toBe('reorder');
+    placement.dispose();
+  });
+
+  it('takes the row back off the pile when the drag ends', () => {
+    const { placement, preview } = pile(() => 2);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    placement.cancelPlacement();
+    expect(preview[preview.length - 1]).toEqual([null, undefined]);
+    placement.dispose();
+  });
+
+  it('changes nothing on the row it started on', () => {
+    const { placement, commits } = pile(() => 0);
+    placement.beginMove('light.a', { carryStack: false });
+    placement.updatePlacement(...screen(0.1, 0.1));
+    expect(decision(placement).action).toBe('stay');
+    placement.commitPlacement(...screen(0.1, 0.1));
+    expect(commits).toEqual([]);
+    placement.dispose();
+  });
+});
+
+/**
+ * The frame is the pile's drop area.
+ *
+ * The box is drawn around the whole list to say it is one thing, so the air
+ * between two rows belongs to it as much as the rows do. Requiring a chip meant
+ * dropping an entity "into" a stack had to hit a target a few pixels tall, and
+ * missing it made a second marker at the same spot instead.
+ */
+describe('dropping onto a pile rather than onto a chip', () => {
+  function world(inFrame: boolean): {
+    placement: PlacementController;
+    decision: () => { action: string; target: string | null };
+  } {
+    const members = [
+      { entity: 'light.a', position: [2, 0.02, 2] as Vec3, level: 'ground', stack: 's', name: 'Lamp' },
+      { entity: 'switch.b', position: [2, 0.02, 2] as Vec3, level: 'ground', stack: 's' },
+    ];
+    const entities = {
+      moveEntity: () => {},
+      setEntities: () => {},
+      setHovered: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      getStackMembers: () => members.map((m) => m.entity),
+      // Every chip missed: the pointer is in the air between two rows.
+      pick: () => null,
+      stackUnder: () => (inFrame ? { stackId: 's', base: 'light.a' } : null),
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    return {
+      placement,
+      decision: () =>
+        (placement as unknown as { decision: { action: string; target: string | null } }).decision,
+    };
+  }
+
+  it('joins the pile the pointer is inside', () => {
+    const { placement, decision } = world(true);
+    placement.beginPlacement('sensor.new');
+    placement.updatePlacement(...screen(1, 1));
+    expect(decision().action).toBe('join');
+    expect(decision().target).toBe('light.a');
+    placement.dispose();
+  });
+
+  it('says which pile, and how much is in it', () => {
+    const { placement } = world(true);
+    placement.beginPlacement('sensor.new');
+    placement.updatePlacement(...screen(1, 1));
+    const caption = (placement as unknown as { decision: { caption: string } }).decision.caption;
+    expect(caption).toContain('Lamp');
+    expect(caption).toContain('1 more');
+    placement.dispose();
+  });
+
+  it('is an ordinary placement everywhere else', () => {
+    const { placement, decision } = world(false);
+    placement.beginPlacement('sensor.new');
+    placement.updatePlacement(...screen(1, 1));
+    expect(decision().action).toBe('place');
+    placement.dispose();
+  });
+});

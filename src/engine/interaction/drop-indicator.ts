@@ -24,7 +24,14 @@ import { MarkerAtlas, type AtlasCell } from '@/engine/entities/marker-texture';
  * half of the message: joining a pile and landing on the floor are different
  * outcomes and must not look the same from the corner of your eye.
  */
-export type DropTone = 'place' | 'join' | 'detach' | 'stay' | 'label' | 'invalid';
+export type DropTone =
+  | 'place'
+  | 'join'
+  | 'detach'
+  | 'stay'
+  | 'reorder'
+  | 'label'
+  | 'invalid';
 
 export interface DropFeedback {
   /** Surface point under the cursor. */
@@ -68,13 +75,19 @@ const TONE_COLORS: Record<DropTone, string | null> = {
   join: '#3fa65a',
   detach: '#e08a2e',
   stay: null,
+  // The same green as a join: both are about the pile holding together, and a
+  // reorder is a move *within* one rather than out of it.
+  reorder: '#3fa65a',
   label: null,
   invalid: null,
 };
 
 /** Tones that name a spot on a surface. The others are about the marker itself. */
 function marksASpot(tone: DropTone): boolean {
-  return tone !== 'label' && tone !== 'stay';
+  // A reorder is about the list, not about a spot on the floor: the marker is
+  // not going anywhere in the house, so a drop line down to the slab would be
+  // pointing at something that is not happening.
+  return tone !== 'label' && tone !== 'stay' && tone !== 'reorder';
 }
 
 const RENDER_ORDER = 3500;

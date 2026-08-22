@@ -355,14 +355,14 @@ marker *is* the gesture, and that is decided by what overlaps on screen.
 
 | Gesture | Result |
 | --- | --- |
-| Drop a marker on another | They stack |
+| Drop a marker on another, or anywhere inside a pile's frame | They stack |
 | Drag one **label** onto another | The same: labels are what you can see and grab |
 | Drag the stack's **grab bar** or its **anchor dot** | The whole pile moves |
 | Drop a whole pile on another marker | The two piles merge |
 | Drag one **row** off the pile | That marker leaves the stack and lands where you dropped it |
-| Drag a row around inside the pile | Nothing: it is still on the pile it started on |
+| Drag a row up or down inside the pile | The pile is reordered, and you watch the list change as you drag |
 | Tap the **grab bar** | The stack's own settings open |
-| Drag a row in those settings | The pile is reordered |
+| Drag a row in the stack's settings | The same, from the list rather than the plan |
 
 The cursor says which of these a release would do before you let go, so the
 gesture is never a guess.
@@ -379,10 +379,17 @@ bar and written to every member as `stackColor` and `stackRoom`.
 
 The rows are drawn in the order the `entities:` list gives them, bottom row
 first — and the bottom row is the one that keeps the anchor dot and the leader
-line, so which marker sits there is worth choosing. The stack's settings list
-the rows in that order and let you move them, by dragging or with the arrows
-beside each one; the arrows are there because dragging a list is a mouse
-gesture and this card runs on wall panels too.
+line, so which marker sits there is worth choosing. Drag a row up or down
+inside its own frame and the pile reorders; the list comes out in the new order
+while the row is still in your hand, because a reorder you cannot see until you
+let go is a guess about a list you are looking straight at. The same rows are
+listed in the stack's settings with arrows beside them, for a finger — HTML5
+drag is a mouse gesture, and this card runs on wall panels.
+
+The frame is the pile's drop area, not just its rows. Dragging an entity out of
+the picker and letting go anywhere inside the box adds it to that stack: the
+box is drawn around the whole list to say it is one thing, so the air between
+two rows belongs to it as much as the rows do.
 
 **Anchor and label are two things.** The dot is the entity — where the lamp
 hangs, where its light comes from. The chip is a caption, and a plan is full of

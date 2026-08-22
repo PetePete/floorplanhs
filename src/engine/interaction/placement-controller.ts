@@ -103,6 +103,17 @@ interface EntityLayerExtras {
   getPlacedEntities?(): PlacedEntity[];
   setLabelOffset?(entityId: string, offset: Vec3): void;
   getLabelOffset?(entityId: string): Vec3 | null;
+  /** Which row of `stackId` the pointer is over, counting from the bottom. */
+  rowUnder?(ndc: { x: number; y: number }, stackId: string): number | null;
+  /** The pile whose frame the pointer is inside; the whole box is a target. */
+  stackUnder?(
+    ndc: { x: number; y: number },
+    options?: { ignore?: string },
+  ): { stackId: string; base: string } | null;
+  /** Draw a row where the drag says it is going; see `EntityLayer`. */
+  setRowPreview?(entityId: string | null, row?: number): void;
+  /** Rows of a pile, in the order they are drawn. */
+  getStackMembers?(stackId: string): string[];
   /** Screen test for the hysteresis that keeps a pile from falling apart. */
   overStack?(
     ndc: { x: number; y: number },
@@ -169,6 +180,7 @@ const TONE_BY_ACTION: Record<DropDecision['action'], DropTone> = {
   join: 'join',
   detach: 'detach',
   stay: 'stay',
+  reorder: 'reorder',
   label: 'label',
   invalid: 'invalid',
 };
@@ -224,6 +236,15 @@ export class PlacementController implements IPlacementController {
    * user can still see what they took hold of.
    */
   private carryStack = true;
+  /**
+   * The row this drag started on.
+   *
+   * Read once, on the way down. Asking the layer mid-drag would ask about the
+   * *preview* — the row is drawn where the drag says it is going — so the
+   * answer would chase itself: moved to row 2, therefore already on row 2,
+   * therefore nothing to move.
+   */
+  private startRow: number | null = null;
   /** What a release would do right now; recomputed on every pointer move. */
   private decision: DropDecision = { action: 'place', target: null, caption: '' };
   private strings: DropStrings = DEFAULT_DROP_STRINGS;
@@ -358,6 +379,12 @@ export class PlacementController implements IPlacementController {
     this.entityId = entityId;
     this.mode = 'move';
     this.carryStack = options?.carryStack !== false;
+    this.startRow = null;
+    if (!this.carryStack && placed?.stack) {
+      const rows = extras.getStackMembers?.(placed.stack) ?? [];
+      const row = rows.indexOf(entityId);
+      this.startRow = row < 0 ? null : row;
+    }
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
     this.carrying = this.carryStack ? this.pileUnder(entityId) : [];
@@ -510,7 +537,7 @@ export class PlacementController implements IPlacementController {
     // The marker itself follows the cursor in move mode; the ghost would only
     // duplicate it.
     if (this.mode === 'move' && this.entityId) {
-      if (this.decision.action === 'stay') {
+      if (this.decision.action === 'stay' || this.decision.action === 'reorder') {
         // "Stays in the stack" has to look like it. Dragged out and brought
         // back, the marker is already sitting somewhere else — and a pile lays
         // its rows out from each marker's own anchor, so leaving it there draws
@@ -568,7 +595,11 @@ export class PlacementController implements IPlacementController {
     }
 
     result.stackWith = this.decision.target;
-    if (mode === 'move') this.entities.moveEntity(entityId, result.position);
+    // A reorder is about the list, not the plan: the marker has not moved and
+    // must not be written as if it had.
+    if (mode === 'move' && this.decision.action !== 'reorder') {
+      this.entities.moveEntity(entityId, result.position);
+    }
     const intent = this.decision;
     const carryStack = this.carryStack;
     this.finish(null);
@@ -808,6 +839,7 @@ export class PlacementController implements IPlacementController {
         ...this.blankSituation(),
         target: this.targetUnderPointer(),
         overOwnStack: this.overOwnStack(),
+        ...this.rowsUnderPointer(),
         valid,
         reason: this.feedback.reason,
         levelName: this.feedback.levelName,
@@ -860,6 +892,21 @@ export class PlacementController implements IPlacementController {
     );
   }
 
+  /**
+   * Which row of its own pile this marker is on, and which one the pointer is
+   * over. Both null unless a single row is in hand and still on the pile.
+   */
+  private rowsUnderPointer(): { ownRow: number | null; targetRow: number | null } {
+    const stack = this.ownStack();
+    const entityId = this.entityId;
+    if (!stack || !entityId || this.carryStack) return { ownRow: null, targetRow: null };
+
+    const ownRow = this.startRow;
+    if (ownRow === null) return { ownRow: null, targetRow: null };
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    return { ownRow, targetRow: extras.rowUnder?.({ x: this.ndc.x, y: this.ndc.y }, stack) ?? null };
+  }
+
   /** The marker under the pointer, described the way the rules want it. */
   private targetUnderPointer(): DropTarget | null {
     const hit = this.markerUnderPointer();
@@ -899,6 +946,15 @@ export class PlacementController implements IPlacementController {
     // pile the user is holding in two.
     const leaving = !this.carryStack && (action === 'detach' || action === 'join');
     extras.setDraggedOut?.(leaving ? this.entityId : null);
+
+    // The list comes out in the new order while the row is still in the hand.
+    // A reorder you cannot see until you let go is a guess about a list you are
+    // looking straight at.
+    if (action === 'reorder' && typeof this.decision.row === 'number') {
+      extras.setRowPreview?.(this.entityId, this.decision.row);
+    } else {
+      extras.setRowPreview?.(null);
+    }
   }
 
   /** Everyone sharing this marker's anchor, with the spot they started from. */
@@ -922,10 +978,20 @@ export class PlacementController implements IPlacementController {
    */
   private markerUnderPointer(): string | null {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
-    const hit =
+    const picked =
       typeof this.entities.pick === 'function'
         ? this.entities.pick({ x: this.ndc.x, y: this.ndc.y }, { ignore: this.entityId ?? undefined })
         : null;
+    // Missing every chip but inside a pile's frame still means that pile: the
+    // box is drawn around the list to say it is one thing, so it is one target.
+    // Without this, dropping an entity from the palette "into" a stack had to
+    // hit a chip a few pixels tall, and landing between two rows quietly made a
+    // second marker at the same spot instead.
+    const hit =
+      picked ??
+      extras.stackUnder?.({ x: this.ndc.x, y: this.ndc.y }, { ignore: this.entityId ?? undefined })
+        ?.base ??
+      null;
     if (!hit || hit === this.entityId) return null;
 
     const target = extras.getPlacedEntity?.(hit) ?? null;
@@ -1201,6 +1267,7 @@ export class PlacementController implements IPlacementController {
 
     this.mode = null;
     this.entityId = null;
+    this.startRow = null;
     this.originalPosition = null;
     this.lastResult = null;
     this.domDrag = false;
@@ -1213,6 +1280,7 @@ export class PlacementController implements IPlacementController {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
     extras.setDraggedOut?.(null);
     extras.setStackHighlight?.(null);
+    extras.setRowPreview?.(null);
     this.entities.setHovered(null);
 
     this.indicator.hide();

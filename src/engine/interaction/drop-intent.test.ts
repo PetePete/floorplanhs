@@ -158,3 +158,53 @@ describe('captions', () => {
     expect(decision.caption).toBe('Stapeln mit Kitchen');
   });
 });
+
+/**
+ * A pile is a list you read, and the hand that can pull a row out of it is
+ * already on the row — so moving it *within* the list has to be the same
+ * gesture, told apart by where it ends.
+ */
+describe('reordering inside a pile', () => {
+  const onPile = (patch: Partial<DropSituation> = {}): DropSituation =>
+    situation({ ownStack: 's', overOwnStack: true, ownRow: 0, targetRow: 0, ...patch });
+
+  it('moves the row when the pointer is over a different one', () => {
+    const decision = decideDrop(onPile({ targetRow: 2 }));
+    expect(decision.action).toBe('reorder');
+    expect(decision.row).toBe(2);
+  });
+
+  it('counts the rows from one when it says so', () => {
+    expect(decideDrop(onPile({ targetRow: 2 })).caption).toBe('Move to row 3');
+  });
+
+  it('changes nothing on the row it started on', () => {
+    expect(decideDrop(onPile({ targetRow: 0 })).action).toBe('stay');
+  });
+
+  it('writes something on a release, unlike staying put', () => {
+    expect(isCommittable('reorder')).toBe(true);
+    expect(isCommittable('stay')).toBe(false);
+  });
+
+  /** Off the pile is still off the pile; the rows only matter inside it. */
+  it('leaves the pile when the pointer does', () => {
+    expect(decideDrop(onPile({ overOwnStack: false, targetRow: 2 })).action).toBe('detach');
+  });
+
+  it('does not reorder when the whole pile is in the hand', () => {
+    expect(decideDrop(onPile({ carryingStack: true, targetRow: 2 })).action).toBe('place');
+  });
+
+  /** Without a row from the layer there is nothing to say, so say nothing. */
+  it('falls back to staying put when the rows are unknown', () => {
+    expect(decideDrop(onPile({ ownRow: null, targetRow: null })).action).toBe('stay');
+  });
+
+  it('a marker under the pointer still outranks the list', () => {
+    const decision = decideDrop(
+      onPile({ targetRow: 2, target: target({ entityId: 'light.other', stack: 'b', size: 2 }) }),
+    );
+    expect(decision.action).toBe('join');
+  });
+});

@@ -811,6 +811,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       joinPile: this.t('ui.drop.join_pile', 'Add to {name} + {count} more'),
       detach: this.t('ui.drop.detach', 'Take out of the stack'),
       stay: this.t('ui.drop.stay', 'Stays in the stack'),
+      reorder: this.t('ui.drop.reorder', 'Move to row {row}'),
       label: this.t('ui.drop.label', 'Move the label'),
       invalid: this.t('ui.drop.invalid', 'Cannot drop here'),
       outside: this.t('ui.drop.outside', 'Drop beside the house, not above the horizon'),

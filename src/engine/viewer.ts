@@ -44,7 +44,7 @@ import { easeInOutCubic, vRound } from '@/util/math';
 import { EdgeOverlay } from '@/engine/model/edge-overlay';
 import { explodeOffsets } from '@/engine/model/explode';
 import { roomAnchors } from '@/engine/model/room-anchors';
-import { leaveStack, resolveMove, stackFor } from '@/engine/entities/stacks';
+import { leaveStack, reorderStack, resolveMove, stackFor } from '@/engine/entities/stacks';
 import type { RoomFillSource } from '@/engine/lighting/room-fill';
 import { RenderCore, WebGLUnavailableError } from '@/engine/core/render-core';
 import { RenderLoop } from '@/engine/core/render-loop';
@@ -465,6 +465,22 @@ export class Viewer implements IViewer {
           // plan with nothing to say which room it belongs to — the placement
           // works it out, and then nobody wrote it down.
           const room = result.room ?? undefined;
+          // A row moved inside its own pile is not a placement: nothing about
+          // where the marker *is* has changed, only which row of the list it is.
+          if (intent.action === 'reorder' && typeof intent.row === 'number') {
+            const stack = stackFor(this.config.entities ?? [], entityId);
+            const from = stack?.members.findIndex((entry) => entry.entity === entityId) ?? -1;
+            if (stack && from >= 0) {
+              this.emit('edit-intent', {
+                kind: 'reorder-stack',
+                stackId: stack.id,
+                from,
+                to: intent.row,
+              });
+              this.adoptReorder(stack.id, from, intent.row);
+            }
+            return;
+          }
           // A row pulled off its pile leaves it. Sending this as a plain move
           // would take the whole pile along — the mover looks the stack up by
           // id, and this marker is still on it until the intent says otherwise.
@@ -592,6 +608,13 @@ export class Viewer implements IViewer {
     // rules is how a pile came to be merged by a gesture that only meant to
     // take one marker off it.
     const next = resolveMove(entities, { entityId, position, level, room, stackWith, carryStack });
+    this.config = { ...this.config, entities: next };
+    this.guard('entities', this._entities, (e) => e.setEntities(next));
+  }
+
+  /** A row moved within its pile, taken into our own copy straight away. */
+  private adoptReorder(stackId: string, from: number, to: number): void {
+    const next = reorderStack(this.config.entities ?? [], stackId, from, to);
     this.config = { ...this.config, entities: next };
     this.guard('entities', this._entities, (e) => e.setEntities(next));
   }

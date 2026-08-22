@@ -19,8 +19,10 @@ export type DropAction =
   | 'join'
   /** Leave the pile this marker is on, and land here. */
   | 'detach'
-  /** Still over its own pile: releasing changes nothing. */
+  /** Still over its own pile, on the row it started on: releasing changes nothing. */
   | 'stay'
+  /** Still over its own pile, on a different row: releasing reorders it. */
+  | 'reorder'
   /** Moving a caption beside its anchor; the entity does not move. */
   | 'label'
   /** Nowhere to put it. */
@@ -47,6 +49,15 @@ export interface DropSituation {
   target: DropTarget | null;
   /** Pointer still inside the pile this marker came from. */
   overOwnStack: boolean;
+  /**
+   * The row of its own pile the pointer is over, and the row it started on.
+   *
+   * A pile is a list you read, and moving a row within it is the one thing you
+   * would expect to be able to do by dragging — the gesture is already in your
+   * hand. Only meaningful while `overOwnStack`.
+   */
+  ownRow?: number | null;
+  targetRow?: number | null;
   /** The raycast found somewhere to put it. */
   valid: boolean;
   /** Why not, when it did not. */
@@ -61,6 +72,8 @@ export interface DropDecision {
   target: string | null;
   /** Words for the chip under the cursor. */
   caption: string;
+  /** Where the row would land; set only when `action` is `reorder`. */
+  row?: number;
 }
 
 /**
@@ -74,6 +87,8 @@ export interface DropStrings {
   /** Onto a pile that already exists. */
   joinPile: string;
   detach: string;
+  /** Moved to another row of the same pile; `{row}` counts from 1. */
+  reorder: string;
   stay: string;
   label: string;
   invalid: string;
@@ -88,6 +103,7 @@ export const DEFAULT_DROP_STRINGS: DropStrings = {
   joinPile: 'Add to {name} + {count} more',
   detach: 'Take out of the stack',
   stay: 'Stays in the stack',
+  reorder: 'Move to row {row}',
   label: 'Move the label',
   invalid: 'Cannot drop here',
   outside: 'Drop beside the house, not above the horizon',
@@ -148,9 +164,24 @@ export function decideDrop(
   // Carrying the whole pile is a placement of the pile, so none of the
   // leaving/staying rules apply — there is nothing left behind to leave.
   if (situation.ownStack && !situation.carryingStack) {
-    return situation.overOwnStack
-      ? { action: 'stay', target: null, caption: strings.stay }
-      : { action: 'detach', target: null, caption: strings.detach };
+    if (!situation.overOwnStack) {
+      return { action: 'detach', target: null, caption: strings.detach };
+    }
+    // Inside its own pile, the drag is about the list rather than the plan: the
+    // rows are read in order and the bottom one carries the anchor, so which
+    // row this marker is on is worth being able to say with the hand that is
+    // already holding it.
+    const from = situation.ownRow;
+    const to = situation.targetRow;
+    if (typeof from === 'number' && typeof to === 'number' && from !== to) {
+      return {
+        action: 'reorder',
+        target: null,
+        caption: fillTemplate(strings.reorder, { row: to + 1 }),
+        row: to,
+      };
+    }
+    return { action: 'stay', target: null, caption: strings.stay };
   }
 
   return { action: 'place', target: null, caption: situation.levelName ?? '' };
