@@ -107,11 +107,16 @@ describe('the stack as a whole', () => {
 
 /**
  * Labels are the parts you can see and grab, so dragging two of them together
- * is how anyone says "put these in one place". Joining then has to clear the
- * offsets that got them there, or the rows of the list stand apart.
+ * is how anyone says "put these in one place".
+ *
+ * Where a label was dragged to is a placement made by hand — it is what the
+ * leader line is drawn to — and joining a pile must not spend it. The rows of a
+ * stack are laid out from the shared anchor, so while a marker is a member the
+ * offset simply plays no part; the layer overrules it where the rows are placed,
+ * and the config keeps it for the day the marker is on its own again.
  */
 describe('joining from where the labels were dragged', () => {
-  it('drops the label offset of the marker that joins', () => {
+  it('keeps the label offset of the marker that joins', () => {
     const house = [
       at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
       at('media_player.room', 4, 4, { marker: { offset: [-5.8, 0.34, -2.1] } }),
@@ -119,27 +124,40 @@ describe('joining from where the labels were dragged', () => {
     const next = joinStack(house, 'media_player.room', house[0]);
 
     expect(next[1].stack).toBe('stack_1');
-    expect(next[1].marker?.offset).toBeUndefined();
+    expect(next[1].marker?.offset).toEqual([-5.8, 0.34, -2.1]);
     expect(next[1].position).toEqual([1, 2.5, 1]);
   });
 
-  it('drops it on the marker that was landed on as well', () => {
+  it('keeps it on the marker that was landed on as well', () => {
     const house = [
       at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
       at('media_player.room', 4, 4),
     ];
     const next = joinStack(house, 'media_player.room', house[0]);
-    expect(next[0].marker?.offset).toBeUndefined();
+    expect(next[0].marker?.offset).toEqual([-5, 0.34, -3]);
     expect(next[0].stack).toBe('stack_1');
   });
 
-  it('keeps the rest of the marker config while doing it', () => {
+  it('leaves the rest of the marker config alone too', () => {
     const house = [
       at('light.a', 1, 1, { marker: { icon: 'mdi:lamp', offset: [1, 0.34, 1] } }),
       at('light.b', 4, 4),
     ];
     const next = joinStack(house, 'light.b', house[0]);
-    expect(next[0].marker).toEqual({ icon: 'mdi:lamp' });
+    expect(next[0].marker).toEqual({ icon: 'mdi:lamp', offset: [1, 0.34, 1] });
+  });
+
+  /** The whole point: it is there again when the marker comes back out. */
+  it('hands the label back when the marker leaves the pile', () => {
+    const house = [
+      at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
+      at('sensor.b', 4, 4, { marker: { offset: [2, 0.34, -1], icon: 'mdi:thermometer' } }),
+    ];
+    const joined = joinStack(house, 'sensor.b', house[0]);
+    const out = unstackTo(joined, 'sensor.b', [7, 2.5, 7], 'ground');
+    const back = out.find((entry) => entry.entity === 'sensor.b');
+    expect(back?.stack).toBeUndefined();
+    expect(back?.marker).toEqual({ offset: [2, 0.34, -1], icon: 'mdi:thermometer' });
   });
 });
 

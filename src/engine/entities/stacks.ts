@@ -75,11 +75,18 @@ export function joinStack(
 }
 
 /**
- * On the pile, and without a label offset of its own.
+ * On the pile.
  *
- * The rows of a stack are placed by their position in the list; a leftover
- * offset from when the marker stood alone would drag one row off sideways and
- * the list would stop being one.
+ * The rows of a stack are placed by their position in the list, so a label
+ * offset from when the marker stood alone plays no part while it is a member —
+ * the layer lays every row out from the shared anchor and ignores it.
+ *
+ * Ignored, and deliberately not deleted. It was deleted here once, to stop a
+ * leftover offset dragging a row off sideways, and that made joining a pile
+ * throw away the one thing the marker had been told by hand: where its label
+ * sits, and therefore the leader line drawn to it. The tidying now happens
+ * where the rows are laid out, which is the only place that has any business
+ * overruling it — and leaving the pile hands the label straight back.
  */
 function withStack(entry: PlacedEntity, id: string, from?: PlacedEntity): PlacedEntity {
   const next: PlacedEntity = entry.stack === id ? { ...entry } : { ...entry, stack: id };
@@ -92,10 +99,6 @@ function withStack(entry: PlacedEntity, id: string, from?: PlacedEntity): Placed
     if (from.stackColor) next.stackColor = from.stackColor;
     else delete next.stackColor;
   }
-  if (!next.marker?.offset) return next;
-  const { offset: _offset, ...marker } = next.marker;
-  next.marker = Object.keys(marker).length > 0 ? marker : undefined;
-  if (next.marker === undefined) delete next.marker;
   return next;
 }
 
