@@ -161,24 +161,51 @@ describe('joining from where the labels were dragged', () => {
   });
 
   /**
-   * The whole point: the label is where it was, whatever the anchor did in the
-   * meantime — including being dropped somewhere else entirely on the way out.
+   * Both halves go back where they belong. What you drag out of a pile is a
+   * *row* — a label — so that is what lands under the cursor; the entity goes
+   * home, because joining was a way of tidying the screen and never a decision
+   * about where the lamp hangs.
    */
-  it('hands the label back to the place it was put', () => {
+  it('sends the marker home and the label to where it was let go', () => {
     const house = [
       at('media_player.tv', 1, 1, { marker: { offset: [-5, 0.34, -3] } }),
       at('sensor.b', 4, 4, { marker: { offset: [2, 0.34, -1], icon: 'mdi:thermometer' } }),
     ];
-    const before = labelAt(house[1]);
 
     const joined = joinStack(house, 'sensor.b', house[0]);
+    expect(joined[1].position, 'while stacked it shares the anchor').toEqual([1, 2.5, 1]);
+
     const out = unstackTo(joined, 'sensor.b', [7, 2.5, 7], 'ground');
     const back = out.find((entry) => entry.entity === 'sensor.b');
 
     expect(back?.stack).toBeUndefined();
-    expect(back?.position, 'the marker lands where it was dropped').toEqual([7, 2.5, 7]);
-    expect(labelAt(back), 'and its label is back where it was drawn').toEqual(before);
+    expect(back?.stackFrom, 'the memory is spent').toBeUndefined();
+    expect(back?.position, 'the marker is back where it stood').toEqual([4, 2.5, 4]);
+    expect(labelAt(back), 'the label is where it was let go').toEqual([7, 7]);
     expect(back?.marker?.icon, 'the rest of the marker config is untouched').toBe('mdi:thermometer');
+  });
+
+  it('brings a marker home even when the pile has been moved since', () => {
+    const house = [at('light.a', 1, 1), at('sensor.b', 4, 4)];
+    const joined = joinStack(house, 'sensor.b', house[0]);
+    // The pile travels four metres east; the marker is three east of it either
+    // way, so it comes back beside the pile's new home rather than at an
+    // address nothing is at any more.
+    const moved = moveStack(joined, 'stack_1', [5, 2.5, 1], 'ground');
+    const out = unstackTo(moved, 'sensor.b', [9, 2.5, 2], 'ground');
+    expect(out.find((entry) => entry.entity === 'sensor.b')?.position).toEqual([8, 2.5, 4]);
+  });
+
+  /** A pile from an older config has nothing to remember; the drop is all. */
+  it('falls back to the drop point when there is no memory', () => {
+    const legacy = [
+      at('light.a', 1, 1, { stack: 's' }),
+      at('sensor.b', 1, 1, { stack: 's' }),
+    ];
+    const out = unstackTo(legacy, 'sensor.b', [6, 2.5, 6], 'ground');
+    const back = out.find((entry) => entry.entity === 'sensor.b');
+    expect(back?.position).toEqual([6, 2.5, 6]);
+    expect(back?.marker?.offset, 'and the label sits above it').toBeUndefined();
   });
 
   it('does the same when the pile is tipped onto another marker', () => {

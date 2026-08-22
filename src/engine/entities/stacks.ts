@@ -66,12 +66,50 @@ export function joinStack(
   return entities.map((entry) => {
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.entity !== moved) return entry;
-    return {
-      ...rebaseOffset(withStack(entry, id, target), entry.position, target.position),
-      position: [...target.position] as Vec3,
-      level: target.level ?? null,
-    };
+    const kept = withHome(rebaseOffset(withStack(entry, id, target), entry.position, target.position), target.position);
+    return { ...kept, position: [...target.position] as Vec3, level: target.level ?? null };
   });
+}
+
+/** Metres a label floats above its anchor when it has none of its own. */
+const DEFAULT_LABEL_LIFT = 0.34;
+
+/**
+ * Where a marker stands when it is not on a pile — its own spot in the house.
+ *
+ * For a member that is the pile's anchor plus what it remembers of where it
+ * came from. For anyone else it is simply where they are.
+ */
+function homeOf(entry: PlacedEntity): Vec3 {
+  const from = entry.stackFrom;
+  if (!from) return [...entry.position] as Vec3;
+  return [
+    round3(entry.position[0] + from[0]),
+    round3(entry.position[1] + from[1]),
+    round3(entry.position[2] + from[2]),
+  ];
+}
+
+/**
+ * Record where a marker came from, as a vector from the pile it is joining.
+ *
+ * A vector, not a point: a pile that is later dragged across the house should
+ * hand its markers back beside its new home, not at an address nothing is at
+ * any more. And a marker moving from one pile to another keeps the home it had
+ * all along rather than adopting the first pile's spot as its own.
+ */
+function withHome(entry: PlacedEntity, pile: Vec3): PlacedEntity {
+  const home = homeOf(entry);
+  const from: Vec3 = [
+    round3(home[0] - pile[0]),
+    round3(home[1] - pile[1]),
+    round3(home[2] - pile[2]),
+  ];
+  if (from[0] === 0 && from[1] === 0 && from[2] === 0) {
+    const { stackFrom: _drop, ...rest } = entry;
+    return rest;
+  }
+  return { ...entry, stackFrom: from };
 }
 
 /**
@@ -155,11 +193,8 @@ export function mergeStacks(
   return entities.map((entry) => {
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.stack !== movedStack) return entry;
-    return {
-      ...rebaseOffset(withStack(entry, id, target), entry.position, target.position),
-      position: [...target.position] as Vec3,
-      level: target.level ?? null,
-    };
+    const kept = withHome(rebaseOffset(withStack(entry, id, target), entry.position, target.position), target.position);
+    return { ...kept, position: [...target.position] as Vec3, level: target.level ?? null };
   });
 }
 
@@ -179,7 +214,13 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
     if (entry.entity === entityId || (dissolve && entry.stack === id)) {
       // Off the pile, and without the things that were the pile's: its room and
       // its colour said something about the group, not about this marker.
-      const { stack: _stack, stackRoom: _room, stackColor: _color, ...rest } = entry;
+      const {
+        stack: _stack,
+        stackFrom: _from,
+        stackRoom: _room,
+        stackColor: _color,
+        ...rest
+      } = entry;
       return rest;
     }
     return entry;
@@ -326,8 +367,7 @@ function settle(
   room: string | undefined,
   leavingPile: boolean,
 ): PlacedEntity {
-  const base = leavingPile ? rebaseOffset(entry, entry.position, position) : entry;
-  const moved: PlacedEntity = { ...base, position: [...position] as Vec3, level };
+  const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
   if (leavingPile) {
     if (!moved.room && room) moved.room = room;
     return moved;
@@ -338,20 +378,55 @@ function settle(
 }
 
 /**
- * Take a marker off its pile and put it down, keeping what it says about
- * itself. The card writes this and the viewer draws it, from one rule.
+ * Take a marker off its pile, and put both halves of it back where they belong.
+ *
+ * What you are dragging out of a pile is a *row* — a label — so `labelAt` is
+ * where the label goes: under the cursor, where you let go. The entity itself
+ * goes home, to the spot it stood on before it ever joined, because joining was
+ * a way of tidying the screen and never a decision about where the lamp hangs.
+ * The leader line then runs from the lamp to the caption you just placed, which
+ * is the line the marker had before the pile and the one you were asking for
+ * back.
+ *
+ * Without a remembered home — a pile built by an older version — the drop point
+ * is all there is, so the marker lands there and keeps its label above it.
+ *
+ * The card writes this and the viewer draws it, from one rule.
  */
 export function unstackTo(
   entities: readonly PlacedEntity[],
   entityId: string,
-  position: Vec3,
+  labelAt: Vec3,
   level: string | null,
   room?: string,
 ): PlacedEntity[] {
-  if (!entities.some((entry) => entry.entity === entityId)) return [...entities];
-  return leaveStack(entities, entityId).map((entry) =>
-    entry.entity === entityId ? settle(entry, position, level, room, true) : entry,
-  );
+  const self = entities.find((entry) => entry.entity === entityId);
+  if (!self) return [...entities];
+
+  const home = self.stackFrom ? homeOf(self) : null;
+  const anchor = home ?? labelAt;
+  const lift = self.marker?.offset?.[1] ?? DEFAULT_LABEL_LIFT;
+  const offset: Vec3 = home
+    ? [round3(labelAt[0] - anchor[0]), lift, round3(labelAt[2] - anchor[2])]
+    : [0, lift, 0];
+
+  return leaveStack(entities, entityId).map((entry) => {
+    if (entry.entity !== entityId) return entry;
+    const settled = settle(entry, anchor, home ? (self.level ?? level) : level, room, true);
+    return { ...settled, marker: withOffset(settled.marker, offset) };
+  });
+}
+
+/** The label's place beside its anchor, without disturbing the rest. */
+function withOffset(marker: PlacedEntity['marker'], offset: Vec3): PlacedEntity['marker'] {
+  // A label sitting straight above its anchor is where a marker starts out, so
+  // that is written as no offset at all rather than as a zero one.
+  if (offset[0] === 0 && offset[2] === 0) {
+    if (!marker?.offset) return marker;
+    const { offset: _drop, ...rest } = marker;
+    return Object.keys(rest).length > 0 ? rest : undefined;
+  }
+  return { ...marker, offset };
 }
 
 /**

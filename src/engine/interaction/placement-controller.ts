@@ -387,6 +387,7 @@ export class PlacementController implements IPlacementController {
     }
     this.role = placed?.role ?? roleForEntityId(entityId);
     this.originalPosition = extras.getEntityPosition?.(entityId) ?? null;
+    this.originalOffset = extras.getLabelOffset?.(entityId) ?? null;
     this.carrying = this.carryStack ? this.pileUnder(entityId) : [];
     this.freePlacement = false;
     this.lastHitLevel = null;
@@ -543,6 +544,19 @@ export class PlacementController implements IPlacementController {
         // its rows out from each marker's own anchor, so leaving it there draws
         // one row hanging off the side of a pile it is supposedly still on.
         if (this.originalPosition) this.entities.moveEntity(this.entityId, this.originalPosition);
+      } else if (this.decision.action === 'detach' && this.detachHome()) {
+        // What a release will do, shown while the pointer is still down: the
+        // entity goes back to its own spot and the label follows the cursor.
+        // Moving the whole marker instead and then putting it home on release
+        // is the same drop with a jump at the end of it.
+        const home = this.detachHome() as Vec3;
+        const lift = this.originalOffset?.[1] ?? DEFAULT_LABEL_LIFT;
+        this.entities.moveEntity(this.entityId, home);
+        (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(this.entityId, [
+          round3(resolved.position[0] - home[0]),
+          lift,
+          round3(resolved.position[2] - home[2]),
+        ]);
       } else {
         this.entities.moveEntity(this.entityId, resolved.position);
         for (const member of this.carrying) {
@@ -957,6 +971,27 @@ export class PlacementController implements IPlacementController {
     }
   }
 
+  /**
+   * Where this marker stood before it joined the pile, in world metres.
+   *
+   * The pile's anchor plus what the config remembers of the marker's own spot.
+   * Null when there is nothing remembered — a pile written by an older version
+   * — and then a release has only the drop point to go on.
+   */
+  private detachHome(): Vec3 | null {
+    const entityId = this.entityId;
+    if (!entityId) return null;
+    const extras = this.entities as IEntityLayer & EntityLayerExtras;
+    const placed = extras.getPlacedEntity?.(entityId);
+    const from = placed?.stackFrom;
+    if (!placed || !from) return null;
+    return [
+      round3(placed.position[0] + from[0]),
+      round3(placed.position[1] + from[1]),
+      round3(placed.position[2] + from[2]),
+    ];
+  }
+
   /** Everyone sharing this marker's anchor, with the spot they started from. */
   private pileUnder(entityId: string): Array<{ entityId: string; from: Vec3 }> {
     const extras = this.entities as IEntityLayer & EntityLayerExtras;
@@ -1255,7 +1290,9 @@ export class PlacementController implements IPlacementController {
       }
     }
     this.carrying = [];
-    if (reason && mode === 'label' && entityId && this.originalOffset) {
+    // Any mode: pulling a row out of a pile moves its label as well, so a
+    // cancelled one has to hand that back the same way a caption drag does.
+    if (reason && entityId && this.originalOffset) {
       (this.entities as IEntityLayer & EntityLayerExtras).setLabelOffset?.(
         entityId,
         this.originalOffset,

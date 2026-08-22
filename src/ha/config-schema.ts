@@ -722,6 +722,8 @@ function readEntities(raw: unknown[], path: string): PlacedEntity[] {
     // What the pile says about itself, held on every member. Read back out here
     // or it is dropped on the next round-trip — this rebuilds the entity from
     // the keys it knows, so a field it does not know does not survive one.
+    const stackFrom = readVec3(obj, 'stackFrom', here);
+    if (stackFrom) placed.stackFrom = stackFrom;
     const stackRoom = readString(obj, 'stackRoom', here);
     if (stackRoom) placed.stackRoom = stackRoom;
     const stackColor = readString(obj, 'stackColor', here);

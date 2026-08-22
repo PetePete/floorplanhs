@@ -366,7 +366,7 @@ marker *is* the gesture, and that is decided by what overlaps on screen.
 | Drag one **label** onto another | The same: labels are what you can see and grab |
 | Drag the stack's **grab bar** or its **anchor dot** | The whole pile moves |
 | Drop a whole pile on another marker | The two piles merge |
-| Drag one **row** off the pile | That marker leaves the stack and lands where you dropped it |
+| Drag one **row** off the pile | That marker leaves the stack: the entity goes back to its own spot, and its label lands where you let go |
 | Drag a row up or down inside the pile | The pile is reordered, and you watch the list change as you drag |
 | Tap the **grab bar** | The stack's own settings open |
 | Drag a row in the stack's settings | The same, from the list rather than the plan |
@@ -384,12 +384,13 @@ each entity's own `room`, untouched by piling them up. On a pile that setting
 simply goes unused — a stack is one thing on the plan and draws one line, its
 own, because three markers each pointing off at the room they name is the
 tangle a pile is there to end. Take a marker out again and its line comes back;
-nothing was thrown away. The same goes for a label you dragged aside: while the
-marker is a row of a pile the offset plays no part, because the rows are laid
-out from the shared anchor — and it is still there when the marker leaves. It
-comes back as a *place on the plan* rather than as a distance: joining a pile
-and leaving one both relocate the anchor for you, and a caption that keeps its
-distance from a point that has moved is a caption that has moved. What the pile does have
+nothing was thrown away. Joining a pile moves the entity to the pile's spot, which is a way of tidying
+the screen and not a decision about where the lamp hangs — so the spot it came
+from is written down as `stackFrom` and handed back when the marker leaves. What
+you drag out of a pile is a *row*, which is a label, so that is what lands under
+the cursor; the entity itself goes home, and the leader line runs between the
+two. Kept as a vector from the pile rather than as an address, so a pile that has
+since been dragged across the house hands its markers back beside its new home. What the pile does have
 of its own is a colour and a room for its leader line, set by tapping its grab
 bar and written to every member as `stackColor` and `stackRoom`.
 

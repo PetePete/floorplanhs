@@ -267,6 +267,20 @@ export interface PlacedEntity {
    */
   stack?: string;
   /**
+   * Where this marker stood before it joined the pile, as a vector from the
+   * pile's anchor.
+   *
+   * Joining moves the entity to the pile's spot, which is a grouping and not a
+   * decision about where the lamp hangs — so the spot it came from is kept, and
+   * taking it out again puts it back there. Held as a vector rather than a
+   * point so that a pile which has since been dragged across the house hands
+   * its markers back beside its new home rather than at an address nothing is
+   * at any more.
+   *
+   * Written and read by the card; there is nothing to maintain by hand.
+   */
+  stackFrom?: Vec3;
+  /**
    * The room the *pile* points at, which is not the room its members are in.
    *
    * A stack groups chips on the screen; it says nothing about where a lamp

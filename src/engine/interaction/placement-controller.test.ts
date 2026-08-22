@@ -902,3 +902,81 @@ describe('dropping onto a pile rather than onto a chip', () => {
     placement.dispose();
   });
 });
+
+/**
+ * What the release will do, shown while the pointer is still down.
+ *
+ * Pulling a row out of a pile puts the entity back on its own spot and leaves
+ * the label where you let go. Dragging the whole marker around and only then
+ * putting it home is the same drop with a jump at the end of it, and a jump at
+ * the end is how a gesture stops being trusted.
+ */
+describe('pulling a row out, as it happens', () => {
+  function pile(): {
+    placement: PlacementController;
+    moves: Array<[string, Vec3]>;
+    offsets: Array<[string, Vec3]>;
+  } {
+    const moves: Array<[string, Vec3]> = [];
+    const offsets: Array<[string, Vec3]> = [];
+    const members = [
+      { entity: 'light.a', position: [0, 0.02, 0] as Vec3, level: 'ground', stack: 's' },
+      {
+        entity: 'sensor.b',
+        position: [0, 0.02, 0] as Vec3,
+        level: 'ground',
+        stack: 's',
+        // It stood two metres east and one north before it joined.
+        stackFrom: [2, 0, -1] as Vec3,
+      },
+    ];
+    const entities = {
+      moveEntity: (entityId: string, position: Vec3) => moves.push([entityId, position]),
+      setEntities: () => {},
+      setHovered: () => {},
+      getEntityPosition: (): Vec3 => [0, 0.02, 0],
+      getPlacedEntity: (id: string) => members.find((m) => m.entity === id) ?? null,
+      getPlacedEntities: () => members,
+      getStackMembers: () => members.map((m) => m.entity),
+      getLabelOffset: (): Vec3 => [0, 0.34, 0],
+      setLabelOffset: (entityId: string, offset: Vec3) => offsets.push([entityId, offset]),
+      pick: () => null,
+      overStack: () => false,
+      rowUnder: () => null,
+    } as unknown as IEntityLayer;
+
+    const placement = new PlacementController(stubModel(house()), entities, noopCamera);
+    placement.init(stubContext());
+    return { placement, moves, offsets };
+  }
+
+  it('puts the entity back on its own spot straight away', () => {
+    const { placement, moves } = pile();
+    placement.beginMove('sensor.b', { carryStack: false });
+    placement.updatePlacement(...screen(1.5, 1.5));
+    expect(moves[moves.length - 1]).toEqual(['sensor.b', [2, 0.02, -1]]);
+    placement.dispose();
+  });
+
+  it('hangs the label off it, where the pointer is', () => {
+    const { placement, offsets } = pile();
+    placement.beginMove('sensor.b', { carryStack: false });
+    placement.updatePlacement(...screen(1.5, 1.5));
+
+    const [entityId, offset] = offsets[offsets.length - 1];
+    expect(entityId).toBe('sensor.b');
+    // Anchor at x=2, pointer at x=1.5: the label hangs half a metre west of it.
+    expect(offset[0]).toBeCloseTo(-0.5, 1);
+    expect(offset[1], 'and keeps the lift it had').toBeCloseTo(0.34, 5);
+    placement.dispose();
+  });
+
+  it('puts the label back where it was if the drag is cancelled', () => {
+    const { placement, offsets } = pile();
+    placement.beginMove('sensor.b', { carryStack: false });
+    placement.updatePlacement(...screen(1.5, 1.5));
+    placement.cancelPlacement();
+    expect(offsets[offsets.length - 1]).toEqual(['sensor.b', [0, 0.34, 0]]);
+    placement.dispose();
+  });
+});
