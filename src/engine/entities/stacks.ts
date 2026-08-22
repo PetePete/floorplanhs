@@ -148,6 +148,11 @@ export function leaveStack(entities: readonly PlacedEntity[], entityId: string):
   });
 }
 
+/** The room a pile currently points at, as any of its members states it. */
+function roomOf(entities: readonly PlacedEntity[], stackId: string): string | undefined {
+  return entities.find((entry) => entry.stack === stackId && entry.stackRoom)?.stackRoom;
+}
+
 /**
  * Move every member of a stack to one spot.
  *
@@ -223,8 +228,10 @@ export function resolveMove(
     if (target && target.stack !== carrying.id) {
       const merged = mergeStacks(entities, carrying.id, target);
       const id = merged.find((entry) => entry.entity === entityId)?.stack;
-      return id ? moveStack(merged, id, position, level, room) : merged;
+      return id ? moveStack(merged, id, position, level, room ?? roomOf(merged, id)) : merged;
     }
+    // The pile itself was dragged, so the drop does speak for its room: a name
+    // is where it came from, nothing is "it is inside a room now".
     return moveStack(entities, carrying.id, position, level, room);
   }
 
@@ -236,7 +243,11 @@ export function resolveMove(
   if (onto && onto.entity !== entityId) {
     const joined = joinStack(freed, entityId, onto);
     const id = joined.find((entry) => entry.entity === entityId)?.stack;
-    return id ? moveStack(joined, id, position, level, room) : joined;
+    // A newcomer does not speak for the pile's room. The drop that carried it
+    // in says where *it* came from, and answering "nothing" there used to be
+    // read as "this pile is inside a room now" — so adding a marker to a pile
+    // rubbed out the line the pile was drawing.
+    return id ? moveStack(joined, id, position, level, room ?? roomOf(joined, id)) : joined;
   }
 
   return freed.map((entry) => {

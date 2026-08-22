@@ -577,3 +577,74 @@ describe('a marker that leaves a pile', () => {
     expect(unstackTo(pile, 'light.ghost', [0, 0, 0], 'ground')).toEqual(pile);
   });
 });
+
+/**
+ * A pile's line survives what happens to the pile.
+ *
+ * The room a drop names answers "where did this come from", and for a marker
+ * being carried *into* a pile the answer says nothing about the pile. Read as
+ * "nothing, so this pile must be standing inside a room now", it rubbed out the
+ * line the pile was drawing every time a marker was added to it.
+ */
+describe('adding to a pile that points at a room', () => {
+  const pile: PlacedEntity[] = [
+    at('light.a', 1, 1, { stack: 's', stackRoom: 'kitchen' }),
+    at('switch.b', 1, 1, { stack: 's', stackRoom: 'kitchen' }),
+    at('sensor.c', 8, 8, { room: 'study' }),
+  ];
+
+  it('keeps the line when a marker joins', () => {
+    const next = resolveMove(pile, {
+      entityId: 'sensor.c',
+      position: [1, 2.5, 1],
+      level: 'ground',
+      stackWith: 'light.a',
+    });
+    expect(next.map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen', 'kitchen']);
+  });
+
+  it('leaves what the newcomer says about itself alone', () => {
+    const next = resolveMove(pile, {
+      entityId: 'sensor.c',
+      position: [1, 2.5, 1],
+      level: 'ground',
+      stackWith: 'light.a',
+    });
+    expect(next.find((entry) => entry.entity === 'sensor.c')?.room).toBe('study');
+  });
+
+  it('gives it straight back when the marker leaves again', () => {
+    const joined = resolveMove(pile, {
+      entityId: 'sensor.c',
+      position: [1, 2.5, 1],
+      level: 'ground',
+      stackWith: 'light.a',
+    });
+    const out = unstackTo(joined, 'sensor.c', [8, 2.5, 8], 'ground', 'kitchen');
+    const back = out.find((entry) => entry.entity === 'sensor.c');
+    expect(back?.room, 'its own room, not the pile’s address').toBe('study');
+    expect(back?.stackRoom).toBeUndefined();
+    expect(back?.stack).toBeUndefined();
+  });
+
+  it('and the pile keeps drawing its own', () => {
+    const joined = resolveMove(pile, {
+      entityId: 'sensor.c',
+      position: [1, 2.5, 1],
+      level: 'ground',
+      stackWith: 'light.a',
+    });
+    const out = unstackTo(joined, 'sensor.c', [8, 2.5, 8], 'ground');
+    expect(out.find((entry) => entry.entity === 'light.a')?.stackRoom).toBe('kitchen');
+  });
+
+  /** Dragging the pile itself is different: then the drop does speak for it. */
+  it('still clears the pile’s room when the pile lands inside a room', () => {
+    const next = resolveMove(pile, {
+      entityId: 'light.a',
+      position: [4, 2.5, 4],
+      level: 'ground',
+    });
+    expect(next.slice(0, 2).every((entry) => entry.stackRoom === undefined)).toBe(true);
+  });
+});
