@@ -527,9 +527,20 @@ describe('a marker that leaves a pile', () => {
     expect(gone?.stackColor).toBeUndefined();
   });
 
-  it('takes the room it was dragged out of when the drop names one', () => {
+  /**
+   * The room a drop names is the one the *gesture* started in, which for a
+   * detach is wherever the pile was standing. A marker that has said which room
+   * it is talking about must not be argued with by the pile's address.
+   */
+  it('is not talked out of its own room by where the pile stood', () => {
     const next = unstackTo(pile, 'sensor.c', [9, 2.5, 9], 'ground', 'hall');
-    expect(next.find((entry) => entry.entity === 'sensor.c')?.room).toBe('hall');
+    expect(next.find((entry) => entry.entity === 'sensor.c')?.room).toBe('study');
+  });
+
+  /** Nothing to protect, and a line is the point of dragging it out there. */
+  it('takes the room it was dragged out of when it named none itself', () => {
+    const next = unstackTo(pile, 'switch.b', [9, 2.5, 9], 'ground', 'hall');
+    expect(next.find((entry) => entry.entity === 'switch.b')?.room).toBe('hall');
   });
 
   it('lands where it was put', () => {

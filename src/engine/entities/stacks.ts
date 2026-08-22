@@ -255,11 +255,20 @@ export function resolveMove(
  * inside a room, where the position already says which, so a stale override is
  * dropped rather than left to go wrong.
  *
- * `leavingPile` suspends the second half. A marker coming off a pile has not
+ * `leavingPile` suspends the whole of it. A marker coming off a pile has not
  * been dragged across the plan — it has been taken out of a group — and the
  * room it names is a setting it had before it ever joined and goes on wanting
- * once it is on its own again. Clearing it there threw away the one thing the
- * user would expect a marker to remember.
+ * once it is on its own again. Neither half of the rule may touch it:
+ *
+ *   - clearing it threw away the one thing a marker is expected to remember;
+ *   - *setting* it was worse and less obvious. The room a drop names is the one
+ *     the gesture started in, and for a detach that is wherever the pile was
+ *     standing — so a sensor reporting on the kitchen came off a pile in the
+ *     hall and started pointing at the hall.
+ *
+ * A marker that names no room of its own still takes the one it was dragged out
+ * of: there is nothing to protect, and the leader line is the point of the
+ * gesture.
  */
 function settle(
   entry: PlacedEntity,
@@ -269,8 +278,12 @@ function settle(
   leavingPile: boolean,
 ): PlacedEntity {
   const moved: PlacedEntity = { ...entry, position: [...position] as Vec3, level };
+  if (leavingPile) {
+    if (!moved.room && room) moved.room = room;
+    return moved;
+  }
   if (room) moved.room = room;
-  else if (!leavingPile) delete moved.room;
+  else delete moved.room;
   return moved;
 }
 
