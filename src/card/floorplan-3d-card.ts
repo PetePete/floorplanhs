@@ -74,6 +74,7 @@ import { recallView, rememberView } from '@/card/view-memory';
 import { configKey } from '@/util/config-key';
 import {
   authorToolsVisible,
+  fitOnEntry,
   resolveDark,
   explodeAvailable,
   levelSelectorVisible,
@@ -201,7 +202,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   /** Markers on the drawing, or the drawing on its own; see the toolbar. */
   @state() private markersVisible = true;
   /** Frame the house once the viewport has settled; see `narrowEntry`. */
-  private fitOnEntry = false;
+  private framePending = false;
   /** A pile whose grab bar was tapped; opens the stack's own settings. */
   @state() private selectedStack: string | null = null;
   @state() private autoRotate = false;
@@ -675,15 +676,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * and the height we measured belongs to the old one.
    */
   /**
-   * Is this card opening on a phone?
+   * Is this card opening somewhere a saved viewpoint will not fit?
    *
-   * Measured rather than remembered: `layout` is set by the resize observer,
+   * Measured rather than read off `layout`: that is set by the resize observer,
    * which has not necessarily run by the time the model finishes loading, and
-   * the answer decides what the first frame looks like.
+   * this decides what the first frame looks like. The rule itself is in
+   * `chrome-rules`, where it can be read as the two cases it is.
    */
   private narrowEntry(): boolean {
     const width = this.getBoundingClientRect().width || this.clientWidth;
-    return width > 0 ? width < NARROW_PX : this.layout === 'narrow';
+    const coarse =
+      typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    return fitOnEntry(width, coarse);
   }
 
   private scheduleSizing(): void {
@@ -695,8 +699,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.viewer?.resize();
         // After the resize, never before: framing the house against a viewport
         // that is about to change is framing it against the wrong one.
-        if (this.fitOnEntry) {
-          this.fitOnEntry = false;
+        if (this.framePending) {
+          this.framePending = false;
           this.viewer?.fitToView(false);
           // Nothing is standing on a saved view any more, so no view is lit.
           this.activePreset = null;
@@ -791,8 +795,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       // A phone gets the whole house, whatever was saved. Everything else the
       // card remembers is still restored — the storey, the cut, the folded
       // panels — because none of that depends on how wide the card is.
-      this.fitOnEntry = this.narrowEntry();
-      this.restoreView(viewer, { camera: !this.fitOnEntry });
+      this.framePending = this.narrowEntry();
+      this.restoreView(viewer, { camera: !this.framePending });
       // Mounting is asynchronous, so the card may have been moved into its
       // final place while the model was loading.
       this.scheduleSizing();

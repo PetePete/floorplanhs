@@ -100,3 +100,24 @@ export function chromeVisibility(
     levels: levelSelectorVisible(ui),
   };
 }
+
+/**
+ * Should the card frame the whole house when it opens, instead of restoring
+ * the view it was last looked at from?
+ *
+ * A viewpoint is saved with the shape of the card it was framed in. Restore it
+ * into a card of a different shape — a phone, or a narrow column beside a
+ * sidebar — and it puts you somewhere inside the building with the first move
+ * being to pinch back out until the house appears.
+ *
+ * Two ways to be that card, because one of them is not enough on its own: a
+ * width below the wide breakpoint catches the narrow column and the phone held
+ * upright, and a coarse pointer catches the phone held sideways, which is as
+ * wide as a laptop and still nothing like one. `MEDIUM_PX` rather than
+ * `NARROW_PX`: the phones that miss a 400 px test by twenty pixels are exactly
+ * the ones this is for.
+ */
+export function fitOnEntry(widthPx: number, coarsePointer: boolean): boolean {
+  if (coarsePointer) return true;
+  return widthPx > 0 && widthPx < 660;
+}

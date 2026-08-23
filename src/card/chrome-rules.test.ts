@@ -4,6 +4,7 @@ import {
   authorToolsVisible,
   chromeVisibility,
   explodeAvailable,
+  fitOnEntry,
   levelSelectorVisible,
   resolveDark,
   sectionButtonVisible,
@@ -133,5 +134,43 @@ describe('theme', () => {
 
   it('overrules a light dashboard when the card asks for dark', () => {
     expect(resolveDark('dark', false)).toBe(true);
+  });
+});
+
+/**
+ * A viewpoint is saved with the shape of the card it was framed in. Restored
+ * into a card of a different shape it puts you inside the building, and the
+ * first move is to pinch back out until the house appears — so on those cards
+ * the card does it for you.
+ */
+describe('framing the house on entry', () => {
+  it('does it on a phone held upright', () => {
+    expect(fitOnEntry(392, true)).toBe(true);
+  });
+
+  /** As wide as a laptop and still nothing like one. */
+  it('does it on a phone held sideways', () => {
+    expect(fitOnEntry(844, true)).toBe(true);
+  });
+
+  it('does it in a narrow column beside a sidebar', () => {
+    expect(fitOnEntry(430, false)).toBe(true);
+  });
+
+  it('leaves a full-width card alone', () => {
+    expect(fitOnEntry(1200, false)).toBe(false);
+  });
+
+  /**
+   * The phones that miss a 400px test by twenty pixels are exactly the ones
+   * this is for, which is why the wider breakpoint is the one that counts.
+   */
+  it('does not stop caring at four hundred pixels', () => {
+    expect(fitOnEntry(412, false)).toBe(true);
+    expect(fitOnEntry(659, false)).toBe(true);
+  });
+
+  it('says no rather than yes when the card has not been measured yet', () => {
+    expect(fitOnEntry(0, false)).toBe(false);
   });
 });
