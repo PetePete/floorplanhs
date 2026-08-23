@@ -200,6 +200,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private selectedEntity: string | null = null;
   /** Markers on the drawing, or the drawing on its own; see the toolbar. */
   @state() private markersVisible = true;
+  /** Frame the house once the viewport has settled; see `narrowEntry`. */
+  private fitOnEntry = false;
   /** A pile whose grab bar was tapped; opens the stack's own settings. */
   @state() private selectedStack: string | null = null;
   @state() private autoRotate = false;
@@ -672,6 +674,18 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
    * being replaced by the real one. Each of those puts us in a different box,
    * and the height we measured belongs to the old one.
    */
+  /**
+   * Is this card opening on a phone?
+   *
+   * Measured rather than remembered: `layout` is set by the resize observer,
+   * which has not necessarily run by the time the model finishes loading, and
+   * the answer decides what the first frame looks like.
+   */
+  private narrowEntry(): boolean {
+    const width = this.getBoundingClientRect().width || this.clientWidth;
+    return width > 0 ? width < NARROW_PX : this.layout === 'narrow';
+  }
+
   private scheduleSizing(): void {
     if (this.sizingFrame !== null || typeof requestAnimationFrame !== 'function') return;
     this.sizingFrame = requestAnimationFrame(() => {
@@ -679,6 +693,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.sizingFrame = null;
         this.applyHostSizing();
         this.viewer?.resize();
+        // After the resize, never before: framing the house against a viewport
+        // that is about to change is framing it against the wrong one.
+        if (this.fitOnEntry) {
+          this.fitOnEntry = false;
+          this.viewer?.fitToView(false);
+          // Nothing is standing on a saved view any more, so no view is lit.
+          this.activePreset = null;
+        }
       });
     });
   }
@@ -766,7 +788,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.setThemeDark(this.dark);
       await viewer.mount(host, this.config);
       if (!this.isConnected || this.viewer !== viewer) return;
-      this.restoreView(viewer);
+      // A phone gets the whole house, whatever was saved. Everything else the
+      // card remembers is still restored — the storey, the cut, the folded
+      // panels — because none of that depends on how wide the card is.
+      this.fitOnEntry = this.narrowEntry();
+      this.restoreView(viewer, { camera: !this.fitOnEntry });
       // Mounting is asynchronous, so the card may have been moved into its
       // final place while the model was loading.
       this.scheduleSizing();
@@ -861,7 +887,12 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   }
 
   /** Storeys first, then the camera: pulling them apart refits the view. */
-  private restoreView(viewer: Viewer): void {
+  /**
+   * `camera: false` keeps everything the card remembers except where it was
+   * looking from — for a viewport that is nothing like the one the view was
+   * saved in, and where the useful answer is the whole house.
+   */
+  private restoreView(viewer: Viewer, options: { camera?: boolean } = {}): void {
     const key = this.viewMemoryKey();
     const memory = key ? recallView(key) : null;
     if (!memory) return;
@@ -880,6 +911,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       viewer.setExplode(memory.explode, false);
       this.exploded = true;
     }
+    if (options.camera === false) return;
     try {
       void viewer.cameraCtl.applyPreset(memory.camera, false);
       this.activePreset = memory.activePreset;

@@ -317,6 +317,12 @@ falls back to hollow shells rather than failing.
 
 A preset stores the camera position and target, and optionally the field of
 view, the cross-section state and which levels were visible.
+On a phone the card opens framed on the whole house, whatever view was saved:
+a viewpoint captured on a desktop puts a narrow card somewhere inside the
+building, and the first thing you would do is zoom out. Everything else the card
+remembers is still restored — the storey, the cut, the folded panels — because
+none of that depends on how wide the card is.
+
 Frame the shot in the card, hit **Save current view** in the toolbar, and the
 preset is written into your dashboard YAML. Presets with `inTour: true` are
 included in the auto-rotate slideshow; the one with `default: true` is applied
