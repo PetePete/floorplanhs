@@ -701,7 +701,11 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         // that is about to change is framing it against the wrong one.
         if (this.framePending) {
           this.framePending = false;
-          this.viewer?.fitToView(false);
+          // Flown, not cut to. The card opens on a view somebody saved and then
+          // pulls back to the whole house, which says what just happened —
+          // arriving at a different view with no explanation reads as the card
+          // having ignored the configuration.
+          this.viewer?.fitToView(!this.prefersReducedMotion());
           // Nothing is standing on a saved view any more, so no view is lit.
           this.activePreset = null;
         }
@@ -800,6 +804,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       // Mounting is asynchronous, so the card may have been moved into its
       // final place while the model was loading.
       this.scheduleSizing();
+      // The card outlives its viewer: Home Assistant re-parents cards, and the
+      // one that comes back is the same element with a brand new scene in it.
+      // Anything the card is holding that the scene does not know about has to
+      // be said again here, or the toolbar goes on showing a switch that is no
+      // longer connected to anything.
+      viewer.setMarkersVisible(this.markersVisible);
+      if (this.exploded && this.canExplode) viewer.setExplode(this.explodeGap(), false);
       viewer.setEditMode(this.editing);
       if (this.autoRotate) viewer.cameraCtl.setAutoRotate(true);
     } catch (err) {

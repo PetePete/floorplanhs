@@ -358,7 +358,9 @@ lines and all. A floorplan with forty entities on it is a diagram of the
 entities, and sometimes the thing you want to look at is the house. It is a way
 of looking rather than a setting: nothing is written down, a reload brings them
 back, and so does entering edit mode, since placing something you cannot see is
-not a thing anyone means to do.
+not a thing anyone means to do. It does survive navigating away and back, along
+with the exploded view — Home Assistant re-parents cards, and the card that
+comes back is the same element with a new scene inside it.
 
 **Markers stack.** A lamp, its switch and the motion sensor that drives them
 are one place in the house, and three chips fighting over the same square metre
