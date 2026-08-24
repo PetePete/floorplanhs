@@ -33,7 +33,8 @@ describe('validateConfig', () => {
     expect(config.render).toEqual(DEFAULT_RENDER_CONFIG);
     expect(config.ui?.showToolbar).toBe(true);
     expect(config.section?.mode).toBe('none');
-    expect(config.section?.planes).toHaveLength(3);
+    // Nothing is cut until somebody asks for it.
+    expect(config.section?.cuts).toEqual({});
     expect(config.config_version).toBe(CURRENT_CONFIG_VERSION);
   });
 
@@ -261,12 +262,39 @@ describe('coercion of things that are obviously intended', () => {
     expect(config.entities?.[0].tap_action?.confirmation).toEqual({});
   });
 
-  it('fills the missing clip planes so all three axes exist', () => {
+  it('reads the depth cut off each face', () => {
+    const config = validateConfig(minimal({ section: { cuts: { top: 0.4, front: 1.25 } } }));
+    expect(config.section?.cuts).toEqual({ top: 0.4, front: 1.25 });
+  });
+
+  it('names the sides it knows when given one it does not', () => {
+    expect(() => validateConfig(minimal({ section: { cuts: { north: 1 } } }))).toThrow(/north/);
+  });
+
+  it('refuses to cut a negative depth', () => {
+    expect(() => validateConfig(minimal({ section: { cuts: { top: -1 } } }))).toThrow(/at least 0/);
+  });
+
+  /**
+   * The pre-0.7 form. Its positions are world coordinates, so the schema can
+   * only carry them across; the section controller turns them into depths once
+   * the model has told it where its faces are.
+   */
+  it('carries a pre-0.7 cut plane across for the controller to convert', () => {
     const config = validateConfig(
       minimal({ section: { mode: 'plane', planes: [{ axis: 'y', position: 1.4, enabled: true }] } }),
     );
-    expect(config.section?.planes.map((plane) => plane.axis)).toEqual(['x', 'y', 'z']);
-    expect(config.section?.planes[1]).toMatchObject({ position: 1.4, enabled: true });
+    expect(config.section?.mode).toBe('none');
+    expect(config.section?.planes).toEqual([
+      { axis: 'y', position: 1.4, enabled: true, invert: false },
+    ]);
+  });
+
+  it('drops planes that were never cutting anything', () => {
+    const config = validateConfig(
+      minimal({ section: { mode: 'none', planes: [{ axis: 'y', position: 1.4, enabled: true }] } }),
+    );
+    expect(config.section?.planes).toBeUndefined();
   });
 });
 

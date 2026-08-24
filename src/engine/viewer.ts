@@ -18,6 +18,7 @@ import {
   DEFAULT_SECTION_STATE,
   DEFAULT_UI_CONFIG,
   type CameraPreset,
+  type CutSide,
   type Floorplan3dCardConfig,
   type LevelDefinition,
   type PlacedEntity,
@@ -439,16 +440,14 @@ export class Viewer implements IViewer {
     this.unwire.push(
       section.onHandleDragStart(() => camera.setEnabled(false)),
       section.onHandleDragEnd(() => camera.setEnabled(true)),
-      section.onChange((state, origin) => {
+      // A cut is a way of looking, not an edit — the same class of thing as
+      // where the camera is standing. It is never written down on its own, and
+      // `this.config.section` deliberately stays the state the card *opened*
+      // with so that a later `updateConfig` can tell a real change to the
+      // opening cut from the one on screen. Saving a view is what commits it.
+      section.onChange((state) => {
         this.flashSectionHandles();
-        this.config = { ...this.config, section: state };
         this.emit('section-changed', state);
-        // Only a hand on a cut handle is an edit. Applying a view also lands
-        // here, and writing *that* down means every click on a storey rewrites
-        // the card's stored `section:` — which is the state the card opens
-        // with, so the card would then start on whichever storey was last
-        // looked at instead of the view its config asks for.
-        if (origin === 'user') this.emit('edit-intent', { kind: 'set-section', section: state });
       }),
     );
 
@@ -1277,6 +1276,28 @@ export class Viewer implements IViewer {
   setSection(state: SectionState, animate = true): void {
     this.guard('section', this._section, (s) => s.setState(state, animate));
     this.emit('section-changed', state);
+    this.core?.invalidate();
+  }
+
+  /**
+   * Outline one face of the house because the pointer is over its row in the
+   * panel. Nothing is cut and nothing is written down.
+   *
+   * The handles are pinned up for as long as the pointer stays, rather than
+   * flashed: a linger timer that expires under a stationary pointer takes the
+   * answer away while the question is still being asked.
+   */
+  previewCut(side: CutSide | null): void {
+    this.guard('section', this._section, (s) => s.setPreviewSide(side));
+    if (side === null) {
+      this.flashSectionHandles();
+      return;
+    }
+    if (this.handleHideTimer) {
+      clearTimeout(this.handleHideTimer);
+      this.handleHideTimer = null;
+    }
+    this.guard('section', this._section, (s) => s.setHandlesVisible(true));
     this.core?.invalidate();
   }
 

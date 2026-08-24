@@ -30,8 +30,8 @@ and your model file never leaves your Home Assistant instance.
   and up to the walls — the reading a floorplan wants. Brightness, RGB colour
   and colour temperature from Home Assistant drive it, not a coloured icon.
   Switch to `lightMode: realistic` for physically based falloff instead.
-- **Cross-sections.** Isolate one storey or slide cut planes along X/Y/Z, with
-  solid cut caps so walls do not look like empty shells.
+- **Cross-sections.** Isolate one storey, cut in from any of the five faces, or
+  both at once — with solid cut faces so walls do not look like empty shells.
 - **Camera presets.** Save a viewpoint (plus its cross-section and level
   visibility), give it a name and an icon, and fly to it in one tap. Optional
   slideshow tour and idle return.
@@ -221,7 +221,6 @@ presets:
     section:
       mode: level
       levelId: ground
-      caps: true
 entities:
   - entity: light.kitchen_ceiling
     position: [-2.15, 2.62, 1.4]
@@ -304,10 +303,26 @@ plus a fixed `color` when you want a constant tint.
 
 ### Cross-sections
 
-`section.mode` picks the technique:
+Two things that work together rather than two modes to choose between:
 
-- `level` — isolate one storey; everything above and below is clipped away.
-- `plane` — up to three clipping planes, one per axis, draggable in the card.
+- **Isolate a storey** (`section.mode: level`) — everything above and below the
+  chosen floor is clipped away.
+- **Cut in from a side** (`section.cuts`) — metres taken off the top, left,
+  right, front or back face of the house, each on its own. Nothing is cut until
+  you ask for it; the card never opens with a cut it chose for you.
+
+Both apply at once, so an upper floor with its front wall taken off is one
+setting plus one slider rather than a compromise.
+
+A cut is stated as *how deep*, not *where*: `top: 0.4` takes 40 cm off the roof
+whatever the house's coordinates are. Every slider in the panel therefore runs
+the same way, from nothing to everything. Point at a row and the plan outlines
+the face it belongs to; drag the handle that appears to set it in the view
+instead.
+
+A cut you make in the card is a way of looking, not an edit: it is not written
+into the dashboard config on its own. Save a view and it is stored with that
+view; set `section:` in the YAML for the state the card should open in.
 
 Cut surfaces are filled with solid caps using a stencil pass so a sliced wall
 reads as a wall. If the WebGL context has no stencil buffer available, the card
@@ -588,20 +603,43 @@ tour:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `mode` | `none` \| `level` \| `plane` | `none` | Which cutting technique is active. |
-| `planes` | `ClipPlaneState[]` | one disabled plane per axis at `position: 0` | Used when `mode: plane`. |
+| `mode` | `none` \| `level` | `none` | Whether one storey is isolated. |
 | `levelId` | string \| null | `null` | Used when `mode: level`. |
-| `caps` | boolean | `true` | Fill cut surfaces so walls read as solid. |
-| `capColor` | string | `#8a8f98` | Colour of the cut caps. |
+| `cuts` | [`SectionCuts`](#sectioncuts) | `{}` | Metres taken off each face. Applies alongside `mode`. |
+| `ceilingCut` | number | `0.45` | Metres taken off the top of an isolated storey so you look into the rooms rather than onto their ceiling. Only used by `mode: level`. |
+| `capColor` | string | `#8a8f98` | Colour of the cut faces. |
 
-#### `ClipPlaneState`
+Cut faces are always filled — a wall showing its hollow inside is a modelling
+artefact, not a choice — so there is no switch for it.
+
+#### `SectionCuts`
+
+Each key is optional; absent or `0` leaves that side whole. The model faces −Z,
+so `front` is its lesser Z face and `right` is +X.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `axis` | `x` \| `y` \| `z` | — | Required. Plane normal. |
-| `position` | number | `0` | World-space position along the axis, metres. |
-| `enabled` | boolean | `false` | Whether this plane cuts. |
-| `invert` | boolean | `false` | Keep the other half. |
+| `top` | number | `0` | Metres cut down from the roof. |
+| `left` | number | `0` | Metres cut in from the −X face. |
+| `right` | number | `0` | Metres cut in from the +X face. |
+| `front` | number | `0` | Metres cut in from the −Z face. |
+| `back` | number | `0` | Metres cut in from the +Z face. |
+
+```yaml
+section:
+  mode: level
+  levelId: upper
+  cuts:
+    top: 0.4
+    front: 1.2
+```
+
+A `planes:` block written before 0.7 is still read: the card converts it into
+`cuts` once the model has loaded, and writes the new form the next time you
+touch a cut.
+
+There is no floor to cut away. A floorplan stands on its ground slab, and
+removing it leaves the house hanging in the air with nothing gained.
 
 ### Entities
 

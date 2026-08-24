@@ -1,10 +1,12 @@
 /**
- * Drag handles for the cut planes.
+ * Drag handles for the cuts, one per face.
  *
- * A slider in a toolbar can move a section plane, but it never tells you *where*
- * the plane is. These do: a thin outline of the cut rectangle plus a knob you
- * grab, drawn on top of the model (depth test off — a gizmo you cannot see
- * inside the house is not a gizmo).
+ * A slider in a panel can move a cut, but it never tells you *where* the cut
+ * is, and with five of them it does not even tell you which side "front" is.
+ * These do: a thin outline of the cut rectangle plus a knob you grab, drawn on
+ * top of the model (depth test off — a gizmo you cannot see inside the house is
+ * not a gizmo). Pointing at a row in the panel puts up the outline for that
+ * side alone, which is the whole answer to "which one is front".
  *
  * Pointer events only, so a finger works exactly like a mouse. The listeners sit
  * on the canvas' container in the capture phase and stop propagation once a
@@ -13,25 +15,27 @@
  */
 
 import * as THREE from 'three';
-import type { Axis } from '@/types/config';
+import type { Axis, CutSide } from '@/types/config';
 import type { RenderContext } from '@/engine/contracts';
 import { clamp } from '@/util/math';
+import { AXIS_INDEX, CUT_GEOMETRY } from '@/engine/section/cut-sides';
 
-/** One draggable plane. `dir` is which half the clip keeps, for the outline hint. */
+/** One draggable cut. `dir` is which half survives, for the outline hint. */
 export interface SectionHandleSpec {
+  side: CutSide;
   axis: Axis;
   position: number;
   dir: 1 | -1;
+  /** Shown only because the pointer is over its row, and not actually cutting. */
+  ghost?: boolean;
 }
 
 export interface SectionHandlesOptions {
   /** Live drag callback — the section controller applies it without a tween. */
-  onDrag: (axis: Axis, position: number) => void;
+  onDrag: (side: CutSide, position: number) => void;
   /** Grid the dragged position snaps to, in metres. */
   snap?: number;
 }
-
-const AXIS_INDEX: Record<Axis, number> = { x: 0, y: 1, z: 2 };
 
 /**
  * Muted, tasteful axis colours: saturated red/green/blue reads as a debug
@@ -48,8 +52,10 @@ const PLANE_AXES: Record<Axis, [Axis, Axis]> = {
 };
 
 interface Handle {
+  side: CutSide;
   axis: Axis;
   position: number;
+  ghost: boolean;
   group: THREE.Group;
   outline: THREE.LineLoop;
   outlinePositions: Float32Array;
@@ -76,9 +82,9 @@ export class SectionHandles {
   private host: HTMLElement | null = null;
 
   private readonly root = new THREE.Group();
-  private readonly handles = new Map<Axis, Handle>();
+  private readonly handles = new Map<CutSide, Handle>();
   private readonly bounds = new THREE.Box3();
-  private readonly onDrag: (axis: Axis, position: number) => void;
+  private readonly onDrag: (side: CutSide, position: number) => void;
   private readonly snap: number;
 
   private readonly knobGeometry = new THREE.CylinderGeometry(1, 1, 0.55, 20);
@@ -96,7 +102,7 @@ export class SectionHandles {
 
   constructor(options: SectionHandlesOptions) {
     this.onDrag = options.onDrag;
-    this.snap = options.snap && options.snap > 0 ? options.snap : 0.1;
+    this.snap = options.snap && options.snap > 0 ? options.snap : 0.05;
     this.root.name = 'sectionHandles';
     this.root.visible = false;
     this.root.userData.fp3dInternal = true;
@@ -151,25 +157,29 @@ export class SectionHandles {
   /** Rebuild the handle set. Cheap enough to call on every plane move. */
   sync(specs: readonly SectionHandleSpec[], bounds: THREE.Box3): void {
     this.bounds.copy(bounds);
-    if (this.bounds.isEmpty()) this.bounds.set(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5));
+    if (this.bounds.isEmpty()) {
+      this.bounds.set(new THREE.Vector3(-5, 0, -5), new THREE.Vector3(5, 3, 5));
+    }
 
     const size = this.bounds.getSize(new THREE.Vector3());
     this.handleScale = clamp(size.length() * 0.016, 0.05, 0.32);
 
-    const wanted = new Set<Axis>();
+    const wanted = new Set<CutSide>();
     for (const spec of specs) {
-      wanted.add(spec.axis);
-      const handle = this.handles.get(spec.axis) ?? this.createHandle(spec.axis);
+      wanted.add(spec.side);
+      const handle = this.handles.get(spec.side) ?? this.createHandle(spec.side);
       handle.position = spec.position;
+      handle.ghost = spec.ghost === true;
       handle.group.visible = true;
       this.layout(handle);
+      this.paint(handle);
     }
 
-    for (const [axis, handle] of this.handles) {
-      if (!wanted.has(axis)) handle.group.visible = false;
+    for (const [side, handle] of this.handles) {
+      if (!wanted.has(side)) handle.group.visible = false;
     }
 
-    if (this.drag && !wanted.has(this.drag.handle.axis)) this.endDrag();
+    if (this.drag && !wanted.has(this.drag.handle.side)) this.endDrag();
     this.root.visible = this.visible && wanted.size > 0;
     this.ctx?.invalidate();
   }
@@ -203,7 +213,8 @@ export class SectionHandles {
 
   /* -------------------------------------------------------------- geometry */
 
-  private createHandle(axis: Axis): Handle {
+  private createHandle(side: CutSide): Handle {
+    const axis = CUT_GEOMETRY[side].axis;
     const color = AXIS_COLOR[axis];
 
     const outlinePositions = new Float32Array(12);
@@ -235,21 +246,20 @@ export class SectionHandles {
     else if (axis === 'z') knob.rotation.x = Math.PI / 2;
 
     // A generous invisible sphere: 40 px of finger needs more than a 5 cm knob.
-    const hit = new THREE.Mesh(
-      this.hitGeometry,
-      new THREE.MeshBasicMaterial({ visible: false }),
-    );
-    hit.userData.axis = axis;
+    const hit = new THREE.Mesh(this.hitGeometry, new THREE.MeshBasicMaterial({ visible: false }));
+    hit.userData.side = side;
 
     const group = new THREE.Group();
-    group.name = `sectionHandle:${axis}`;
+    group.name = `sectionHandle:${side}`;
     group.userData.fp3dInternal = true;
     group.add(outline, knob, hit);
     this.root.add(group);
 
     const handle: Handle = {
+      side,
       axis,
       position: 0,
+      ghost: false,
       group,
       outline,
       outlinePositions,
@@ -259,7 +269,7 @@ export class SectionHandles {
       knobMaterial,
       anchor: new THREE.Vector3(),
     };
-    this.handles.set(axis, handle);
+    this.handles.set(side, handle);
     return handle;
   }
 
@@ -303,17 +313,26 @@ export class SectionHandles {
     handle.hit.scale.setScalar(this.handleScale * 2.6);
   }
 
+  /**
+   * A side that is only being pointed at gets its outline and nothing else: a
+   * knob you cannot usefully grab yet would be a promise the gizmo cannot keep.
+   */
+  private paint(handle: Handle): void {
+    const active = handle === this.hovered;
+    handle.knob.visible = !handle.ghost;
+    handle.hit.visible = !handle.ghost;
+    handle.knobMaterial.color.setHex(
+      active ? AXIS_COLOR_ACTIVE[handle.axis] : AXIS_COLOR[handle.axis],
+    );
+    handle.lineMaterial.opacity = active || handle.ghost ? 0.9 : 0.55;
+  }
+
   private setHovered(handle: Handle | null): void {
     if (this.hovered === handle) return;
-    if (this.hovered) {
-      this.hovered.knobMaterial.color.setHex(AXIS_COLOR[this.hovered.axis]);
-      this.hovered.lineMaterial.opacity = 0.55;
-    }
+    const previous = this.hovered;
     this.hovered = handle;
-    if (handle) {
-      handle.knobMaterial.color.setHex(AXIS_COLOR_ACTIVE[handle.axis]);
-      handle.lineMaterial.opacity = 0.9;
-    }
+    if (previous) this.paint(previous);
+    if (handle) this.paint(handle);
     this.ctx?.invalidate();
   }
 
@@ -333,14 +352,14 @@ export class SectionHandles {
 
     const targets: THREE.Object3D[] = [];
     for (const handle of this.handles.values()) {
-      if (handle.group.visible) targets.push(handle.hit);
+      if (handle.group.visible && !handle.ghost) targets.push(handle.hit);
     }
     if (targets.length === 0) return null;
 
     const hits = this.raycaster.intersectObjects(targets, false);
     if (hits.length === 0) return null;
-    const axis = hits[0].object.userData.axis as Axis | undefined;
-    return axis ? this.handles.get(axis) ?? null : null;
+    const side = hits[0].object.userData.side as CutSide | undefined;
+    return side ? (this.handles.get(side) ?? null) : null;
   }
 
   private readonly onHoverMove = (event: PointerEvent): void => {
@@ -389,8 +408,10 @@ export class SectionHandles {
     if (coord === null) return;
 
     const ai = AXIS_INDEX[drag.handle.axis];
-    const min = this.bounds.min.getComponent(ai) - 0.5;
-    const max = this.bounds.max.getComponent(ai) + 0.5;
+    // Clamped to the model itself, not to a metre outside it: past the far face
+    // the cut has taken everything and further travel means nothing.
+    const min = this.bounds.min.getComponent(ai);
+    const max = this.bounds.max.getComponent(ai);
     const raw = drag.startPosition + (coord - drag.grabCoord);
     const snapped = Math.round(raw / this.snap) * this.snap;
     const next = clamp(Number(snapped.toFixed(4)), min, max);
@@ -398,7 +419,7 @@ export class SectionHandles {
     if (next === drag.handle.position) return;
     drag.handle.position = next;
     this.layout(drag.handle);
-    this.onDrag(drag.handle.axis, next);
+    this.onDrag(drag.handle.side, next);
     this.ctx?.invalidate();
   };
 

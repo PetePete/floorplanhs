@@ -15,6 +15,7 @@ import {
   CARD_TYPE,
   DEFAULT_CAMERA_CONFIG,
   DEFAULT_RENDER_CONFIG,
+  CUT_SIDES,
   DEFAULT_SECTION_STATE,
   DEFAULT_UI_CONFIG,
   type ActionConfig,
@@ -33,7 +34,7 @@ import {
   type PlacedEntity,
   type ShortcutItem,
   type RenderConfig,
-  type SectionMode,
+  type SectionCuts,
   type SectionState,
   type TourConfig,
   type UiConfig,
@@ -420,7 +421,8 @@ function readModel(raw: unknown, path: string): ModelConfig {
 
 /* ----------------------------------------------------------------- section */
 
-const SECTION_MODES: readonly SectionMode[] = ['none', 'level', 'plane'];
+/** `plane` is the pre-0.7 mode; it is still accepted and converted. See below. */
+const SECTION_MODES: readonly string[] = ['none', 'level', 'plane'];
 const AXES: readonly Axis[] = ['x', 'y', 'z'];
 
 const SECTION_ALIASES: Record<string, string> = {
@@ -434,10 +436,17 @@ function readSection(raw: unknown, path: string): SectionState {
   if (!isRecord(raw)) return fail(path, 'must be a mapping with a "mode" option');
   const obj = withAliases(raw, SECTION_ALIASES);
 
+  const declaredMode = readEnum(obj, 'mode', path, SECTION_MODES) ?? 'none';
   const section: SectionState = {
-    mode: readEnum(obj, 'mode', path, SECTION_MODES) ?? 'none',
-    planes: clone(DEFAULT_SECTION_STATE.planes),
+    // Cuts are no longer a mode of their own — they apply alongside an isolated
+    // storey — so `plane` collapses to `none` and its planes travel in the
+    // deprecated field below, where the section controller can turn them into
+    // depths once it knows how big the model is.
+    mode: declaredMode === 'level' ? 'level' : 'none',
   };
+
+  const cuts = readCuts(obj, path);
+  if (cuts) section.cuts = cuts;
 
   const planes = readObjectList(obj, 'planes', path);
   if (planes) {
@@ -453,7 +462,11 @@ function readSection(raw: unknown, path: string): SectionState {
         invert: readBoolean(entry, 'invert', here) ?? false,
       };
     });
-    section.planes = fillPlanes(parsed);
+    // Only from a config that actually cut with them. Under any other mode they
+    // were inert, and reviving them now would start cutting a house that has
+    // never been cut.
+    const active = declaredMode === 'plane' ? parsed.filter((plane) => plane.enabled) : [];
+    if (active.length) section.planes = active;
   }
 
   if ('levelId' in obj) {
@@ -461,8 +474,6 @@ function readSection(raw: unknown, path: string): SectionState {
     section.levelId = levelId ?? null;
   }
 
-  const caps = readBoolean(obj, 'caps', path);
-  if (caps !== undefined) section.caps = caps;
   const capColor = readColor(obj, 'capColor', path);
   if (capColor) section.capColor = capColor;
   const ceilingCut = readNumber(obj, 'ceilingCut', path, { min: 0, max: 10 });
@@ -472,17 +483,28 @@ function readSection(raw: unknown, path: string): SectionState {
   return section;
 }
 
-/** The controller indexes planes by axis, so all three must always be present. */
-function fillPlanes(planes: ClipPlaneState[]): ClipPlaneState[] {
-  return AXES.map(
-    (axis) =>
-      planes.find((plane) => plane.axis === axis) ?? {
-        axis,
-        position: 0,
-        enabled: false,
-        invert: false,
-      },
-  );
+/**
+ * `cuts: { top: 0.4, front: 1.2 }` — metres taken off each face, and nothing
+ * said about the faces that are left whole.
+ */
+function readCuts(obj: Record<string, unknown>, path: string): SectionCuts | undefined {
+  const raw = obj.cuts;
+  if (raw === undefined) return undefined;
+  const here = child(path, 'cuts');
+  if (!isRecord(raw)) {
+    return fail(here, 'must be a mapping of sides to depths, e.g. `{ top: 0.4 }`');
+  }
+  for (const key of Object.keys(raw)) {
+    if (!(CUT_SIDES as readonly string[]).includes(key)) {
+      fail(child(here, key), `unknown cut side; expected one of ${CUT_SIDES.join(', ')}`);
+    }
+  }
+  const cuts: SectionCuts = {};
+  for (const side of CUT_SIDES) {
+    const depth = readNumber(raw, side, here, { min: 0 });
+    if (depth !== undefined && depth > 0) cuts[side] = depth;
+  }
+  return cuts;
 }
 
 /* ----------------------------------------------------------------- presets */
@@ -1031,7 +1053,7 @@ export function normalizeConfig(config: Floorplan3dCardConfig): Floorplan3dCardC
     section: {
       ...clone(DEFAULT_SECTION_STATE),
       ...(config.section ?? {}),
-      planes: fillPlanes(config.section?.planes ?? clone(DEFAULT_SECTION_STATE.planes)),
+      cuts: { ...(config.section?.cuts ?? {}) },
     },
     config_version: CURRENT_CONFIG_VERSION,
   };

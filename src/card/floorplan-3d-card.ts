@@ -57,6 +57,7 @@ import {
   DEFAULT_SECTION_STATE,
   EDITOR_TAG,
   type CameraPreset,
+  type CutSide,
   type Floorplan3dCardConfig,
   type LevelDefinition,
   type PlacedEntity,
@@ -203,6 +204,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
   @state() private markersVisible = true;
   /** Frame the house once the viewport has settled; see `narrowEntry`. */
   private framePending = false;
+  /** True once a remount put the previously open panel back; see `restoreView`. */
+  private panelRestored = false;
+  /** The cut face outlined because the pointer is over its row in the panel. */
+  private cutPreview: CutSide | null = null;
   /** A pile whose grab bar was tapped; opens the stack's own settings. */
   @state() private selectedStack: string | null = null;
   @state() private autoRotate = false;
@@ -313,7 +318,15 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
     const previous = this.config;
     this.config = next;
-    this.section = next.section ?? { ...DEFAULT_SECTION_STATE };
+    // Only when the *opening* cut changed. `section:` says how the card opens,
+    // and a cut made in the card is deliberately not written there — so
+    // re-reading it on every config change would throw the cut on screen away
+    // the moment some unrelated edit lands. The viewer applies the same rule to
+    // the scene; the two have to agree or the panel describes a house nobody is
+    // looking at.
+    if (!previous || configKey(previous.section) !== configKey(next.section)) {
+      this.section = next.section ?? { ...DEFAULT_SECTION_STATE };
+    }
     this.autoRotate = next.camera?.autoRotate === true && !this.prefersReducedMotion();
     if (next.model?.levels?.length) this.levels = next.model.levels;
     if (this.error?.kind === 'config') this.error = null;
@@ -442,8 +455,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         (this.editMode || this.inCardEditor() || findLovelaceHost(this)?.editMode === true);
       if (this.editing !== wanted) {
         this.editing = wanted;
-        // Entering it shows the placement tools rather than just enabling them.
-        this.panel = wanted ? 'palette' : 'none';
+        // Leaving edit mode always closes up. Entering it shows the placement
+        // tools rather than just enabling them — except when the card is coming
+        // back from a save, where `restoreView` has a panel of its own to put
+        // back and stamping over it here shut the section panel on the user
+        // after every single cut.
+        if (!wanted) this.panel = 'none';
+        else if (!this.panelRestored) this.panel = 'palette';
       }
     }
     if (changed.has('config')) {
@@ -462,6 +480,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         this.selectedStack = null;
         if (this.panel === 'palette') this.panel = 'none';
       }
+    }
+    // The panel can go while a row is still under the pointer — closed, or
+    // elbowed off the rail by the inspector — and the face it was outlining
+    // must not stay drawn on a plan with nothing to explain it.
+    if (this.cutPreview && !this.renderRoot.querySelector('fp3d-section-panel')) {
+      this.cutPreview = null;
+      this.viewer?.previewCut(null);
     }
     if (changed.has('layout')) {
       this.setAttribute('data-layout', this.layout);
@@ -895,6 +920,7 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         collapseChosen: this.collapseChosen,
         dockCollapsed: this.dockCollapsed,
         dockCollapseChosen: this.dockCollapseChosen,
+        panel: this.panel,
       });
     } catch {
       // Camera subsystem already gone; nothing worth keeping.
@@ -921,6 +947,8 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.collapseChosen = memory.collapseChosen;
     this.dockCollapsed = memory.dockCollapsed;
     this.dockCollapseChosen = memory.dockCollapseChosen;
+    this.panel = memory.panel;
+    this.panelRestored = true;
     viewer.setVisibleLevels(memory.visibleLevels);
     if (memory.explode > 0) {
       viewer.setExplode(memory.explode, false);
@@ -1258,11 +1286,6 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       case 'remove-preset': {
         next.presets = presets.filter((entry) => entry.id !== intent.presetId);
         if (next.presets.length === presets.length) return;
-        break;
-      }
-      case 'set-section': {
-        next.section = intent.section;
-        this.section = intent.section;
         break;
       }
     }
@@ -1777,10 +1800,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
       visibleLevels: [level.id],
       section: {
         ...JSON.parse(JSON.stringify(DEFAULT_SECTION_STATE)),
-        // Generated views are still *your* views: the cut-cap preference from
-        // the `section` block carries over, so there is one place to decide how
-        // a storey is presented rather than two.
-        caps: this.config?.section?.caps ?? DEFAULT_SECTION_STATE.caps,
+        // Generated views are still *your* views: the cut colour from the
+        // `section` block carries over, so there is one place to decide how a
+        // storey is presented rather than two.
+        capColor: this.config?.section?.capColor ?? DEFAULT_SECTION_STATE.capColor,
         mode: 'level' as const,
         levelId: level.id,
       },
@@ -1883,14 +1906,20 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
 
   /* --------------------------------------------------------- chrome events */
 
+  /**
+   * A cut moved. Nothing is saved.
+   *
+   * Writing every cut into the dashboard config meant Home Assistant rebuilt
+   * the card on each one — set a cut, lose the panel it was set from, open it
+   * again for the next. And the config's `section:` is the state the card
+   * *opens* with, which is not the same statement as "what I am looking at
+   * right now". The live cut travels with the view: it is captured when a view
+   * is saved, and `view-memory` carries it over a remount some other edit
+   * causes.
+   */
   private onSectionChange(section: SectionState, live: boolean): void {
     this.section = section;
-    if (live) {
-      this.viewer?.setSection(section, false);
-      return;
-    }
-    this.viewer?.setSection(section, !this.prefersReducedMotion());
-    this.applyIntent({ kind: 'set-section', section }, true);
+    this.viewer?.setSection(section, !live && !this.prefersReducedMotion());
   }
 
   /* --------------------------------------------------------------- tour */
@@ -2426,6 +2455,10 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         .bounds=${this.bounds}
         @fp3d-section-change=${(event: CustomEvent<{ section: SectionState; live: boolean }>) =>
           this.onSectionChange(event.detail.section, event.detail.live)}
+        @fp3d-section-preview=${(event: CustomEvent<{ side: CutSide | null }>) => {
+          this.cutPreview = event.detail.side;
+          this.viewer?.previewCut(event.detail.side);
+        }}
         @fp3d-section-close=${() => {
           this.panel = 'none';
         }}

@@ -153,7 +153,6 @@ presets:
     section:
       mode: level
       levelId: ground
-      caps: true
     inTour: true
 
   - id: kitchen
@@ -198,8 +197,12 @@ alternative.
 
 ## `section`
 
-The cross-section state the card starts in. Users can still change it live; only
-what you write here is persisted.
+The cross-section state the card starts in. Users can still change it live, and
+that live cut is never written back here by itself — it belongs to the view, so
+it is stored when a view is saved. Only what you write here decides how the card
+opens.
+
+There are two independent things here, not two modes to pick between.
 
 **Isolate one storey** — the most common setup:
 
@@ -207,34 +210,46 @@ what you write here is persisted.
 section:
   mode: level
   levelId: ground
-  caps: true
-  capColor: "#8a8f98"
 ```
 
-**Cut planes** — a doll's-house slice:
+**Cut in from a side** — a doll's-house slice. Each of the five faces has its
+own depth in metres; absent or `0` leaves that side whole, and the card never
+starts with a cut you did not ask for:
 
 ```yaml
 section:
-  mode: plane
-  planes:
-    - axis: y
-      position: 2.4
-      enabled: true
-      invert: false
-    - axis: x
-      position: 0
-      enabled: false
-      invert: false
-    - axis: z
-      position: 0
-      enabled: false
-      invert: false
-  caps: true
+  cuts:
+    top: 0.4     # metres off the roof
+    front: 1.2   # metres in from the front wall
 ```
 
-- `caps: true` fills the cut surfaces so a sliced wall reads as a solid wall.
-  This uses a stencil pass; if the WebGL context has no stencil buffer, the card
-  degrades gracefully to hollow shells instead of failing.
+The sides are `top`, `left`, `right`, `front` and `back`. The model faces −Z, so
+`front` is its lesser Z face and `right` is +X. There is no floor to cut away:
+a floorplan stands on its ground slab.
+
+Because a cut is a depth rather than a coordinate, `top: 0.4` means the same
+thing wherever the house sits, and the panel's five sliders all run the same way
+— from nothing on the left to the far side of the house on the right. Facing
+sides stop where each other start, so `left` and `right` can never pass through
+one another and leave nothing standing.
+
+Both settings apply at once, so an upper floor with its front wall taken off is:
+
+```yaml
+section:
+  mode: level
+  levelId: upper
+  cuts:
+    front: 1.2
+```
+
+- Cut surfaces are always filled so a sliced wall reads as a solid wall — there
+  is no switch for it. This uses a stencil pass; if the WebGL context has no
+  stencil buffer, the card degrades gracefully to hollow shells instead of
+  failing. `capColor` sets the colour of those faces.
+- A `planes:` block written before 0.7 is still read. The card converts it into
+  `cuts` once the model has loaded and writes the new form the next time you
+  move a cut.
 - `showCeilings: false` drops the ceiling slabs, line work included. Worth it in
   a plan or exploded view, where the ceiling is all you can see of the storey
   under it — and it opens each storey from above, so you look into the rooms.

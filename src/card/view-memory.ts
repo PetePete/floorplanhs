@@ -27,6 +27,15 @@ export interface ViewMemory {
   collapseChosen: boolean;
   dockCollapsed: boolean;
   dockCollapseChosen: boolean;
+  /**
+   * Which side panel was open.
+   *
+   * Every cut, every placement rewrites the dashboard config and rebuilds the
+   * card, and a card that comes back with the section panel closed closes it
+   * on the user in the middle of the one gesture that opened it — set a cut,
+   * lose the panel, open it again, set the next cut.
+   */
+  panel: 'none' | 'section' | 'palette';
   at: number;
 }
 

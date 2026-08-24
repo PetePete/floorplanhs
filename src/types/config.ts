@@ -65,9 +65,33 @@ export interface ModelConfig {
 
 /* ---------------------------------------------------------------- section */
 
-export type SectionMode = 'none' | 'level' | 'plane';
+export type SectionMode = 'none' | 'level';
 export type Axis = 'x' | 'y' | 'z';
 
+/**
+ * The five faces a cut can come in from: the four walls and the roof.
+ *
+ * No floor. A floorplan stands on its ground slab, and a cut that eats it away
+ * leaves the house hanging in the air with nothing gained.
+ */
+export const CUT_SIDES = ['top', 'left', 'right', 'front', 'back'] as const;
+export type CutSide = (typeof CUT_SIDES)[number];
+
+/**
+ * How far each face is cut in, in metres. Absent or `0` leaves that side whole.
+ *
+ * A depth measured from the model, not a coordinate measured from the origin.
+ * That makes `0` mean "not cut" — which is the state the card opens in and the
+ * end a slider starts at — lets all five sliders run the same way, from nothing
+ * to everything, and keeps the number meaningful when the model moves.
+ */
+export type SectionCuts = Partial<Record<CutSide, number>>;
+
+/**
+ * @deprecated Pre-0.7 axis planes. Still read from old configs and converted
+ * into {@link SectionCuts} the first time the model's bounds are known; nothing
+ * writes it any more.
+ */
 export interface ClipPlaneState {
   axis: Axis;
   /** World-space position of the plane along its axis. */
@@ -79,11 +103,20 @@ export interface ClipPlaneState {
 
 export interface SectionState {
   mode: SectionMode;
-  planes: ClipPlaneState[];
+  /** Cuts apply whether or not a storey is isolated; the two are independent. */
+  cuts?: SectionCuts;
+  /** @deprecated See {@link ClipPlaneState}. */
+  planes?: ClipPlaneState[];
   /** For mode `level`: which storey is isolated. */
   levelId?: string | null;
-  /** Render solid caps on cut surfaces instead of hollow shells. */
-  caps?: boolean;
+  /**
+   * Colour of the cut faces.
+   *
+   * The faces themselves are not optional. A sliced wall that shows its inside
+   * is a modelling artefact, not a choice worth offering — so the caps are
+   * always drawn, and fall back to hollow shells only where the GL context has
+   * no stencil buffer to draw them with.
+   */
   capColor?: string;
   /**
    * Metres taken off the top of an isolated storey, so the cut lands below the
@@ -513,13 +546,10 @@ export interface Floorplan3dCardConfig {
 
 export const DEFAULT_SECTION_STATE: SectionState = {
   mode: 'none',
-  planes: [
-    { axis: 'x', position: 0, enabled: false, invert: false },
-    { axis: 'y', position: 0, enabled: false, invert: false },
-    { axis: 'z', position: 0, enabled: false, invert: false },
-  ],
+  // Empty, and it stays empty until somebody asks for a cut. A card that opens
+  // with half the house missing is a card that has decided for you.
+  cuts: {},
   levelId: null,
-  caps: true,
   capColor: '#8a8f98',
   // Roughly a floor slab plus a little: enough to clear the ceiling of a
   // normal storey without eating into the walls that give the room its shape.

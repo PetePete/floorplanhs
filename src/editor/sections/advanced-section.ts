@@ -3,12 +3,12 @@
 import { html } from 'lit';
 import type { TemplateResult } from 'lit';
 import {
+  CUT_SIDES,
   DEFAULT_CAMERA_CONFIG,
   DEFAULT_SECTION_STATE,
-  type Axis,
   type CameraConfig,
-  type ClipPlaneState,
-  type SectionMode,
+  type CutSide,
+  type SectionCuts,
   type SectionState,
 } from '@/types/config';
 import { radToDeg, degToRad } from '@/util/math';
@@ -42,21 +42,25 @@ function patchCamera(ctx: EditorContext, patch: Partial<CameraConfig>, immediate
   ctx.update({ camera: { ...cameraOf(ctx), ...patch } }, immediate);
 }
 
-function planesOf(state: SectionState): ClipPlaneState[] {
-  if (state.planes && state.planes.length) return state.planes;
-  return DEFAULT_SECTION_STATE.planes;
+function cutsOf(state: SectionState): SectionCuts {
+  return state.cuts ?? {};
 }
 
-function patchPlane(
-  ctx: EditorContext,
-  axis: Axis,
-  patch: Partial<ClipPlaneState>,
-  immediate = false,
-): void {
-  const state = sectionOf(ctx);
-  const planes = planesOf(state).map((p) => (p.axis === axis ? { ...p, ...patch } : p));
-  patchSection(ctx, { planes }, immediate);
+/** A depth of zero is not a cut, so it leaves the config rather than sitting in it. */
+function patchCut(ctx: EditorContext, side: CutSide, depth: number | undefined): void {
+  const cuts: SectionCuts = { ...cutsOf(sectionOf(ctx)) };
+  if (depth && depth > 0) cuts[side] = depth;
+  else delete cuts[side];
+  patchSection(ctx, { cuts });
 }
+
+const CUT_LABELS: Record<CutSide, string> = {
+  top: 'Top',
+  left: 'Left',
+  right: 'Right',
+  front: 'Front',
+  back: 'Back',
+};
 
 function levelOptions(ctx: EditorContext): FieldOption[] {
   const levels = ctx.config.model?.levels ?? [];
@@ -95,7 +99,7 @@ export function renderAdvancedSection(ctx: EditorContext): TemplateResult {
   const section = sectionOf(ctx);
   const cam = cameraOf(ctx);
   const dc = DEFAULT_CAMERA_CONFIG;
-  const planes = planesOf(section);
+  const cuts = cutsOf(section);
 
   return html`
     <div class="section">
@@ -108,68 +112,43 @@ export function renderAdvancedSection(ctx: EditorContext): TemplateResult {
         ),
       )}
       ${selectField({
-        label: ctx.t('editor.section_mode', 'Mode'),
-        value: section.mode ?? 'none',
-        options: [
-          { value: 'none', label: ctx.t('editor.section_none', 'None — whole house') },
-          { value: 'level', label: ctx.t('editor.section_level', 'Isolate one level') },
-          { value: 'plane', label: ctx.t('editor.section_plane', 'Cut planes') },
-        ],
-        onChange: (v) => patchSection(ctx, { mode: v as SectionMode }, true),
+        label: ctx.t('editor.section_level_id', 'Isolated storey'),
+        value: section.mode === 'level' ? (section.levelId ?? '') : '',
+        options: levelOptions(ctx),
+        onChange: (v) =>
+          patchSection(ctx, { levelId: v || null, mode: v ? 'level' : 'none' }, true),
       })}
-      ${section.mode === 'level'
-        ? selectField({
-            label: ctx.t('editor.section_level_id', 'Isolated level'),
-            value: section.levelId ?? '',
-            options: levelOptions(ctx),
-            onChange: (v) => patchSection(ctx, { levelId: v || null }, true),
-          })
-        : ''}
-      ${section.mode === 'plane'
-        ? html`${planes.map((plane) =>
-            html`<div class="row-card">
-              <div class="row-head">
-                <div class="row-title">
-                  <strong>${ctx.t('editor.plane', 'Plane')} ${plane.axis.toUpperCase()}</strong>
-                </div>
-              </div>
-              ${switchRow({
-                label: ctx.t('editor.enabled', 'Enabled'),
-                checked: plane.enabled,
-                onChange: (v) => patchPlane(ctx, plane.axis, { enabled: v }, true),
-              })}
-              ${numberField({
-                label: ctx.t('editor.plane_position', 'Position'),
-                value: plane.position,
-                step: 0.05,
-                suffix: 'm',
-                onChange: (v) => patchPlane(ctx, plane.axis, { position: v ?? 0 }),
-              })}
-              ${switchRow({
-                label: ctx.t('editor.plane_invert', 'Keep the other half'),
-                checked: plane.invert,
-                onChange: (v) => patchPlane(ctx, plane.axis, { invert: v }, true),
-              })}
-            </div>`,
-          )}`
-        : ''}
-      ${switchRow({
-        label: ctx.t('editor.section_caps', 'Solid cut caps'),
-        checked: section.caps ?? true,
-        helper: ctx.t(
-          'editor.section_caps_help',
-          'Fills cut surfaces so walls look solid instead of hollow. Needs a stencil buffer; ' +
-            'falls back to hollow shells where that is unavailable.',
+      ${sectionTitle(
+        ctx.t('editor.section_cuts', 'Cut in from'),
+        ctx.t(
+          'editor.section_cuts_desc',
+          'Metres taken off each face of the house. Empty leaves that side whole, and a cut ' +
+            'applies whether or not a storey is isolated.',
         ),
-        onChange: (v) => patchSection(ctx, { caps: v }, true),
+      )}
+      <div class="grid two">
+        ${CUT_SIDES.map((side) =>
+          numberField({
+            label: ctx.t(`editor.cut_${side}`, CUT_LABELS[side]),
+            value: cuts[side],
+            min: 0,
+            step: 0.05,
+            suffix: 'm',
+            placeholder: '0',
+            onChange: (v) => patchCut(ctx, side, v),
+          }),
+        )}
+      </div>
+      ${colorField({
+        label: ctx.t('editor.cap_color', 'Cut colour'),
+        value: section.capColor ?? DEFAULT_SECTION_STATE.capColor ?? '#8a8f98',
+        helper: ctx.t(
+          'editor.cap_color_help',
+          'Cut surfaces are always filled so walls read as solid rather than hollow. Needs a ' +
+            'stencil buffer; falls back to hollow shells where that is unavailable.',
+        ),
+        onChange: (v) => patchSection(ctx, { capColor: v || undefined }),
       })}
-      ${(section.caps ?? true)
-        ? colorField({
-            label: ctx.t('editor.cap_color', 'Cap colour'),
-            value: section.capColor ?? DEFAULT_SECTION_STATE.capColor ?? '#8a8f98',
-            onChange: (v) => patchSection(ctx, { capColor: v || undefined }),
-          })
-        : ''}
       ${sectionTitle(ctx.t('editor.camera', 'Camera'))}
       <div class="grid two">
         ${numberField({

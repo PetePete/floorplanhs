@@ -195,19 +195,17 @@ battery-powered tablet, turn it off.
 
 ## Cross-section shows hollow walls
 
-**Cause A — `caps` is off.** Set `section.caps: true`.
-
-**Cause B — no stencil buffer.** Cut caps are drawn with a stencil pass. If the
+**Cause A — no stencil buffer.** Cut caps are drawn with a stencil pass. If the
 WebGL context was created without one, the card degrades to hollow shells rather
 than failing. Nothing in the config fixes that; it is a browser/driver
 limitation.
 
-**Cause C — zero-thickness walls.** This is the common one. Walls modelled as
+**Cause B — zero-thickness walls.** This is the common one. Walls modelled as
 single-sided planes have no interior to fill: slice them and you see through the
 sheet. Model walls with real thickness (Sweet Home 3D does this by default;
 hand-modelled Blender planes do not).
 
-**Cause D — the roof floats.** Roof geometry should be named with the `roof`
+**Cause C — the roof floats.** Roof geometry should be named with the `roof`
 pseudo-room (`site/roof/...`) so isolating a level handles it specially.
 
 ---

@@ -8,6 +8,7 @@ import type * as THREE from 'three';
 import type {
   CameraConfig,
   CameraPreset,
+  CutSide,
   Floorplan3dCardConfig,
   LevelDefinition,
   PlacedEntity,
@@ -123,8 +124,12 @@ export interface IModelManager extends Subsystem {
 export interface ISectionController extends Subsystem {
   setState(state: SectionState, animate?: boolean): void;
   getState(): SectionState;
-  /** Live drag of a single plane without rewriting the whole state. */
-  setPlanePosition(axis: 'x' | 'y' | 'z', position: number): void;
+  /** Live drag of one side's cut, in metres from that face, without a commit. */
+  setCutDepth(side: CutSide, depth: number): void;
+  /** How deep that side is cut right now. */
+  cutDepth(side: CutSide): number;
+  /** Outline one face without cutting it — the panel's row hover. */
+  setPreviewSide(side: CutSide | null): void;
   /** Isolate one storey; pass null to show everything. */
   isolateLevel(levelId: string | null, animate?: boolean): void;
   /** Section bounds follow the model; call after load. */
@@ -135,8 +140,8 @@ export interface ISectionController extends Subsystem {
   setLevels(levels: LevelDefinition[]): void;
   /** Re-collect model materials after a reload that kept the same bounds. */
   refreshMaterials(): void;
-  /** `user` is a hand on a cut handle; `apply` is a view or config being restored. */
-  onChange(cb: (state: SectionState, origin: SectionChangeOrigin) => void): () => void;
+  /** The cut changed. Nothing is written down; see the card's save-view path. */
+  onChange(cb: (state: SectionState) => void): () => void;
   /** Let the camera park OrbitControls while a cut handle is being dragged. */
   onHandleDragStart(cb: () => void): () => void;
   onHandleDragEnd(cb: () => void): () => void;
@@ -319,9 +324,6 @@ export interface IPlacementController extends Subsystem {
 
 /* ------------------------------------------------------------------ store */
 
-/** Who moved the cut: see `ISectionController.onChange`. */
-export type SectionChangeOrigin = 'user' | 'apply';
-
 export type EditIntent =
   | {
       kind: 'add-entity';
@@ -371,8 +373,7 @@ export type EditIntent =
     }
   /** Entities that live in the panel rather than on the plan. */
   | { kind: 'add-shortcut'; entityId: string }
-  | { kind: 'remove-shortcut'; entityId: string }
-  | { kind: 'set-section'; section: SectionState };
+  | { kind: 'remove-shortcut'; entityId: string };
 
 /** Emitted by the viewer; the card turns these into `config-changed`. */
 export interface ViewerEvents {

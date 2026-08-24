@@ -1,11 +1,19 @@
 /**
- * Cross-section controls.
+ * Cross-section controls: one storey selector and five cuts.
  *
- * The one rule that makes or breaks this panel: dragging a slider must move the
- * cut *while* you drag. A control that only applies on release turns "find the
- * right plane" into a guessing game. `input` events therefore emit a live
- * change (coalesced to one animation frame, since a slider fires far faster
- * than the compositor cares about) and `change` emits the persistable one.
+ * Two rules make or break this panel.
+ *
+ * Dragging a slider must move the cut *while* you drag. A control that only
+ * applies on release turns "find the right plane" into a guessing game. `input`
+ * events therefore emit a live change (coalesced to one animation frame, since
+ * a slider fires far faster than the compositor cares about) and `change` emits
+ * the persistable one.
+ *
+ * And every slider runs the same way: from nothing at the left to the far side
+ * of the house at the right. The numbers are depths in metres taken off that
+ * face, not coordinates, so "front" and "back" do not count in opposite
+ * directions and zero always means the house is whole. Which face is which is
+ * answered by pointing at a row: the plan outlines it.
  */
 
 import { css, html, nothing, type TemplateResult } from 'lit';
@@ -13,22 +21,28 @@ import { property } from 'lit/decorators.js';
 import { defineFp, FpBaseElement } from '@/ui/base-element';
 import { icon } from '@/ui/icons';
 import {
+  AXIS_INDEX,
+  CUT_GEOMETRY,
+  OPPOSITE_SIDE,
+  cutHeadroom,
+} from '@/engine/section/cut-sides';
+import {
+  CUT_SIDES,
   DEFAULT_SECTION_STATE,
-  type Axis,
-  type ClipPlaneState,
+  type CutSide,
   type LevelDefinition,
-  type SectionMode,
+  type SectionCuts,
   type SectionState,
   type Vec3,
 } from '@/types/config';
-
-const AXES: Axis[] = ['x', 'y', 'z'];
-const AXIS_INDEX: Record<Axis, number> = { x: 0, y: 1, z: 2 };
 
 interface Bounds {
   min: Vec3;
   max: Vec3;
 }
+
+/** Fallback span per axis before the model has loaded, so the sliders still move. */
+const FALLBACK_EXTENT = 10;
 
 @defineFp('fp3d-section-panel')
 export class Fp3dSectionPanel extends FpBaseElement {
@@ -56,96 +70,68 @@ export class Fp3dSectionPanel extends FpBaseElement {
         min-height: 0;
       }
 
-      .modes {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 4px;
-        padding: 3px;
-        border-radius: var(--fp3d-chrome-radius);
-        background: var(--fp3d-hover);
-      }
-
-      .mode {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 32px;
-        padding: 0 6px;
-        border-radius: var(--fp3d-chrome-radius);
-        font-size: 11.5px;
-        font-weight: 600;
-        color: var(--fp3d-text-dim);
-        transition:
-          background-color var(--fp3d-fast) var(--fp3d-ease),
-          color var(--fp3d-fast) var(--fp3d-ease);
-      }
-
-      .mode[aria-pressed='true'] {
-        background: var(--fp3d-card-bg);
-        color: var(--fp3d-accent);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
-      }
-
-      .axis {
+      .cut {
         display: flex;
         align-items: center;
         gap: 8px;
         min-height: var(--fp3d-touch);
       }
 
-      .axis-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+      .cut .name {
         flex: none;
-        width: 30px;
-        height: 30px;
-        border-radius: var(--fp3d-chrome-radius);
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
+        width: 44px;
+        font-size: 11.5px;
+        font-weight: 600;
         color: var(--fp3d-text-dim);
-        border: 1px solid var(--fp3d-divider);
-        transition:
-          background-color var(--fp3d-fast) var(--fp3d-ease),
-          color var(--fp3d-fast) var(--fp3d-ease),
-          border-color var(--fp3d-fast) var(--fp3d-ease);
+        transition: color var(--fp3d-fast) var(--fp3d-ease);
       }
 
-      .axis-toggle[aria-pressed='true'] {
-        background: var(--fp3d-accent-soft);
-        border-color: transparent;
+      .cut[data-active='true'] .name {
         color: var(--fp3d-accent);
       }
 
-      .axis input[type='range'] {
+      .cut input[type='range'] {
         flex: 1 1 auto;
         min-width: 0;
       }
 
-      .axis input[type='range']:disabled {
+      .cut input[type='range']:disabled {
         opacity: 0.35;
-      }
-
-      .axis .flip {
-        flex: none;
-        width: 30px;
-        height: 30px;
-        border-radius: var(--fp3d-chrome-radius);
-      }
-
-      .axis .flip .fp-icon {
-        width: 17px;
-        height: 17px;
       }
 
       .value {
         flex: none;
-        width: 44px;
+        width: 46px;
         text-align: right;
         font-size: 11.5px;
         font-variant-numeric: tabular-nums;
         color: var(--fp3d-text-dim);
+      }
+
+      .clear {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        border-radius: var(--fp3d-chrome-radius);
+      }
+
+      .clear .fp-icon {
+        width: 15px;
+        height: 15px;
+      }
+
+      /* Holds the row height steady whether or not the button is there. */
+      .clear[hidden] {
+        display: block;
+        visibility: hidden;
+      }
+
+      .hint {
+        margin: 2px 0 6px;
+        font-size: 11px;
+        line-height: 1.35;
+        color: var(--fp3d-text-dim);
+        opacity: 0.8;
       }
 
       .cap-row {
@@ -154,8 +140,10 @@ export class Fp3dSectionPanel extends FpBaseElement {
         gap: 8px;
       }
 
-      .cap-row .switch {
+      .cap-row label {
         flex: 1;
+        font-size: 12px;
+        color: var(--fp3d-text-dim);
       }
 
       .foot {
@@ -172,11 +160,14 @@ export class Fp3dSectionPanel extends FpBaseElement {
 
   private liveFrame = 0;
   private pendingLive: SectionState | null = null;
+  private previewing: CutSide | null = null;
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     if (this.liveFrame) cancelAnimationFrame(this.liveFrame);
     this.liveFrame = 0;
+    // The outline belongs to the pointer, and the pointer is gone with us.
+    if (this.previewing) this.preview(null);
   }
 
   /** One emit per frame while dragging; the last value always wins. */
@@ -200,139 +191,113 @@ export class Fp3dSectionPanel extends FpBaseElement {
     this.emit('fp3d-section-change', { section, live: false });
   }
 
-  private planes(): ClipPlaneState[] {
-    const existing = this.section.planes ?? [];
-    return AXES.map(
-      (axis) =>
-        existing.find((plane) => plane.axis === axis) ?? {
-          axis,
-          position: 0,
-          enabled: false,
-          invert: false,
-        },
+  private preview(side: CutSide | null): void {
+    if (this.previewing === side) return;
+    this.previewing = side;
+    this.emit('fp3d-section-preview', { side });
+    this.requestUpdate();
+  }
+
+  private cuts(): SectionCuts {
+    return this.section.cuts ?? {};
+  }
+
+  private depth(side: CutSide): number {
+    const value = this.cuts()[side];
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  private withCut(side: CutSide, depth: number): SectionState {
+    const cuts: SectionCuts = { ...this.cuts() };
+    if (depth > 0) cuts[side] = Number(depth.toFixed(3));
+    else delete cuts[side];
+    return { ...this.section, cuts };
+  }
+
+  /**
+   * How far this side can be cut: the model's reach along that axis, less
+   * whatever the side facing it has already taken. Two cuts that meet in the
+   * middle leave nothing between them and no way to tell which slider to pull
+   * back, so the slider stops where the other one starts.
+   */
+  private range(side: CutSide): number {
+    const index = AXIS_INDEX[CUT_GEOMETRY[side].axis];
+    if (!this.bounds) return FALLBACK_EXTENT;
+    const facing = OPPOSITE_SIDE[side];
+    const room = cutHeadroom(
+      this.bounds.min[index],
+      this.bounds.max[index],
+      facing ? this.depth(facing) : 0,
     );
+    // A genuine zero means the facing cut has taken the lot, and the slider
+    // should say so by refusing to move rather than quietly allowing more.
+    return room;
   }
 
-  private withPlane(axis: Axis, patch: Partial<ClipPlaneState>): SectionState {
-    return {
-      ...this.section,
-      planes: this.planes().map((plane) => (plane.axis === axis ? { ...plane, ...patch } : plane)),
+  private sideLabel(side: CutSide): string {
+    const fallback: Record<CutSide, string> = {
+      top: 'Top',
+      left: 'Left',
+      right: 'Right',
+      front: 'Front',
+      back: 'Back',
     };
+    return this.t(`ui.section.side_${side}`, fallback[side]);
   }
 
-  /** Slider range follows the model, with a metre of slack at each end. */
-  private range(axis: Axis): { min: number; max: number; step: number } {
-    const index = AXIS_INDEX[axis];
-    const min = this.bounds ? this.bounds.min[index] - 0.5 : -10;
-    const max = this.bounds ? this.bounds.max[index] + 0.5 : 10;
-    return { min, max, step: Math.max(0.01, (max - min) / 400) };
-  }
-
-  private setMode(mode: SectionMode): void {
-    const next: SectionState = { ...this.section, mode };
-    // Isolating a level with nothing selected does nothing visible; pick the
-    // lowest storey so the control always has an effect.
-    if (mode === 'level' && !next.levelId && this.levels.length) {
-      next.levelId = [...this.levels].sort((a, b) => a.elevation - b.elevation)[0].id;
-    }
-    if (mode === 'plane' && !this.planes().some((plane) => plane.enabled)) {
-      next.planes = this.planes().map((plane) =>
-        plane.axis === 'y'
-          ? { ...plane, enabled: true, position: this.midpoint('y') }
-          : { ...plane },
-      );
-    }
-    this.emitCommit(next);
-  }
-
-  private midpoint(axis: Axis): number {
-    const { min, max } = this.range(axis);
-    return Number(((min + max) / 2).toFixed(3));
-  }
-
-  private reset(): void {
+  private setLevel(levelId: string): void {
     this.emitCommit({
-      ...DEFAULT_SECTION_STATE,
-      planes: DEFAULT_SECTION_STATE.planes.map((plane) => ({ ...plane })),
-      caps: this.section.caps,
-      capColor: this.section.capColor,
+      ...this.section,
+      levelId: levelId || null,
+      mode: levelId ? 'level' : 'none',
     });
   }
 
-  private renderModes(): TemplateResult {
-    const modes: Array<{ mode: SectionMode; label: string }> = [
-      { mode: 'none', label: this.t('ui.section.none', 'Off') },
-      { mode: 'level', label: this.t('ui.section.level', 'Level') },
-      { mode: 'plane', label: this.t('ui.section.plane', 'Plane') },
-    ];
-    return html`<div class="modes" role="group" aria-label=${this.t('ui.toolbar.section', 'Section')}>
-      ${modes.map(
-        (entry) => html`
-          <button
-            class="mode"
-            aria-pressed=${this.section.mode === entry.mode ? 'true' : 'false'}
-            @click=${() => this.setMode(entry.mode)}
-          >
-            ${entry.label}
-          </button>
-        `,
-      )}
-    </div>`;
+  private reset(): void {
+    this.emitCommit({ ...DEFAULT_SECTION_STATE, cuts: {}, capColor: this.section.capColor });
   }
 
-  private renderAxis(plane: ClipPlaneState): TemplateResult {
-    const { min, max, step } = this.range(plane.axis);
-    const label = this.t(`ui.section.axis_${plane.axis}`, `${plane.axis.toUpperCase()} axis`);
+  private renderCut(side: CutSide): TemplateResult {
+    const depth = this.depth(side);
+    const max = this.range(side);
+    const label = this.sideLabel(side);
+    const clear = this.t('ui.section.clear_cut', 'Undo this cut');
     return html`
-      <div class="axis">
-        <button
-          class="axis-toggle"
-          aria-pressed=${plane.enabled ? 'true' : 'false'}
-          aria-label=${label}
-          title=${label}
-          @click=${() => this.emitCommit(this.withPlane(plane.axis, { enabled: !plane.enabled }))}
-        >
-          ${plane.axis}
-        </button>
+      <div class="cut" data-active=${depth > 0 || this.previewing === side ? 'true' : 'false'}>
+        <span class="name">${label}</span>
         <input
           type="range"
-          min=${min}
+          min="0"
           max=${max}
-          step=${step}
-          .value=${String(plane.position)}
-          ?disabled=${!plane.enabled}
+          step=${Math.max(0.01, Number((max / 200).toFixed(3)))}
+          .value=${String(Math.min(depth, max))}
+          ?disabled=${max <= 0}
           aria-label=${label}
+          @pointerenter=${() => this.preview(side)}
+          @pointerleave=${() => this.preview(null)}
+          @focus=${() => this.preview(side)}
+          @blur=${() => this.preview(null)}
           @input=${(event: Event) =>
-            this.emitLive(
-              this.withPlane(plane.axis, {
-                position: Number((event.target as HTMLInputElement).value),
-              }),
-            )}
+            this.emitLive(this.withCut(side, Number((event.target as HTMLInputElement).value)))}
           @change=${(event: Event) =>
-            this.emitCommit(
-              this.withPlane(plane.axis, {
-                position: Number((event.target as HTMLInputElement).value),
-              }),
-            )}
+            this.emitCommit(this.withCut(side, Number((event.target as HTMLInputElement).value)))}
         />
-        <span class="value">${plane.position.toFixed(2)}</span>
+        <span class="value">${depth > 0 ? `${depth.toFixed(2)} m` : '—'}</span>
         <button
-          class="icon-btn flip"
-          aria-pressed=${plane.invert ? 'true' : 'false'}
-          aria-label=${this.t('ui.section.invert', 'Flip side')}
-          title=${this.t('ui.section.invert', 'Flip side')}
-          ?disabled=${!plane.enabled}
-          @click=${() => this.emitCommit(this.withPlane(plane.axis, { invert: !plane.invert }))}
+          class="icon-btn clear"
+          ?hidden=${depth === 0}
+          aria-label=${clear}
+          title=${clear}
+          @click=${() => this.emitCommit(this.withCut(side, 0))}
         >
-          ${icon(plane.invert ? 'arrowLeft' : 'arrowRight')}
+          ${icon('close')}
         </button>
       </div>
     `;
   }
 
   protected override render(): TemplateResult {
-    const mode = this.section.mode;
-    const showPlanes = mode === 'plane';
+    const levelId = this.section.mode === 'level' ? (this.section.levelId ?? '') : '';
 
     return html`
       <div class="panel surface solid" role="region" aria-label=${this.t('ui.toolbar.section', 'Section')}>
@@ -349,46 +314,36 @@ export class Fp3dSectionPanel extends FpBaseElement {
           </button>
         </div>
         <div class="body scroll-y">
-          ${this.renderModes()}
-          ${mode === 'level'
+          ${this.levels.length > 1
             ? html`
-                <div class="section-label">${this.t('ui.section.level', 'Isolate level')}</div>
+                <div class="section-label">${this.t('ui.section.storey', 'Storey')}</div>
                 <select
-                  aria-label=${this.t('ui.section.level', 'Isolate level')}
-                  .value=${this.section.levelId ?? ''}
-                  @change=${(event: Event) =>
-                    this.emitCommit({
-                      ...this.section,
-                      levelId: (event.target as HTMLSelectElement).value || null,
-                    })}
+                  aria-label=${this.t('ui.section.storey', 'Storey')}
+                  .value=${levelId}
+                  @change=${(event: Event) => this.setLevel((event.target as HTMLSelectElement).value)}
                 >
+                  <option value="" ?selected=${levelId === ''}>
+                    ${this.t('ui.section.whole_house', 'Whole house')}
+                  </option>
                   ${this.levels.map(
                     (level) =>
-                      html`<option value=${level.id} ?selected=${this.section.levelId === level.id}>
+                      html`<option value=${level.id} ?selected=${levelId === level.id}>
                         ${level.name}
                       </option>`,
                   )}
                 </select>
               `
             : nothing}
-          ${showPlanes
-            ? html`
-                <div class="section-label">${this.t('ui.section.planes', 'Cut planes')}</div>
-                ${this.planes().map((plane) => this.renderAxis(plane))}
-              `
-            : nothing}
+          <div class="section-label">${this.t('ui.section.cuts', 'Cut in from')}</div>
+          <p class="hint">
+            ${this.t('ui.section.cuts_hint', 'Point at a side to see where it cuts.')}
+          </p>
+          ${CUT_SIDES.map((side) => this.renderCut(side))}
           <div class="section-label">${this.t('ui.section.appearance', 'Appearance')}</div>
           <div class="cap-row">
-            <button
-              class="switch"
-              role="switch"
-              aria-checked=${this.section.caps !== false ? 'true' : 'false'}
-              @click=${() => this.emitCommit({ ...this.section, caps: this.section.caps === false })}
-            >
-              <span>${this.t('ui.section.caps', 'Solid cuts')}</span>
-              <span class="track"></span>
-            </button>
+            <label for="fp3d-cap-color">${this.t('ui.section.cap_color', 'Cut colour')}</label>
             <input
+              id="fp3d-cap-color"
               type="color"
               aria-label=${this.t('ui.section.cap_color', 'Cut colour')}
               .value=${this.section.capColor ?? '#8a8f98'}

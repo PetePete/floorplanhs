@@ -6,7 +6,7 @@
 
 import { html } from 'lit';
 import type { TemplateResult } from 'lit';
-import type { CameraPreset, Vec3 } from '@/types/config';
+import { CUT_SIDES, type CameraPreset, type SectionState, type Vec3 } from '@/types/config';
 import { slugify, uid } from '@/util/math';
 import {
   MDI,
@@ -166,13 +166,30 @@ function renderPresetRow(
       helper: ctx.t('editor.preset_tour_help', 'Part of the auto-rotate slideshow.'),
       onChange: (v) => updatePreset(ctx, index, { inTour: v || undefined }, true),
     })}
-    ${preset.section && preset.section.mode !== 'none'
+    ${sectionSummary(preset.section)
       ? html`<span class="helper"
           >${ctx.t('editor.preset_section', 'Saved cross-section')}:
-          <span class="mono">${preset.section.mode}</span></span
+          <span class="mono">${sectionSummary(preset.section)}</span></span
         >`
       : ''}
   </div>`;
+}
+
+/**
+ * What this preset's cut amounts to, in one line: the isolated storey, the
+ * faces cut away, or nothing at all. `mode` alone stopped saying anything once
+ * cuts became independent of it — a view that takes the front wall off is
+ * `mode: none`.
+ */
+function sectionSummary(section: SectionState | undefined): string {
+  if (!section) return '';
+  const parts: string[] = [];
+  if (section.mode === 'level') parts.push(section.levelId ?? 'level');
+  for (const side of CUT_SIDES) {
+    const depth = section.cuts?.[side];
+    if (depth && depth > 0) parts.push(`${side} ${depth}m`);
+  }
+  return parts.join(', ');
 }
 
 export function renderPresetsSection(ctx: EditorContext): TemplateResult {

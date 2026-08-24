@@ -222,8 +222,7 @@ view updates as you type.
   material will hide the entire interior.
 - **Double-sided materials** cost fill rate and break cut caps. Model walls with
   real thickness rather than single-sided planes; a zero-thickness wall cannot be
-  capped when you slice it, so it will look hollow no matter what `caps` is set
-  to.
+  capped when you slice it, so it will look hollow whatever the card does.
 - **Emissive materials** are drawn as they are. A lit room is shown by tinting
   the room, not by making its surfaces glow, so an emissive material in the
   model is simply a bright surface.
