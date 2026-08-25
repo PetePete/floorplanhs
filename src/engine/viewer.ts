@@ -1273,9 +1273,17 @@ export class Viewer implements IViewer {
     this.core?.invalidate();
   }
 
+  /**
+   * The event comes from the controller's own `onChange`, not from here.
+   *
+   * `setState` runs it synchronously, so announcing `state` afterwards would
+   * overwrite the settled answer with the request: the clamping that stops
+   * facing cuts overlapping, the trimmed record, a converted legacy block, a
+   * coerced mode. The card would then show, remember and save a cut the scene
+   * had already refused.
+   */
   setSection(state: SectionState, animate = true): void {
     this.guard('section', this._section, (s) => s.setState(state, animate));
-    this.emit('section-changed', state);
     this.core?.invalidate();
   }
 

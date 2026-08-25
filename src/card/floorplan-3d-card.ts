@@ -460,8 +460,14 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
         // back from a save, where `restoreView` has a panel of its own to put
         // back and stamping over it here shut the section panel on the user
         // after every single cut.
-        if (!wanted) this.panel = 'none';
-        else if (!this.panelRestored) this.panel = 'palette';
+        if (!wanted) {
+          this.panel = 'none';
+          // Whatever a remount put back belonged to the session just ended;
+          // without this, entering edit mode a second time opened nothing.
+          this.panelRestored = false;
+        } else if (!this.panelRestored) {
+          this.panel = 'palette';
+        }
       }
     }
     if (changed.has('config')) {
@@ -947,8 +953,13 @@ export class Floorplan3dCard extends LitElement implements LovelaceCard {
     this.collapseChosen = memory.collapseChosen;
     this.dockCollapsed = memory.dockCollapsed;
     this.dockCollapseChosen = memory.dockCollapseChosen;
-    this.panel = memory.panel;
-    this.panelRestored = true;
+    // Only in edit mode. The memory is written while editing, but read on any
+    // mount inside its TTL — including the rebuild that *leaving* edit mode
+    // causes, which would reopen an authoring panel on an ordinary visit.
+    if (this.editing) {
+      this.panel = memory.panel;
+      this.panelRestored = true;
+    }
     viewer.setVisibleLevels(memory.visibleLevels);
     if (memory.explode > 0) {
       viewer.setExplode(memory.explode, false);

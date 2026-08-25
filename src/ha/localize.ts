@@ -37,7 +37,6 @@ const EN = {
   /* -------------------------------------------------------------- section */
   'ui.section.storey': 'Storey',
   'ui.section.whole_house': 'Whole house',
-  'ui.section.level': 'Isolate level',
   'ui.section.cuts': 'Cut in from',
   'ui.section.cuts_hint': 'Point at a side to see where it cuts.',
   'ui.section.side_top': 'Top',
@@ -48,12 +47,13 @@ const EN = {
   'ui.section.clear_cut': 'Undo this cut',
   'ui.section.cap_color': 'Cut colour',
   'ui.section.appearance': 'Appearance',
-  'ui.section.handles': 'Show handles',
 
   /* -------------------------------------------------------- preset dialog */
   'ui.preset.overview': 'Overview',
   'ui.preset.whole_house': 'Building',
   'ui.preset.saved_group': 'Saved views',
+  'ui.action.close': 'Close',
+  'ui.action.reset': 'Reset',
   'ui.dock.title': 'Actions',
   'ui.dock.collapse': 'Hide actions',
   'ui.dock.expand': 'Show actions',
@@ -165,7 +165,6 @@ const DE: Table = {
 
   'ui.section.storey': 'Etage',
   'ui.section.whole_house': 'Ganzes Haus',
-  'ui.section.level': 'Etage isolieren',
   'ui.section.cuts': 'Schneiden von',
   'ui.section.cuts_hint': 'Auf eine Seite zeigen, um den Schnitt zu sehen.',
   'ui.section.side_top': 'Oben',
@@ -176,8 +175,9 @@ const DE: Table = {
   'ui.section.clear_cut': 'Schnitt zurücknehmen',
   'ui.section.cap_color': 'Schnittfarbe',
   'ui.section.appearance': 'Darstellung',
-  'ui.section.handles': 'Griffe anzeigen',
 
+  'ui.action.close': 'Schliessen',
+  'ui.action.reset': 'Zurücksetzen',
   'ui.dock.title': 'Aktionen',
   'ui.dock.collapse': 'Aktionen ausblenden',
   'ui.dock.expand': 'Aktionen einblenden',

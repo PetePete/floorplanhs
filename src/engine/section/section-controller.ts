@@ -97,6 +97,8 @@ export class SectionController implements ISectionController {
   private boundsKnown = false;
   /** Pre-0.7 `planes:`, waiting for bounds to become depths; see `absorbLegacy`. */
   private legacy: ClipPlaneState[] = [];
+  /** Set once the old block has had its say, so it never gets a second one. */
+  private legacyAbsorbed = false;
 
   private readonly clips = new Map<string, Clip>();
   private readonly runner = new TweenRunner();
@@ -224,7 +226,12 @@ export class SectionController implements ISectionController {
 
   setState(state: SectionState, animate = true): void {
     this.state = sanitize(state);
-    this.legacy = legacyPlanes(state);
+    // Only until it has been converted. Nothing strips the deprecated block
+    // from the config — a cut is no longer written back, so the old form has to
+    // keep working on every load — and it therefore arrives again with every
+    // state the panel commits. Re-reading it would put a cut the user has just
+    // cleared straight back on the house.
+    if (!this.legacyAbsorbed) this.legacy = legacyPlanes(state);
     this.absorbLegacy();
     this.settleCuts();
     this.caps.setColor(this.state.capColor);
@@ -439,6 +446,7 @@ export class SectionController implements ISectionController {
    */
   private absorbLegacy(): boolean {
     if (this.legacy.length === 0 || !this.boundsKnown) return false;
+    this.legacyAbsorbed = true;
     const converted = cutsFromPlanes(
       this.legacy,
       [this.bounds.min.x, this.bounds.min.y, this.bounds.min.z],

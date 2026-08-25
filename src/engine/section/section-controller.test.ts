@@ -193,4 +193,29 @@ describe('pre-0.7 cut planes', () => {
     controller.setBounds(house());
     expect(controller.getState().cuts).toEqual({});
   });
+
+  /**
+   * Nothing strips the old block from the config — a cut is no longer written
+   * back, so the old form has to keep working on every load — and it therefore
+   * arrives again with every state the panel commits. Read twice, it puts a cut
+   * the user has just cleared straight back on the house.
+   */
+  it('does not put a cleared cut back when the old block arrives again', () => {
+    const controller = new SectionController(legacy);
+    controller.setBounds(house());
+    expect(controller.getState().cuts).toEqual({ back: 3 });
+
+    // What the panel commits after the user clears that side: the cut is gone,
+    // but the deprecated block is still riding along.
+    controller.setState({ ...legacy, cuts: {} }, false);
+    expect(controller.getState().cuts).toEqual({});
+  });
+
+  it('does not revive it on a later state that says nothing about that side', () => {
+    const controller = new SectionController(legacy);
+    controller.setBounds(house());
+    controller.setCutDepth('back', 0);
+    controller.setState({ ...legacy, cuts: { top: 0.5 } }, false);
+    expect(controller.getState().cuts).toEqual({ top: 0.5 });
+  });
 });
