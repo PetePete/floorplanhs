@@ -234,7 +234,10 @@ export class Viewer implements IViewer {
     if (this.disposed) return;
 
     // The card usually pushes hass before mount() resolves; replay it now that
-    // the subsystems exist.
+    // the subsystems exist. The cache has to go first or this replays nothing:
+    // a push that arrived while the model was loading already recorded itself
+    // as delivered, and the entity list it was meant for only exists now.
+    this.prevStates.clear();
     if (this.hass) this.updateHass(this.hass);
 
     this.emit('load-progress', { phase: 'done' });

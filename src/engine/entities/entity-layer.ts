@@ -168,6 +168,17 @@ export class EntityLayer implements IEntityLayer {
   private highlightStack: string | null = null;
   private roomAnchors: ReadonlyMap<string, Vec3> | null = null;
   private levelOffsets: ReadonlyMap<string, number> | null = null;
+  /**
+   * The last state pushed for each entity, marker or no marker.
+   *
+   * A state push can land before the entity list does — the viewer sets itself
+   * up, then spends a second or two loading the model, and Home Assistant does
+   * not wait. The push was being dropped on the floor, and because the viewer
+   * marks that state as delivered it never came again: the lamp lit its room
+   * and its chip sat there grey until somebody switched the lamp. Kept here, it
+   * is handed to the marker the moment one exists.
+   */
+  private readonly visuals = new Map<string, EntityVisualState>();
   private readonly group = new THREE.Group();
   private readonly atlas: MarkerAtlas;
   private readonly raycaster = new THREE.Raycaster();
@@ -269,6 +280,7 @@ export class EntityLayer implements IEntityLayer {
 
     for (const marker of this.markers.values()) marker.dispose();
     this.markers.clear();
+    this.visuals.clear();
 
     this.group.removeFromParent();
     this.group.clear();
@@ -306,6 +318,7 @@ export class EntityLayer implements IEntityLayer {
         placed,
         accent: this.options.accent,
         animateIn: true,
+        visual: this.visuals.get(placed.entity) ?? null,
       });
       marker.setRoomAnchors(this.roomAnchors);
       marker.setLevelOffsets(this.levelOffsets);
@@ -317,6 +330,7 @@ export class EntityLayer implements IEntityLayer {
       if (seen.has(entityId)) continue;
       marker.dispose();
       this.markers.delete(entityId);
+      this.visuals.delete(entityId);
       if (this.hovered === entityId) this.hovered = null;
       if (this.selected === entityId) this.selected = null;
     }
@@ -529,10 +543,17 @@ export class EntityLayer implements IEntityLayer {
   }
 
   updateVisual(entityId: string, visual: EntityVisualState): void {
+    // Recorded whether or not there is a marker to put it on; see `visuals`.
+    this.visuals.set(entityId, visual);
     const marker = this.markers.get(entityId);
     if (!marker) return;
     marker.setVisual(visual);
     this.ctx?.invalidate();
+  }
+
+  /** What the marker is currently drawn from, for tests and for the inspector. */
+  getVisual(entityId: string): EntityVisualState | null {
+    return this.markers.get(entityId)?.currentVisual() ?? null;
   }
 
   moveEntity(entityId: string, position: Vec3): void {

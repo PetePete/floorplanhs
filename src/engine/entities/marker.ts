@@ -245,6 +245,11 @@ export class EntityMarker {
     return this.placedEntity;
   }
 
+  /** The state this marker is drawn from; null until one has been pushed. */
+  currentVisual(): EntityVisualState | null {
+    return this.visual;
+  }
+
   get levelId(): string | null {
     return this.placedEntity.level ?? null;
   }
