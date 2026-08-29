@@ -457,7 +457,7 @@ describe('resolving a drop', () => {
       .toEqual([5, 2.5, 0]);
   });
 
-  it('records the room a marker was dragged out of, and clears it on the way back in', () => {
+  it('records the room a marker was dragged out of', () => {
     const out = resolveMove(world(), {
       entityId: 'fan.e',
       position: to(20, 20),
@@ -465,9 +465,39 @@ describe('resolving a drop', () => {
       room: 'kitchen',
     });
     expect(out.find((e) => e.entity === 'fan.e')?.room).toBe('kitchen');
+  });
 
+  it('takes the room it is dropped into over the one it came from', () => {
+    const out = resolveMove(world(), {
+      entityId: 'fan.e',
+      position: to(20, 20),
+      level: 'ground',
+      room: 'kitchen',
+    });
+    const back = resolveMove(out, {
+      entityId: 'fan.e',
+      position: to(1, 1),
+      level: 'ground',
+      room: 'hall',
+    });
+    expect(back.find((e) => e.entity === 'fan.e')?.room).toBe('hall');
+  });
+
+  /**
+   * A drop states the room; it never unstates it. Clearing it read as harmless
+   * while the position could speak for itself — and the position stops speaking
+   * the moment the marker joins a pile and its anchor moves to the pile's spot.
+   * The lamps then lit whichever room the pile stood in, or none.
+   */
+  it('leaves the room alone when the drop resolves none', () => {
+    const out = resolveMove(world(), {
+      entityId: 'fan.e',
+      position: to(20, 20),
+      level: 'ground',
+      room: 'kitchen',
+    });
     const back = resolveMove(out, { entityId: 'fan.e', position: to(1, 1), level: 'ground' });
-    expect(back.find((e) => e.entity === 'fan.e')?.room).toBeUndefined();
+    expect(back.find((e) => e.entity === 'fan.e')?.room).toBe('kitchen');
   });
 
   it('leaves the list alone for a marker it has never heard of', () => {
@@ -664,10 +694,27 @@ describe('a marker that leaves a pile', () => {
     expect(next.find((entry) => entry.entity === 'light.a')?.room).toBe('kitchen');
   });
 
-  it('still clears a stale override for a marker that was never on a pile', () => {
+  it('keeps a loose marker’s room when the drop resolves none', () => {
     const loose = [at('fan.e', 9, 9, { room: 'cellar' })];
     const next = resolveMove(loose, { entityId: 'fan.e', position: [1, 2.5, 1], level: 'ground' });
-    expect(next[0].room, 'dragged across the plan, the position speaks').toBeUndefined();
+    expect(next[0].room, 'nothing was said, so nothing changed').toBe('cellar');
+  });
+
+  /**
+   * The case the whole rule exists for: a lamp that names its room is piled up
+   * with others somewhere else on the plan, and goes on lighting its own room.
+   */
+  it('keeps its room through joining a pile', () => {
+    const world = [at('light.a', 1, 1, { room: 'kitchen' }), at('switch.b', 8, 8)];
+    const next = resolveMove(world, {
+      entityId: 'light.a',
+      position: [8, 2.5, 8],
+      level: 'ground',
+      stackWith: 'switch.b',
+    });
+    const lamp = next.find((entry) => entry.entity === 'light.a');
+    expect(lamp?.stack, 'it is on the pile').toBeTruthy();
+    expect(lamp?.room, 'and still says which room it lights').toBe('kitchen');
   });
 
   it('does nothing for a marker it has never heard of', () => {

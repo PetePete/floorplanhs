@@ -460,8 +460,15 @@ render:
   `<level>/<room>/<part>`. Without rooms nothing lights and you want
   `lightMode: realistic`.
 
-  A lamp is assigned to the room its position falls in. When one sits in a
-  doorway or a wall recess and picks the wrong side, name the room explicitly:
+  Dropping a marker records the room it landed in, so a lamp normally names its
+  own room without you doing anything. That matters once markers are piled up:
+  joining a pile moves the anchor to the pile's spot, and a lamp with only a
+  position to go on would start lighting whichever room the pile stands in. A
+  drop states the room; it never unstates it, so an assignment you make by hand
+  survives every later drag.
+
+  Name it explicitly when a lamp sits in a doorway or a wall recess and the
+  drop picks the wrong side:
 
   ```yaml
   entities:

@@ -1206,10 +1206,16 @@ export class PlacementController implements IPlacementController {
   /**
    * Which room the *result* should record.
    *
-   * Dropped inside a room: none, because the position already says which one,
-   * and an override written now would go stale the moment the model changes.
-   * Dropped outside: the room it came from — that is the whole gesture of
+   * Dropped inside a room: that room, said outright. Leaving it unsaid and
+   * letting the position speak for it reads fine until the marker joins a pile,
+   * because joining moves the anchor to the pile's spot — and then the position
+   * is saying something about the pile rather than about the lamp. A name
+   * survives that; a position does not.
+   *
+   * Dropped outside: the room it came from. That is the whole gesture of
    * dragging a chip clear of the plan, and it is what makes the leader appear.
+   * A marker standing in the room it names draws no leader — the line only
+   * appears once there is real distance to cover — so naming it costs nothing.
    */
   private resolveRoom(level: LevelDefinition | null): string | null {
     if (!this.roomAt) return null;
@@ -1218,7 +1224,7 @@ export class PlacementController implements IPlacementController {
     // which of the two the drop meant.
     const id = level?.id ?? null;
     const here = this.roomAt(this.anchor.x, this.anchor.y, this.anchor.z, id);
-    if (here) return null;
+    if (here) return here;
     const from = this.originalPosition;
     return from ? this.roomAt(from[0], from[1], from[2], id) : null;
   }
