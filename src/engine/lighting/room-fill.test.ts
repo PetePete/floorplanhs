@@ -418,6 +418,90 @@ describe('two rooms stacked on top of each other', () => {
   });
 });
 
+/**
+ * The same room name on two storeys — a shower over a shower, a hall over a
+ * hall. Ordinary in a house, and it used to mean one of them took both lamps
+ * while the other never lit however plainly its own lamp was on.
+ */
+describe('one room name, two storeys', () => {
+  function twoShowers(): RoomFill {
+    const root = new THREE.Group();
+    const slab = (level: string, room: string, top: number): THREE.Mesh => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 4));
+      mesh.position.set(0, top - 0.06, 0);
+      mesh.userData = { level, room, part: 'floor' };
+      return mesh;
+    };
+    root.add(slab('lower', 'dusche', 0), slab('upper', 'dusche', 2.62));
+    root.updateMatrixWorld(true);
+
+    const fill = new RoomFill();
+    fill.setModel(root, [
+      { id: 'lower', name: 'Lower', elevation: 0, height: 2.62 },
+      { id: 'upper', name: 'Upper', elevation: 2.62, height: 2.5 },
+    ]);
+    fill.setEnabled(true);
+    return fill;
+  }
+
+  /** [lower, upper] brightness, from the only observable output there is. */
+  function lit(fill: RoomFill): [number, number] {
+    const values = uniformArray(fill);
+    const sum = (from: number): number =>
+      values.slice(from, from + 3).reduce((a, b) => a + b, 0);
+    return [sum(0), sum(3)];
+  }
+
+  function lamp(y: number, level: string | null): RoomFillLight {
+    return {
+      room: 'dusche',
+      level,
+      position: new THREE.Vector3(0, y, 0),
+      color: new THREE.Color(1, 1, 1),
+      weight: 1,
+    };
+  }
+
+  it('lights the upstairs shower when the lamp hangs upstairs', () => {
+    const fill = twoShowers();
+    fill.apply([lamp(2.9, null)]);
+    const [lower, upper] = lit(fill);
+    expect(upper, 'the shower the lamp is in').toBeGreaterThan(0);
+    expect(lower, 'the shower a storey below it').toBe(0);
+    fill.dispose();
+  });
+
+  it('lights the downstairs one when the lamp hangs downstairs', () => {
+    const fill = twoShowers();
+    fill.apply([lamp(0.3, null)]);
+    const [lower, upper] = lit(fill);
+    expect(lower).toBeGreaterThan(0);
+    expect(upper).toBe(0);
+    fill.dispose();
+  });
+
+  /** A storey stated outright still settles it, without consulting the floor. */
+  it('takes the storey the lamp names over the one it stands on', () => {
+    const fill = twoShowers();
+    fill.apply([lamp(2.9, 'lower')]);
+    const [lower, upper] = lit(fill);
+    expect(lower).toBeGreaterThan(0);
+    expect(upper).toBe(0);
+    fill.dispose();
+  });
+
+  /** Named but standing nowhere: any room of that name beats no room at all. */
+  it('still finds a room for a lamp parked outside the plan', () => {
+    const fill = twoShowers();
+    fill.apply([
+      { ...lamp(1, null), position: new THREE.Vector3(40, 1, 40) },
+    ]);
+    const [lower, upper] = lit(fill);
+    expect(lower + upper).toBeGreaterThan(0);
+    fill.dispose();
+  });
+});
+
 /* ------------------------------------------------------------------ helpers */
 
 function roomNames(): string[] {

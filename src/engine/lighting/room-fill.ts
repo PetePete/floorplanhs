@@ -506,10 +506,19 @@ export class RoomFill {
     if (light.room) {
       const explicit = this.slotOf.get(roomKey(light.level ?? '', light.room));
       if (explicit !== undefined) return explicit;
-      // A room name with no level qualifier still has to resolve.
+
+      // A room name with no level qualifier still has to resolve, and a house
+      // routinely has the same name on more than one storey — a bathroom over
+      // a bathroom, a hall over a hall. Taking the first key that answers to
+      // the name gave both lamps to one of them, so the other never lit at all
+      // however plainly its lamp was on. The lamp is standing in exactly one
+      // of them; ask the floor before asking the list.
+      const here = this.locate(light.position.x, light.position.y, light.position.z, light.level);
+      if (here >= 0 && this.shapes[here].room === light.room) return here;
       for (const [key, slot] of this.slotOf) {
         if (key.endsWith(`${KEY_SEPARATOR}${light.room}`)) return slot;
       }
+      return here;
     }
     return this.locate(light.position.x, light.position.y, light.position.z, light.level);
   }
