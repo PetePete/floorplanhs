@@ -97,11 +97,38 @@ describe('the stack as a whole', () => {
   });
 
   it('moves every member and nobody else', () => {
-    const next = moveStack(stacked, 's', [4, 2.5, 4], 'upper');
+    const next = moveStack(stacked, 's', [4, 2.5, 4]);
     expect(next[0].position).toEqual([4, 2.5, 4]);
     expect(next[1].position).toEqual([4, 2.5, 4]);
-    expect(next[0].level).toBe('upper');
     expect(next[2].position).toEqual([8, 2.5, 8]);
+  });
+
+  /**
+   * A storey is a fact about the entity — which floor the lamp is screwed to.
+   * Dragging a pile moves labels around the plan, and a pile parked clear of
+   * the building resolves whatever storey the ground under the pointer belongs
+   * to, so restating it made every member a ground-floor entity and took the
+   * whole pile off the storey it was really on.
+   */
+  it('does not re-assign anyone to another storey', () => {
+    const mixed = [
+      at('light.a', 1, 1, { stack: 's', level: 'upper' }),
+      at('switch.b', 1, 1, { stack: 's', level: 'ground' }),
+    ];
+    const next = moveStack(mixed, 's', [4, 2.5, 4]);
+    expect(next.map((entry) => entry.level)).toEqual(['upper', 'ground']);
+  });
+
+  it('leaves a joining marker on the storey it is really on', () => {
+    const world = [
+      at('light.a', 1, 1, { level: 'ground' }),
+      at('switch.b', 8, 8, { level: 'upper' }),
+    ];
+    const next = joinStack(world, 'light.a', world[1]);
+    const lamp = next.find((entry) => entry.entity === 'light.a');
+    expect(lamp?.stack, 'it is on the pile').toBeTruthy();
+    expect(lamp?.position, 'drawn where the pile is').toEqual([8, 2.5, 8]);
+    expect(lamp?.level, 'and still a ground-floor lamp').toBe('ground');
   });
 });
 
@@ -257,12 +284,12 @@ describe('a stack and its room', () => {
   ];
 
   it('records the room it was dragged out of, on every member', () => {
-    const next = moveStack(pile, 's', [9, 2.5, 9], 'ground', 'kitchen');
+    const next = moveStack(pile, 's', [9, 2.5, 9], 'kitchen');
     expect(next.map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
   });
 
   it('never touches what a member says about itself', () => {
-    const next = moveStack(pile, 's', [9, 2.5, 9], 'ground', 'kitchen');
+    const next = moveStack(pile, 's', [9, 2.5, 9], 'kitchen');
     expect(next.map((entry) => entry.room), 'each entity keeps its own room').toEqual([
       'kitchen',
       'hall',
@@ -270,14 +297,14 @@ describe('a stack and its room', () => {
   });
 
   it('drops the override when the pile lands inside a room again', () => {
-    const next = moveStack(pile, 's', [2, 2.5, 2], 'ground', undefined);
+    const next = moveStack(pile, 's', [2, 2.5, 2], undefined);
     expect(next.every((entry) => entry.stackRoom === undefined)).toBe(true);
     expect(next.map((entry) => entry.room)).toEqual(['kitchen', 'hall']);
   });
 
   it('leaves markers outside the pile alone', () => {
     const mixed = [...pile, at('sensor.c', 8, 8, { room: 'hall' })];
-    const next = moveStack(mixed, 's', [4, 2.5, 4], 'ground', 'kitchen');
+    const next = moveStack(mixed, 's', [4, 2.5, 4], 'kitchen');
     expect(next[2].room).toBe('hall');
     expect(next[2].position).toEqual([8, 2.5, 8]);
   });
@@ -782,14 +809,46 @@ describe('adding to a pile that points at a room', () => {
     expect(out.find((entry) => entry.entity === 'light.a')?.stackRoom).toBe('kitchen');
   });
 
-  /** Dragging the pile itself is different: then the drop does speak for it. */
-  it('still clears the pile’s room when the pile lands inside a room', () => {
+  /**
+   * The pile's room is usually a choice: the stack panel offers every room in
+   * the house, including one on another storey, which no drop could work out.
+   * A drag across the plan must not quietly overrule it — and a pile normally
+   * lives clear of the plan, where neither the place it leaves nor the place it
+   * lands names a room, so a drop that resolves nothing was deleting the one
+   * thing that said what the pile was about.
+   */
+  it('keeps the pile’s room when it is dragged somewhere else', () => {
     const next = resolveMove(pile, {
       entityId: 'light.a',
       position: [4, 2.5, 4],
       level: 'ground',
     });
-    expect(next.slice(0, 2).every((entry) => entry.stackRoom === undefined)).toBe(true);
+    expect(next.slice(0, 2).map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
+  });
+
+  it('does not overrule it with whatever room the drop landed in', () => {
+    const next = resolveMove(pile, {
+      entityId: 'light.a',
+      position: [4, 2.5, 4],
+      level: 'ground',
+      room: 'hall',
+    });
+    expect(next.slice(0, 2).map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
+  });
+
+  /** A pile with no line of its own still takes the room it was dragged out of. */
+  it('fills one in when the pile has none', () => {
+    const bare: PlacedEntity[] = [
+      at('light.a', 1, 1, { stack: 's' }),
+      at('switch.b', 1, 1, { stack: 's' }),
+    ];
+    const next = resolveMove(bare, {
+      entityId: 'light.a',
+      position: [9, 2.5, 9],
+      level: 'ground',
+      room: 'kitchen',
+    });
+    expect(next.map((entry) => entry.stackRoom)).toEqual(['kitchen', 'kitchen']);
   });
 });
 

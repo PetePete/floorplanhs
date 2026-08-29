@@ -88,6 +88,8 @@ const _worldBody = new THREE.Vector3();
 /** The world direction that points up the screen; see the stack rows. */
 const _screenUp = new THREE.Vector3();
 const _camPos = new THREE.Vector3();
+const _probe = new THREE.Vector3();
+const _home = new THREE.Vector3();
 const _proj = new THREE.Vector3();
 const _view = new THREE.Vector3();
 
@@ -257,6 +259,24 @@ export class EntityMarker {
   /** World-space anchor, for testing the marker against the cut planes. */
   get worldPosition(): THREE.Vector3 {
     return this.object.position;
+  }
+
+  /**
+   * Where this entity actually is, for the cut test — which for a member of a
+   * pile is not where its chip is parked.
+   *
+   * Joining a pile moves the anchor to the pile's spot, and a pile is normally
+   * parked clear of the building, on the ground, whatever storey its lamps are
+   * on. Testing *that* point against an isolated storey's slice cut away every
+   * pile the moment anything above the ground floor was shown. The home is the
+   * lamp's own place, which is what the cut is asking about.
+   */
+  get clipProbe(): THREE.Vector3 {
+    const from = this.placedEntity.stackFrom;
+    if (!from) return this.object.position;
+    // `object.position` already carries the exploded view's lift; the home is
+    // stated relative to the anchor, so adding it keeps the lift.
+    return _probe.copy(this.object.position).add(_home.set(from[0], from[1], from[2]));
   }
 
   /** The object a raycaster should hit. */

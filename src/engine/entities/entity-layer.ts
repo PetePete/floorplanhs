@@ -1068,7 +1068,7 @@ export class EntityLayer implements IEntityLayer {
       // the renderer, otherwise a pill would be sliced in half. But an entity
       // whose room has been cut away must not keep floating in the void, so we
       // test its anchor against the active cut planes by hand.
-      marker.setLevelVisible(levelVisible && !isClipped(marker.worldPosition, planes));
+      marker.setLevelVisible(levelVisible && !isClipped(marker.clipProbe, planes));
       marker.setLayerVisible(this.markersVisible);
     }
   }

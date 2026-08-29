@@ -66,8 +66,13 @@ export function joinStack(
   return entities.map((entry) => {
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.entity !== moved) return entry;
+    // The position, and nothing else about where it lives. A storey is a fact
+    // about the entity — which floor the lamp is screwed to — and a pile is a
+    // group of chips on the screen. Restating it made a ground-floor lamp claim
+    // to be upstairs because that is where the pile happened to be, and the
+    // lamp then vanished from the storey it is actually on.
     const kept = withHome(rebaseOffset(withStack(entry, id, target), entry.position, target.position), target.position);
-    return { ...kept, position: [...target.position] as Vec3, level: target.level ?? null };
+    return { ...kept, position: [...target.position] as Vec3 };
   });
 }
 
@@ -193,8 +198,13 @@ export function mergeStacks(
   return entities.map((entry) => {
     if (entry.entity === target.entity) return withStack(entry, id);
     if (entry.stack !== movedStack) return entry;
+    // The position, and nothing else about where it lives. A storey is a fact
+    // about the entity — which floor the lamp is screwed to — and a pile is a
+    // group of chips on the screen. Restating it made a ground-floor lamp claim
+    // to be upstairs because that is where the pile happened to be, and the
+    // lamp then vanished from the storey it is actually on.
     const kept = withHome(rebaseOffset(withStack(entry, id, target), entry.position, target.position), target.position);
-    return { ...kept, position: [...target.position] as Vec3, level: target.level ?? null };
+    return { ...kept, position: [...target.position] as Vec3 };
   });
 }
 
@@ -252,18 +262,22 @@ function roomOf(entities: readonly PlacedEntity[], stackId: string): string | un
 /**
  * Move every member of a stack to one spot.
  *
- * `room` follows the same rule as a single marker — a name is the room the pile
- * was dragged *out of*, and it is what the leader line points back at;
- * `undefined` means the drop landed inside a room, where the position already
- * says which — but it is written as the *pile's* room. The members' own `room`
- * is what each of them says about itself, and dragging a group of chips across
- * the screen is not a statement about where a lamp hangs.
+ * The pile's room is filled in when it has none and left alone otherwise. It is
+ * written as the *pile's* room: the members' own `room` is what each of them
+ * says about itself, and dragging a group of chips across the screen is not a
+ * statement about where a lamp hangs.
+ *
+ * Never overwritten, because it is usually chosen by hand — the stack panel
+ * offers every room in the house, including one on another storey, which is a
+ * thing no drop could ever have worked out. Never cleared either: a pile is
+ * normally parked clear of the plan, so both the place it left and the place it
+ * lands name no room at all, and a drop that resolved nothing was deleting the
+ * one thing that said what the pile was about.
  */
 export function moveStack(
   entities: readonly PlacedEntity[],
   stackId: string,
   position: Vec3,
-  level: string | null,
   room?: string,
 ): PlacedEntity[] {
   return entities.map((entry) => {
@@ -274,9 +288,13 @@ export function moveStack(
     // a pile lands where the two labels met, which is never exactly where the
     // marker underneath was standing, so the very act of joining moved every
     // home it had just written down.
-    const moved: PlacedEntity = { ...withHome(entry, position), position: [...position] as Vec3, level };
-    if (room) moved.stackRoom = room;
-    else delete moved.stackRoom;
+    // No storey. Dragging a pile is moving labels around the plan, not
+    // re-screwing lamps to a different floor — and a pile parked clear of the
+    // building resolves whatever storey the ground under the pointer belongs
+    // to, so every member quietly became a ground-floor entity and disappeared
+    // from the storey it was really on.
+    const moved: PlacedEntity = { ...withHome(entry, position), position: [...position] as Vec3 };
+    if (room && !moved.stackRoom) moved.stackRoom = room;
     return moved;
   });
 }
@@ -330,11 +348,9 @@ export function resolveMove(
     if (target && target.stack !== carrying.id) {
       const merged = mergeStacks(entities, carrying.id, target);
       const id = merged.find((entry) => entry.entity === entityId)?.stack;
-      return id ? moveStack(merged, id, position, level, room ?? roomOf(merged, id)) : merged;
+      return id ? moveStack(merged, id, position, room ?? roomOf(merged, id)) : merged;
     }
-    // The pile itself was dragged, so the drop does speak for its room: a name
-    // is where it came from, nothing is "it is inside a room now".
-    return moveStack(entities, carrying.id, position, level, room);
+    return moveStack(entities, carrying.id, position, room);
   }
 
   // One marker in the hand. If it was on a pile it leaves it first, which also
@@ -349,7 +365,7 @@ export function resolveMove(
     // in says where *it* came from, and answering "nothing" there used to be
     // read as "this pile is inside a room now" — so adding a marker to a pile
     // rubbed out the line the pile was drawing.
-    return id ? moveStack(joined, id, position, level, room ?? roomOf(joined, id)) : joined;
+    return id ? moveStack(joined, id, position, room ?? roomOf(joined, id)) : joined;
   }
 
   return freed.map((entry) => {

@@ -527,3 +527,34 @@ describe('the line a stack draws', () => {
     m.dispose();
   });
 });
+
+/**
+ * Which point the cross-section asks about.
+ *
+ * A pile is normally parked clear of the building, on the ground, whatever
+ * storey its lamps are on — so testing the parked chip against an isolated
+ * storey's slice cut away every pile the moment anything above the ground
+ * floor was shown. The cut is asking where the lamp is, and the pile remembers
+ * that in `stackFrom`.
+ */
+describe('what the cut plane is asked about', () => {
+  it('is the anchor for a marker standing on its own', () => {
+    const m = marker({ position: [1, 2.4, 3] });
+    expect([m.clipProbe.x, m.clipProbe.y, m.clipProbe.z]).toEqual([1, 2.4, 3]);
+  });
+
+  it('is the lamp’s own place for a marker parked on a pile', () => {
+    const m = marker({
+      position: [9, 0.1, 9],
+      stack: 's',
+      stackFrom: [-6, 5.2, -4],
+    });
+    const probe = m.clipProbe;
+    expect([probe.x, probe.y, probe.z], 'upstairs, where the lamp is').toEqual([3, 5.3, 5]);
+  });
+
+  it('falls back to the anchor for a pile that remembers nothing', () => {
+    const m = marker({ position: [9, 0.1, 9], stack: 's' });
+    expect(m.clipProbe.y).toBe(0.1);
+  });
+});
